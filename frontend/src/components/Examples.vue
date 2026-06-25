@@ -283,6 +283,28 @@ function capitalize(str: string | null | undefined): string {
   return str.charAt(0).toUpperCase() + str.slice(1)
 }
 
+async function deleteExample(id: number) {
+  try {
+    const res = await fetch(`${API_BASE}/examples/${id}/toggle-active`, {
+      method: 'PATCH' // O el método HTTP que use tu backend (POST/PATCH/DELETE)
+    })
+    
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    
+    showToast('Example disabled successfully', 'success')
+    
+    // Removemos el ejemplo del estado local para que desaparezca visualmente de inmediato
+    examples.value = examples.value.filter(e => e.id !== id)
+    
+    // Si tenías el panel de una palabra abierto dentro de ese ejemplo, lo cerramos
+    if (expandedWordState.value?.exampleId === id) {
+      resetWordExpansion()
+    }
+  } catch (err) {
+    showToast('Failed to disable example', 'error')
+  }
+}
+
 // ===================== WATCHERS =====================
 watch([sortBy, limit, showOnlyFavorites], () => {
   currentPage.value = 1
@@ -483,9 +505,12 @@ onMounted(() => {
                 :color="reviewCurrent.is_favorite ? '#f59e0b' : '#9ca3af'"
               />
             </button>
+            <button class="action-btn delete-btn" @click="deleteExample(reviewCurrent.id)" title="Disable example">
+              <Icon icon="solar:trash-bin-trash-linear" width="20" color="#9ca3af" />
+            </button>
             <button class="action-btn play" @click="playAudio(reviewCurrent.text)">
               <Icon icon="solar:play-bold" width="18" color="#8b5cf6" />
-            </button>
+            </button>            
           </div>
         </div>
       </div>
@@ -601,9 +626,13 @@ onMounted(() => {
               />
             </button>
 
+            <button class="action-btn delete-btn" @click="deleteExample(example.id)" title="Disable example">
+              <Icon icon="solar:trash-bin-trash-linear" width="20" color="#9ca3af" />
+            </button>
+
             <button class="action-btn play" @click="playAudio(example.text)" title="Listen">
               <Icon icon="solar:play-bold" width="18" color="#8b5cf6" />
-            </button>
+            </button>            
           </div>
         </div>
       </template>

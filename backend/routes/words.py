@@ -1,7 +1,7 @@
 import csv
 import io
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Query, Path
+from fastapi import APIRouter, Depends, HTTPException, Query, Path, BackgroundTasks, status
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session  # CAMBIO: Usamos la sesión de SQLModel
 
@@ -11,6 +11,7 @@ import crud
 import schemas
 import ai
 from models import WordLevel
+from db import engine, get_db
 
 router = APIRouter()
 
@@ -97,9 +98,54 @@ def create_word(word: schemas.WordCreate, db: Session = Depends(get_db)):  # CAM
     new_word = crud.create_word(db, word_data)
     return new_word
 
+# 1. Creamos la función interna que ejecutará el trabajo pesado en background
 
-@router.post("/bulk")
-def create_words_bulk(texts: List[str], db: Session = Depends(get_db)):  # CAMBIO: Tipado de sesión
+
+def process_bulk_words_task(texts: List[str]):
+    # Creamos una sesión manual y aislada usando tu engine
+    with Session(engine) as db:
+        try:
+            for text in texts:
+                extracted = ai.extract_learning_intent(text)
+                if not extracted:
+                    continue
+
+                enriched = ai.enrich_word(extracted["main"])
+
+                word_data = {
+                    "main": extracted["main"],
+                    "type": extracted["type"],
+                    "meaning": enriched.get("meaning"),
+                    "frequency": enriched.get("frequency"),
+                    "level": WordLevel.to_int(enriched.get("level")),
+                    "context": enriched.get("category"),
+                    "source_text": text
+                }
+
+                crud.create_word(db, word_data)
+        except Exception as e:
+            print(f"Error en background: {e}")
+        # Aquí el bloque 'with' cierra la sesión automáticamente al terminar
+
+
+@router.post("/bulk", status_code=status.HTTP_202_ACCEPTED)
+def create_words_bulk(
+    texts: List[str],
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    # Lanzamos la tarea pasando solo los textos
+    background_tasks.add_task(process_bulk_words_task, texts)
+
+    return {
+        "status": "processing",
+        "message": f"Processing {len(texts)} texts in the background."
+    }
+
+
+@router.post("/bulk2")
+# CAMBIO: Tipado de sesión
+def create_words_bulk2(texts: List[str], db: Session = Depends(get_db)):
     created_words = []
 
     for text in texts:
@@ -132,7 +178,8 @@ def create_words_bulk(texts: List[str], db: Session = Depends(get_db)):  # CAMBI
 
 
 @router.patch("/{word_id}/toggle-active")
-def toggle_word_active(word_id: int, db: Session = Depends(get_db)):  # CAMBIO: Tipado de sesión
+# CAMBIO: Tipado de sesión
+def toggle_word_active(word_id: int, db: Session = Depends(get_db)):
     word = crud.toggle_word_active(db, word_id)
 
     if not word:
@@ -143,7 +190,8 @@ def toggle_word_active(word_id: int, db: Session = Depends(get_db)):  # CAMBIO: 
 
 
 @router.patch("/{word_id}/toggle-learned")
-def toggle_word_learned(word_id: int, db: Session = Depends(get_db)):  # CAMBIO: Tipado de sesión
+# CAMBIO: Tipado de sesión
+def toggle_word_learned(word_id: int, db: Session = Depends(get_db)):
     word = crud.toggle_word_learned(db, word_id)
 
     if not word:
@@ -157,7 +205,8 @@ def toggle_word_learned(word_id: int, db: Session = Depends(get_db)):  # CAMBIO:
 
 
 @router.patch("/{word_id}/toggle-fav")
-def toggle_word_favorite(word_id: int, db: Session = Depends(get_db)):  # CAMBIO: Tipado de sesión
+# CAMBIO: Tipado de sesión
+def toggle_word_favorite(word_id: int, db: Session = Depends(get_db)):
     word = crud.toggle_word_favorite(db, word_id)
 
     if not word:
