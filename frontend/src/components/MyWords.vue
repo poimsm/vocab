@@ -241,8 +241,9 @@ function difficultyColor(level: string) {
     }[level.toLowerCase()] || '#999'
 }
 
-function capitalize(str: string) {
-    return str.charAt(0).toUpperCase() + str.slice(1)
+function capitalize(str: string | null | undefined): string {
+    if (!str) return '';
+    return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 // ===================== WATCHERS =====================
