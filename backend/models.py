@@ -64,7 +64,7 @@ class Word(SQLModel, table=True):
     source_text: Optional[str] = Field(default=None)
     
     normalized: Optional[str] = Field(default=None, max_length=255, unique=True, index=True)
-    is_favorite: bool = Field(default=True)
+    is_favorite: bool = Field(default=False)
     is_active: bool = Field(default=True)
     is_learned: bool = Field(default=False)
 

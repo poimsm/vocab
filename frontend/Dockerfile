@@ -2,11 +2,12 @@
 FROM node:20-alpine AS build-stage
 WORKDIR /app
 
-# 👇 CORRECCIÓN: Apuntamos a la carpeta frontend/ que está en la raíz del contexto
+ARG VITE_API_BASE
+ENV VITE_API_BASE=$VITE_API_BASE
+
 COPY ./frontend/package*.json ./
 RUN npm install
 
-# 👇 CORRECCIÓN: Copiamos todo el contenido de la carpeta frontend/ al contenedor
 COPY ./frontend/ ./
 RUN npm run build
 

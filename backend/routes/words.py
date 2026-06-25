@@ -75,7 +75,7 @@ def get_word(
     }
 
 
-@router.post("/")
+@router.post("")
 def create_word(word: schemas.WordCreate, db: Session = Depends(get_db)):  # CAMBIO: Tipado de sesión
     extracted = ai.extract_learning_intent(word.text)
 

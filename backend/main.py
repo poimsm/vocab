@@ -12,7 +12,7 @@ from routes import (
     examples,
 )
 
-app = FastAPI()
+app = FastAPI(redirect_slashes=False)
 
 # Como Nginx ahora está en el medio gestionando el puerto 80, 
 # permitimos todos los orígenes para no tener problemas de CORS en desarrollo.

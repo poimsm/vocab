@@ -36,6 +36,8 @@ services:
     build:
       context: .
       dockerfile: ./frontend/Dockerfile
+      args:
+        - VITE_API_BASE=${VITE_API_BASE}
     container_name: nginx_frontend_container
     restart: always
     ports:
