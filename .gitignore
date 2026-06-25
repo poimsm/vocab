@@ -1,0 +1,63 @@
+# ==========================================
+# General / Sistema Operativo
+# ==========================================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# ==========================================
+# Backend (Python / FastAPI)
+# ==========================================
+# Archivos compilados de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Entornos virtuales locales (si usas venv fuera de Docker)
+.venv/
+venv/
+ENV/
+env/
+
+# Variables de entorno (¡CRÍTICO no subirlas a GitHub!)
+.env
+.env.*
+!.env.example
+
+# Bases de datos locales de desarrollo
+*.db
+*.sqlite3
+
+# Logs de Alembic y temporales
+backend/migrations/versions/*
+!backend/migrations/versions/.gitkeep
+
+# ==========================================
+# Frontend (Node.js / Vue)
+# ==========================================
+# Dependencias de Node (muy pesadas, Docker las instala dentro)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Carpetas de compilación local
+frontend/dist/
+frontend/dist-ssr/
+frontend/*.local
+
+# Archivos de caché de herramientas de Frontend
+.eslintcache
+.phpunit.result.cache
+.vite/
+.vitest/
+
+# ==========================================
+# Docker / Datos Persistentes locales
+# ==========================================
+# Si alguna vez montas datos de Postgres a carpetas locales en vez de volúmenes nombrados
+.postgres_data/
