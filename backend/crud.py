@@ -115,8 +115,13 @@ def get_word_by_id(db: Session, word_id: int):
 def create_word(db: Session, word_data: dict):
     normalized = word_data["main"].lower().strip()
 
-    existing = db.exec(select(models.Word).filter(
-        models.Word.normalized == normalized)).first()
+    existing = db.exec(
+        select(models.Word).filter(
+            models.Word.normalized == normalized,
+            models.Word.is_active == True
+        )
+    ).first()
+
     if existing:
         return None
 

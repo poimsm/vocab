@@ -66,8 +66,8 @@ const isReviewMode = ref(false)
 const reviewIndex = ref(0)
 const randomExamples = ref<ExampleItem[]>([])
 
-// Word detail panel
-const expandedWordId = ref<number | null>(null)
+// Word detail panel (Maneja el estado único por ejemplo y palabra)
+const expandedWordState = ref<{ exampleId: number; wordId: number } | null>(null)
 const wordDetail = ref<WordDetail | null>(null)
 const loadingWordDetail = ref(false)
 
@@ -98,10 +98,10 @@ const reviewCurrent = computed(() =>
 )
 
 const expandedWordName = computed(() => {
-  if (!expandedWordId.value) return null
+  if (!expandedWordState.value) return null
   const word = examples.value
     .flatMap(e => e.words)
-    .find(w => w.word_id === expandedWordId.value)
+    .find(w => w.word_id === expandedWordState.value?.wordId)
   return word?.main || null
 })
 
@@ -222,12 +222,12 @@ function playAudio(text: string) {
   speechSynthesis.speak(utterance)
 }
 
-function toggleWord(wordId: number) {
-  if (expandedWordId.value === wordId) {
-    expandedWordId.value = null
+function toggleWord(exampleId: number, wordId: number) {
+  if (expandedWordState.value?.exampleId === exampleId && expandedWordState.value?.wordId === wordId) {
+    expandedWordState.value = null
     wordDetail.value = null
   } else {
-    expandedWordId.value = wordId
+    expandedWordState.value = { exampleId, wordId }
     fetchWordDetail(wordId)
   }
 }
@@ -239,21 +239,30 @@ function goToPage(page: number) {
   }
 }
 
+// Limpia el estado al salir del panel o cambiar contextos
+function resetWordExpansion() {
+  expandedWordState.value = null
+  wordDetail.value = null
+}
+
 function exitReview() {
   isReviewMode.value = false
   randomExamples.value = []
   reviewIndex.value = 0
+  resetWordExpansion()
 }
 
 function nextReview() {
   if (reviewIndex.value < randomExamples.value.length - 1) {
     reviewIndex.value++
+    resetWordExpansion()
   }
 }
 
 function prevReview() {
   if (reviewIndex.value > 0) {
     reviewIndex.value--
+    resetWordExpansion()
   }
 }
 
@@ -269,13 +278,15 @@ function frequencyColor(freq: string): string {
   return { 'high': '#111', 'medium': '#555', 'low': '#999' }[freq.toLowerCase()] || '#999'
 }
 
-function capitalize(str: string): string {
+function capitalize(str: string | null | undefined): string {
+  if (!str) return ''
   return str.charAt(0).toUpperCase() + str.slice(1)
 }
 
 // ===================== WATCHERS =====================
 watch([sortBy, limit, showOnlyFavorites], () => {
   currentPage.value = 1
+  resetWordExpansion()
   fetchExamples()
 })
 
@@ -284,6 +295,7 @@ watch(search, () => {
   clearTimeout(searchTimeout)
   searchTimeout = setTimeout(() => {
     currentPage.value = 1
+    resetWordExpansion()
     fetchExamples()
   }, 400)
 })
@@ -296,7 +308,6 @@ onMounted(() => {
 
 <template>
   <div class="module">
-    <!-- Toast -->
     <Transition name="toast">
       <div v-if="toast.show" class="toast" :class="toast.type">
         <Icon :icon="toast.type === 'success' ? 'solar:check-circle-bold' : 'solar:danger-circle-bold'" width="18" />
@@ -304,7 +315,6 @@ onMounted(() => {
       </div>
     </Transition>
 
-    <!-- Header -->
     <header class="header">
       <div>
         <h1>Examples</h1>
@@ -322,7 +332,7 @@ onMounted(() => {
             width="18"
             :color="showOnlyFavorites ? '#f59e0b' : '#9ca3af'"
           />
-          {{ showOnlyFavorites ? 'Favorites' : 'Favorites' }}
+          Favorites
         </button>
 
         <button class="randomize-btn" @click="startRandomReview">
@@ -337,7 +347,6 @@ onMounted(() => {
       </div>
     </header>
 
-    <!-- Toolbar with Sort -->
     <div class="toolbar">
       <div class="search">
         <Icon icon="solar:magnifer-linear" width="20" color="#aaa" />
@@ -366,7 +375,6 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Review Banner -->
     <Transition name="slide-down">
       <div v-if="isReviewMode" class="review-banner">
         <div class="review-banner-inner">
@@ -390,26 +398,22 @@ onMounted(() => {
       </div>
     </Transition>
 
-    <!-- Loading State -->
     <div v-if="loading && examples.length === 0" class="loading-state">
       <Icon icon="solar:spinner-bold" width="32" color="#8b5cf6" class="spin" />
       <p>Loading examples...</p>
     </div>
 
-    <!-- Error State -->
     <div v-else-if="error && examples.length === 0" class="empty-state error">
       <Icon icon="solar:danger-circle-bold-duotone" width="48" color="#ef4444" />
       <p>{{ error }}</p>
       <button class="retry-btn" @click="fetchExamples">Try again</button>
     </div>
 
-    <!-- Examples List -->
     <div v-else class="list-wrapper">
       <div v-if="loading" class="list-loading-overlay">
         <Icon icon="solar:spinner-bold" width="24" color="#8b5cf6" class="spin" />
       </div>
 
-      <!-- Skeleton Loading -->
       <template v-if="isGenerating && !isReviewMode">
         <div v-for="n in 3" :key="n" class="example-card skeleton">
           <div class="skeleton-text">
@@ -423,7 +427,6 @@ onMounted(() => {
         </div>
       </template>
 
-      <!-- Review Mode: Single Card -->
       <div v-else-if="isReviewMode && reviewCurrent" class="review-card-wrapper">
         <div class="example-card review-active">
           <div class="example-content">
@@ -433,12 +436,41 @@ onMounted(() => {
                 v-for="word in reviewCurrent.words"
                 :key="word.word_id"
                 class="word-chip"
-                @click="toggleWord(word.word_id)"
+                :class="{ expanded: expandedWordState?.exampleId === reviewCurrent.id && expandedWordState?.wordId === word.word_id }"
+                @click="toggleWord(reviewCurrent.id, word.word_id)"
               >
                 {{ word.main }}
               </button>
             </div>
+
+            <Transition name="expand">
+              <div v-if="expandedWordState?.exampleId === reviewCurrent.id" class="word-detail-panel">
+                <div v-if="loadingWordDetail" class="detail-loading">
+                  <Icon icon="solar:spinner-bold" width="20" color="#8b5cf6" class="spin" />
+                  Loading details...
+                </div>
+                <div v-else-if="wordDetail" class="word-detail-inner">
+                  <div class="word-detail-header">
+                    <h2 class="word-title">{{ wordDetail.main }}</h2>
+                    <span class="badge" :class="levelClass(wordDetail.level)">
+                      {{ levelLabel(wordDetail.level) }}
+                    </span>
+                  </div>
+                  <div class="detail-meta">
+                    <span class="type-badge">{{ capitalize(wordDetail.type) }}</span>
+                    <span :style="{ color: frequencyColor(wordDetail.frequency), fontWeight: '600' }">
+                      {{ capitalize(wordDetail.frequency) }}
+                    </span>
+                  </div>
+                  <div class="detail-section">
+                    <h4>Meaning</h4>
+                    <p>{{ wordDetail.meaning }}</p>
+                  </div>
+                </div>
+              </div>
+            </Transition>
           </div>
+          
           <div class="example-actions">
             <button
               class="action-btn"
@@ -458,7 +490,6 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Normal List -->
       <template v-else>
         <div
           v-for="example in paginatedExamples"
@@ -472,22 +503,21 @@ onMounted(() => {
                 v-for="word in example.words"
                 :key="word.word_id"
                 class="word-chip"
-                :class="{ expanded: expandedWordId === word.word_id }"
-                @click="toggleWord(word.word_id)"
+                :class="{ expanded: expandedWordState?.exampleId === example.id && expandedWordState?.wordId === word.word_id }"
+                @click="toggleWord(example.id, word.word_id)"
               >
                 {{ word.main }}
                 <Icon
-                  :icon="expandedWordId === word.word_id ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'"
+                  :icon="expandedWordState?.exampleId === example.id && expandedWordState?.wordId === word.word_id ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'"
                   width="14"
                   color="#8b5cf6"
                 />
               </button>
             </div>
 
-            <!-- Inline Word Detail Panel -->
             <Transition name="expand">
               <div
-                v-if="example.words.some(w => w.word_id === expandedWordId)"
+                v-if="expandedWordState?.exampleId === example.id"
                 class="word-detail-panel"
               >
                 <div v-if="loadingWordDetail" class="detail-loading">
@@ -514,12 +544,12 @@ onMounted(() => {
                     <p>{{ wordDetail.meaning }}</p>
                   </div>
 
-                  <div class="detail-section">
+                  <div class="detail-section" v-if="wordDetail.context">
                     <h4>Context</h4>
                     <p>{{ wordDetail.context }}</p>
                   </div>
 
-                  <div class="detail-section" v-if="wordDetail.examples.length">
+                  <div class="detail-section" v-if="wordDetail.examples && wordDetail.examples.length">
                     <h4>Existing Examples ({{ wordDetail.total_examples }})</h4>
                     <div class="sub-examples">
                       <div
@@ -578,14 +608,12 @@ onMounted(() => {
         </div>
       </template>
 
-      <!-- Empty State -->
       <div v-if="!isGenerating && !isReviewMode && paginatedExamples.length === 0" class="empty-state">
         <Icon icon="solar:document-text-bold-duotone" width="48" color="#ddd" />
         <p>No examples found. Try a different search or generate some!</p>
       </div>
     </div>
 
-    <!-- Pagination -->
     <div v-if="!isReviewMode && totalPages > 1" class="footer">
       <span class="results-info">
         Showing {{ paginatedExamples.length }} of {{ meta?.total_items || 0 }} examples

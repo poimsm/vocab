@@ -378,7 +378,7 @@ onMounted(() => {
                     <tr v-for="word in filteredWords" :key="word.id">
                         <td class="text">
                             <div class="word-cell">
-                                <span class="word-name">{{ word.main }}</span>
+                                <span class="word-name">{{ capitalize(word.main) }}</span>
                                 <span v-if="word.meaning" class="word-note">{{ word.meaning }}</span>
                             </div>
                         </td>                       
