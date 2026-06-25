@@ -116,7 +116,7 @@ def create_words_bulk(texts: List[str], db: Session = Depends(get_db)):  # CAMBI
             "meaning": enriched.get("meaning"),
             "frequency": enriched.get("frequency"),
             "level": WordLevel.to_int(enriched.get("level")),
-            "context": enriched.get("context"),
+            "context": enriched.get("category"),
             "source_text": text
         }
 
