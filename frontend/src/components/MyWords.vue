@@ -31,7 +31,7 @@ interface ApiResponse {
 }
 
 // ===================== STATE =====================
-const API_BASE = import.meta.env.VITE_API_BASE;
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost/api';
 
 const search = ref('')
 const filterTab = ref('all')
