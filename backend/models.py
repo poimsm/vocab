@@ -95,8 +95,10 @@ class Example(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     text: str = Field(nullable=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    type: Optional[str] = Field(default=None, max_length=50)
     is_active: bool = Field(default=True)
     is_favorite: bool = Field(default=False)
+    times_seen: int = Field(default=0)
 
     example_words: List[ExampleWord] = Relationship(back_populates="example")
 
