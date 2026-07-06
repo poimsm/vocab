@@ -19,20 +19,24 @@ const modules = [
     <!-- Desktop Sidebar -->
     <aside class="sidebar">
       <div class="logo">
-        <div class="logo-square"></div>
+        <div class="logo-bear">
+          <Icon icon="fluent-emoji:bear" width="32" />
+        </div>
         <span>Lexio</span>
       </div>
 
-      <button
-        v-for="module in modules"
-        :key="module.id"
-        class="nav-item"
-        :class="{ active: nav.activeModule === module.id }"
-        @click="nav.setActiveModule(module.id)"
-      >
-        <Icon :icon="module.icon" width="20" />
-        <span>{{ module.label }}</span>
-      </button>
+      <nav class="sidebar-nav">
+        <button
+          v-for="module in modules"
+          :key="module.id"
+          class="nav-item"
+          :class="{ active: nav.activeModule === module.id }"
+          @click="nav.setActiveModule(module.id)"
+        >
+          <Icon :icon="module.icon" width="20" />
+          <span>{{ module.label }}</span>
+        </button>
+      </nav>
     </aside>
 
     <div class="main">
@@ -50,7 +54,6 @@ const modules = [
         </button>
       </div>
 
-      <!-- Ya no necesitamos slot scope, el contenido se maneja en App.vue -->
       <div class="content">
         <slot />
       </div>
@@ -62,15 +65,18 @@ const modules = [
 .layout {
   display: flex;
   min-height: 100vh;
-  background: #fafafa;
+  background: #2d2a3e;
+  color: #e2e0e8;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+/* ─── Desktop Sidebar ─── */
 .sidebar {
   width: 240px;
   flex-shrink: 0;
-  padding: 24px 12px;
-  border-right: 1px solid #ececec;
-  background: white;
+  padding: 24px 16px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: #2d2a3e;
 
   display: flex;
   flex-direction: column;
@@ -81,50 +87,61 @@ const modules = [
   display: flex;
   align-items: center;
   gap: 12px;
-
-  margin-bottom: 24px;
-  padding: 0 12px;
-
+  margin-bottom: 32px;
+  padding: 0 8px;
   font-size: 20px;
   font-weight: 700;
+  color: #e2e0e8;
 }
 
-.logo-square {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  background: #8b5cf6;
+.logo-bear {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #f5f0e8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .nav-item {
   border: 0;
   background: transparent;
-
   display: flex;
   align-items: center;
   gap: 12px;
-
   padding: 12px;
   border-radius: 12px;
-
   cursor: pointer;
-  color: #666;
-
+  color: #9c99ab;
   font-size: 14px;
+  transition: all 0.2s ease;
 }
 
 .nav-item:hover {
-  background: #f5f5f5;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e0e8;
 }
 
 .nav-item.active {
-  background: #f2ebff;
-  color: #7c3aed;
+  background: rgba(124, 58, 237, 0.15);
+  color: #a78bfa;
 }
 
+/* ─── Main Content Area ─── */
 .main {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .mobile-nav {
@@ -132,12 +149,16 @@ const modules = [
 }
 
 .content {
-  padding: 24px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
+/* ─── Mobile Navigation ─── */
 @media (max-width: 768px) {
   .layout {
-    display: block;
+    display: flex;
+    flex-direction: column;
   }
 
   .sidebar {
@@ -147,16 +168,12 @@ const modules = [
   .mobile-nav {
     display: flex;
     gap: 10px;
-
     overflow-x: auto;
     padding: 12px;
-
     position: sticky;
     top: 0;
-
-    background: white;
-    border-bottom: 1px solid #ececec;
-
+    background: #2d2a3e;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     scrollbar-width: none;
     z-index: 100;
   }
@@ -167,27 +184,32 @@ const modules = [
 
   .mobile-tab {
     border: 0;
-    background: #f5f5f5;
-
+    background: rgba(255, 255, 255, 0.06);
     display: flex;
     align-items: center;
     gap: 8px;
-
     white-space: nowrap;
-
     padding: 10px 14px;
     border-radius: 999px;
-
     cursor: pointer;
+    color: #9c99ab;
+    font-size: 13px;
+    transition: all 0.2s ease;
+  }
+
+  .mobile-tab:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e2e0e8;
   }
 
   .mobile-tab.active {
-    background: #f2ebff;
-    color: #7c3aed;
+    background: rgba(124, 58, 237, 0.2);
+    color: #a78bfa;
   }
 
   .content {
-    padding: 16px;
+    flex: 1;
+    overflow: auto;
   }
 }
 </style>

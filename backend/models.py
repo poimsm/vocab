@@ -1,9 +1,10 @@
+import enum
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 from sqlmodel import Field, SQLModel, Relationship
 from sqlalchemy import JSON
 
-# Mantenemos tu clase WordLevel intacta ya que es lógica pura
+
 class WordLevel:
     BEGINNER = 1
     INTERMEDIATE = 2
@@ -37,7 +38,6 @@ class WordLevel:
         return value in cls._REVERSE_MAP
 
 
-# 1. TABLA INTERMEDIA (Muchos a Muchos con datos extra)
 class ExampleWord(SQLModel, table=True):
     __tablename__: str = "example_words"
 
@@ -50,52 +50,47 @@ class ExampleWord(SQLModel, table=True):
     word: "Word" = Relationship(back_populates="example_words")
 
 
-# 2. MODELO WORD
 class Word(SQLModel, table=True):
     __tablename__: str = "words"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    main: str = Field(max_length=255, nullable=False, index=True)
-    meaning: Optional[str] = Field(default=None) # Text en Postgres se maneja con str normal
-    type: Optional[str] = Field(default=None, max_length=50) # word | phrase | idiom | phrasal verb
+    main: str = Field(max_length=100, nullable=False, index=True)
+    # Text en Postgres se maneja con str normal
+    meaning: Optional[str] = Field(default=None)
+    # word | phrase | idiom | phrasal verb
+    type: Optional[str] = Field(default=None, max_length=50)
     frequency: Optional[str] = Field(default=None, max_length=50)
     level: int = Field(default=WordLevel.INTERMEDIATE)
     context: Optional[str] = Field(default=None, max_length=50)
-    source_text: Optional[str] = Field(default=None)
-    
-    normalized: Optional[str] = Field(default=None, max_length=255, unique=True, index=True)
+    source_text: Optional[str] = Field(max_length=100, default=None)
+
+    normalized: Optional[str] = Field(
+        default=None, max_length=100, unique=True, index=True)
+
+    last_seen_at: Optional[datetime] = Field(default=None)
+    times_seen: int = Field(default=0)
     is_favorite: bool = Field(default=False)
     is_active: bool = Field(default=True)
     is_learned: bool = Field(default=False)
 
     # Relaciones
     # sa_relationship_kwargs={"uselist": False} define la relación 1 a 1
-    stats: Optional["WordStats"] = Relationship(back_populates="word", sa_relationship_kwargs={"uselist": False})
     example_words: List[ExampleWord] = Relationship(back_populates="word")
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
 
 
-# 3. MODELO WORD STATS (Relación 1:1 con Word)
-class WordStats(SQLModel, table=True):
-    __tablename__: str = "word_stats"
-
-    word_id: int = Field(foreign_key="words.id", primary_key=True)
-    last_seen_at: Optional[datetime] = Field(default=None)
-    times_seen: int = Field(default=0)
-    times_favorited: int = Field(default=0)
-
-    word: Word = Relationship(back_populates="stats")
-
-
-# 4. MODELO EXAMPLE
 class Example(SQLModel, table=True):
     __tablename__: str = "examples"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     text: str = Field(nullable=False)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
     type: Optional[str] = Field(default=None, max_length=50)
+    normalized: Optional[str] = Field(
+        default=None, max_length=255, unique=True, index=True)
     is_active: bool = Field(default=True)
     is_favorite: bool = Field(default=False)
     times_seen: int = Field(default=0)
@@ -103,14 +98,33 @@ class Example(SQLModel, table=True):
     example_words: List[ExampleWord] = Relationship(back_populates="example")
 
 
-# 5. MODELO ACTIVITY (Manejo de JSON nativo de Postgres)
+class QueueStatus(str, enum.Enum):
+    PENDING = "pending"   # Encolado listo para enviar
+    SENT = "sent"         # Enviado al usuario en el explore (revisando en app)
+    RESOLVED = "resolved"  # Ya procesado e incrementado
+
+
+class ExampleQueue(SQLModel, table=True):
+    __tablename__: str = "example_queue"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    example_id: int = Field(foreign_key="examples.id", index=True)
+    status: QueueStatus = Field(default=QueueStatus.PENDING, index=True)
+    is_active: bool = Field(default=True, index=True)
+
+    example: "Example" = Relationship()
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+
+
 class Activity(SQLModel, table=True):
     __tablename__: str = "activities"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     action: str = Field(max_length=100, nullable=False)
-    
+
     # 🔥 CORRECCIÓN: Le decimos explícitamente a SQLModel que use el tipo JSON de SQLAlchemy
-    payload: Optional[Dict[str, Any]] = Field(default=None, sa_type=JSON) 
-    
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    payload: Optional[Dict[str, Any]] = Field(default=None, sa_type=JSON)
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))

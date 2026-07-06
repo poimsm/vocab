@@ -1,41 +1,42 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { storeToRefs } from 'pinia'
 import { useNavigationStore } from '@/stores/navigation'
-
-import MainLayout from '@/layouts/MainLayout.vue'
-import MyWords from '@/components/MyWords.vue'
-import Examples from '@/components/Examples.vue'
-import Clusters from '@/components/Clusters.vue'
-import Roleplay from '@/components/Roleplay.vue'
-import Monsters from '@/components/Monsters.vue'
-import SearchWord from './components/SearchWord.vue'
+import MainLayout from './layouts/MainLayout.vue'
+import ExamplesView from './components/ExamplesView.vue'
+import MyWordsView from './components/MyWordsView.vue'
 
 const nav = useNavigationStore()
-const { activeModule } = storeToRefs(nav)
-
-type ModuleId = 'words' | 'search' | 'examples' | 'clusters' | 'roleplay' | 'monsters'
-
-const components: Record<ModuleId, any> = {
-  words: MyWords,
-  search: SearchWord,
-  examples: Examples,
-  clusters: Clusters,
-  roleplay: Roleplay,
-  monsters: Monsters
-}
-
-const currentComponent = computed(() => components[activeModule.value as ModuleId])
 </script>
 
 <template>
   <MainLayout>
-    <component :is="currentComponent" />
+    <ExamplesView v-if="nav.activeModule === 'examples'" />
+    <!-- Placeholders para otros módulos -->
+     <MyWordsView v-if="nav.activeModule === 'words'" />
+    <!-- <div v-else-if="nav.activeModule === 'words'" class="placeholder">
+      My Words (coming soon)
+    </div> -->
+    <div v-else-if="nav.activeModule === 'search'" class="placeholder">
+      Search (coming soon)
+    </div>
+    <div v-else-if="nav.activeModule === 'clusters'" class="placeholder">
+      Clusters (coming soon)
+    </div>
+    <div v-else-if="nav.activeModule === 'roleplay'" class="placeholder">
+      Roleplay (coming soon)
+    </div>
+    <div v-else-if="nav.activeModule === 'monsters'" class="placeholder">
+      Monsters (coming soon)
+    </div>
   </MainLayout>
 </template>
 
 <style>
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  color: #9c99ab;
+  font-size: 18px;
 }
 </style>

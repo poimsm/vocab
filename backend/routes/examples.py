@@ -1,3 +1,4 @@
+from sqlmodel import Session
 from fastapi import HTTPException, Query, Body, APIRouter, Depends
 from sqlmodel import Session  # CAMBIO: Usamos la sesión de SQLModel
 
@@ -5,6 +6,7 @@ from sqlmodel import Session  # CAMBIO: Usamos la sesión de SQLModel
 from db import get_db
 import crud
 import ai
+import math
 
 router = APIRouter()
 
@@ -136,4 +138,66 @@ def toggle_example_favorite(example_id: int, db: Session = Depends(get_db)):
         "id": example.id,
         "is_favorite": example.is_favorite,
         "message": f"example marked as {'favorited' if example.is_favorite else 'not favorited'}"
+    }
+
+
+@router.post("/explore")
+def explore_examples(
+    total_amount: int = Body(
+        15, ge=3, le=20, description="Total de ejemplos a retornar", embed=True),
+    db: Session = Depends(get_db)
+):
+    # 1. Intentar obtener los ejemplos directamente de la cola
+    examples_from_queue = crud.get_examples_from_queue(db, limit=total_amount)
+
+    # Calcular si hay déficit en la cola
+    deficit = total_amount - len(examples_from_queue)
+
+    # 2. Si faltan ejemplos, disparamos el método de rellenado (refill)
+    if deficit > 0:
+        crud.refill_example_queue(db)
+
+        # Volvemos a consultar la cola para extraer los faltantes
+        extra_examples = crud.get_examples_from_queue(db, limit=deficit)
+        examples_from_queue.extend(extra_examples)
+
+    if examples_from_queue:
+        db.commit()
+        # Refrescar las entidades para asegurar que los objetos de sesión estén al día
+        for e in examples_from_queue:
+            db.refresh(e)
+
+    # 4. Mapear respuesta unificada al usuario
+    return [
+        {
+            "id": e.id,
+            "text": e.text,
+            "origin": "queue",  # Proceden centralizadamente de la cola
+            "words": [
+                {
+                    "word_id": ew.word_id,
+                    "main": ew.word.main,
+                    "text_form": ew.text_form
+                }
+                for ew in e.example_words
+            ]
+        }
+        for e in examples_from_queue
+    ]
+
+
+@router.patch("/{example_id}/resolve-pending")
+def resolve_example_pending(example_id: int, db: Session = Depends(get_db)):
+    example = crud.resolve_and_increment_example(db, example_id)
+
+    if not example:
+        raise HTTPException(
+            status_code=404,
+            detail="Example no encontrado o ya no estaba marcado como pendiente"
+        )
+
+    return {
+        "id": example.id,
+        "times_seen": example.times_seen,
+        "message": "El ejemplo ya no está pendiente. Visualizaciones incrementadas con éxito."
     }

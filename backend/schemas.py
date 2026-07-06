@@ -13,11 +13,6 @@ class WordResponse(SQLModel):
     created_at: datetime
 
 
-class WordStatsResponse(SQLModel):
-    times_seen: int
-    last_seen_at: Optional[datetime] = None
-
-
 class ExampleResponse(SQLModel):
     id: int
     content: str
