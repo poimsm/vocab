@@ -21,7 +21,6 @@ services:
     container_name: fastapi_container
     restart: always
     environment:
-      # Construcción dinámica de la URL usando las variables del .env
       - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres_db:5432/${DB_NAME}
       - AI_KEY=${AI_KEY}
     ports:
@@ -34,7 +33,7 @@ services:
 
  # 3. FRONTEND (Vue + Nginx)
   nginx:
-    image: nginx:alpine # Ya no necesitas compilar un Dockerfile personalizado si está vacío
+    image: nginx:alpine
     container_name: nginx_frontend_container
     restart: always
     ports:

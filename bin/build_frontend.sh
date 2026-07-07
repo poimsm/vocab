@@ -3,16 +3,15 @@
 # Detener el script si ocurre algún error
 set -e
 
-# Obtener la ruta raíz del proyecto
+# Obtener la ruta absoluta de la raíz del proyecto de forma compatible con Linux/Mac/Windows
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$DIR/.."
 
-# 🔥 MAGIA PARA WINDOWS: Captura la ruta absoluta real estilo Windows (C:/...)
+# Detectar la ruta según el sistema operativo
 if command -v cygpath >/dev/null 2>&1; then
-    # Si estamos en Git Bash/MSYS, usamos la ruta nativa de Windows
-    ROOT_DIR=$(pwd -W)
+    ROOT_DIR=$(pwd -W) # Windows (Git Bash)
 else
-    ROOT_DIR=$(pwd)
+    ROOT_DIR=$(pwd)    # Linux nativo / macOS
 fi
 
 # Importar tu script de comandos compartidos si existe
@@ -22,12 +21,13 @@ fi
 
 echo "🚀 Iniciando build efímero del Frontend con Node 20..."
 
-# Leer la variable VITE_API_BASE desde tu archivo .env local si existe
-if [ -f "$ROOT_DIR/.env" ]; then
-    export $(grep -v '^#' "$ROOT_DIR/.env" | xargs)
+# Asignar un valor por defecto si la variable no viene del entorno o de un .env
+VITE_API_BASE_VALUE="${VITE_API_BASE}"
+if [ -z "$VITE_API_BASE_VALUE" ]; then
+    VITE_API_BASE_VALUE="/api"
 fi
 
-# Forzar a Git Bash a no tocar las rutas internas de Docker (/app)
+# Desactivar la conversión de rutas SOLO si estamos en Windows
 case "$(uname -s)" in
     CYGWIN*|MSYS*|MINGW*)
         export MSYS_NO_PATHCONV=1
@@ -47,7 +47,7 @@ echo "🏗️  Compilando el proyecto..."
 docker run --rm \
   -v "${ROOT_DIR}/frontend:/app" \
   -w /app \
-  -e VITE_API_BASE="${VITE_API_BASE:-/api}" \
+  -e VITE_API_BASE="$VITE_API_BASE_VALUE" \
   node:20-alpine \
   npm run build
 
