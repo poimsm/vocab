@@ -1,4 +1,4 @@
-import re
+import re, random
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -313,12 +313,16 @@ def increment_examples_seen(db: Session, examples: List[Example]):
 
 
 def get_words_least_seen_ordered(db: Session, limit: int = 10) -> List[Word]:
-    # Corregido: Se eliminó el Join implícito con WordStats y ahora ordena por Word.times_seen
+    # Pedimos el triple de lo necesario para tener un "pool" de variedad
     statement = (
-        select(Word).where(Word.is_active == True).order_by(
-            Word.times_seen.asc()).limit(limit)
+        select(Word)
+        .where(Word.is_active == True)
+        .order_by(Word.times_seen.asc())
+        .limit(limit * 3) 
     )
-    return db.exec(statement).all()
+    results = db.exec(statement).all()
+    # Mezclamos el resultado para no darle siempre prioridad a los mismos IDs bajos
+    return random.sample(results, min(len(results), limit))
 
 
 def get_pending_examples(db: Session, limit: int = 15) -> List[Example]:
@@ -347,12 +351,14 @@ def resolve_and_increment_example(db: Session, example_id: int) -> Optional[Exam
     db.add(example)
 
     # 2. Incrementar visualizaciones de palabras asociadas directamente en Word
+    seen_word_ids = set()
     for ew in example.example_words:
         word = ew.word
-        if word:
+        if word and word.id not in seen_word_ids:
             word.times_seen += 1
             word.last_seen_at = datetime.now(timezone.utc)
             db.add(word)
+            seen_word_ids.add(word.id)
 
     # 3. Buscar registro en la cola y pasarlo a RESOLVED
     queue_item = db.exec(
