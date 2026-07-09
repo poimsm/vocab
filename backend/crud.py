@@ -1,4 +1,6 @@
-import re, random
+from sqlmodel import Session, select, or_
+import re
+import random
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -113,12 +115,27 @@ def get_word_by_id(db: Session, word_id: int):
     return db.exec(select(models.Word).filter(models.Word.id == word_id)).first()
 
 
+# Asegúrate de importar 'or_' desde sqlmodel (o desde sqlalchemy, ambas funcionan)
+
+
 def create_word(db: Session, word_data: dict):
-    normalized = word_data["main"].lower().strip()
+    main_raw = word_data.get("main", "").strip()
+    normalized = main_raw.lower()
+    source_text = word_data.get("source_text", "").strip(
+    ) if word_data.get("source_text") else None
+
+    conditions = [models.Word.normalized == normalized]
+
+    if main_raw:
+        conditions.append(models.Word.main == main_raw)
+    if source_text:
+        conditions.append(models.Word.source_text == source_text)
 
     existing = db.exec(
-        select(models.Word).filter(models.Word.normalized ==
-                                   normalized, models.Word.is_active == True)
+        select(models.Word).where(
+            models.Word.is_active == True,
+            or_(*conditions)
+        )
     ).first()
 
     if existing:
@@ -318,7 +335,7 @@ def get_words_least_seen_ordered(db: Session, limit: int = 10) -> List[Word]:
         select(Word)
         .where(Word.is_active == True)
         .order_by(Word.times_seen.asc())
-        .limit(limit * 3) 
+        .limit(limit * 3)
     )
     results = db.exec(statement).all()
     # Mezclamos el resultado para no darle siempre prioridad a los mismos IDs bajos

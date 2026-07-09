@@ -1,17 +1,17 @@
 import csv
 import io
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Query, Path, BackgroundTasks, status
-from fastapi.responses import StreamingResponse
-from sqlmodel import Session  # CAMBIO: Usamos la sesión de SQLModel
-
-# CORRECCIÓN: Ajustamos las importaciones al mismo nivel (sin el prefijo app.)
-from db import get_db
+import time
 import crud
 import schemas
 import ai
+from typing import List
+from fastapi import (APIRouter, Depends, HTTPException,
+                     Query, Path, BackgroundTasks, status)
+from fastapi.responses import StreamingResponse
+from sqlmodel import Session
+from db import get_db, engine
 from models import WordLevel
-from db import engine, get_db
+from helpers import TextFormatter
 
 router = APIRouter()
 
@@ -28,12 +28,13 @@ def get_words(
     paginated_data["items"] = [
         {
             "id": w.id,
-            "main": w.main,
-            "meaning": w.meaning,
+            "main": TextFormatter.capitalize(w.main),
+            "meaning": TextFormatter.capitalize(w.meaning),
+            "synonyms": TextFormatter.capitalize(w.synonyms),
             "type": w.type,
             "frequency": w.frequency,
             "level": WordLevel.to_str(w.level),
-            "context": w.context,
+            "context": TextFormatter.capitalize(w.context),
             "is_favorite": w.is_favorite,
             "is_learned": w.is_learned,
             "total_examples": total_examples
@@ -61,12 +62,13 @@ def get_word(
 
     return {
         "id": word.id,
-        "main": word.main,
-        "meaning": word.meaning,
+        "main": TextFormatter.capitalize(word.main),
+        "meaning": TextFormatter.capitalize(word.meaning),
+        "synonyms": TextFormatter.capitalize(word.synonyms),
         "type": word.type,
         "frequency": word.frequency,
         "level": word.level,
-        "context": word.context,
+        "context": TextFormatter.capitalize(word.context),
         "source_text": word.source_text,
         "is_favorite": word.is_favorite,
         "is_learned": word.is_learned,
@@ -116,6 +118,7 @@ def process_bulk_words_task(texts: List[str]):
                     "main": extracted["main"],
                     "type": extracted["type"],
                     "meaning": enriched.get("meaning"),
+                    "synonyms": enriched.get("synonyms", []),
                     "frequency": enriched.get("frequency"),
                     "level": WordLevel.to_int(enriched.get("level")),
                     "context": enriched.get("category"),
@@ -123,6 +126,7 @@ def process_bulk_words_task(texts: List[str]):
                 }
 
                 crud.create_word(db, word_data)
+                time.sleep(1)
         except Exception as e:
             print(f"Error en background: {e}")
         # Aquí el bloque 'with' cierra la sesión automáticamente al terminar

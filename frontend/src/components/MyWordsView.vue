@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { Icon } from '@iconify/vue'
 
 // ─── Config ───
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost/api';
@@ -22,6 +23,7 @@ interface Word {
   totalExamples: number
   type: string
   examples: string[]
+  synonyms: string[]
   sourceText?: string
 }
 
@@ -34,6 +36,12 @@ const searchQuery = ref('')
 const filterMode = ref<FilterMode>('all')
 const selectedWord = ref<Word | null>(null)
 const showMobileDetail = ref(false)
+
+// ─── Infinite Scroll State ───
+const currentPage = ref(1)
+const totalPages = ref(1)
+const hasMore = ref(false)
+const loadingMore = ref(false)
 
 // ─── Add Word State ───
 const showAddDesktop = ref(false)
@@ -75,15 +83,47 @@ const frequencyLabel = (freq: WordFrequency) => {
   return freq.charAt(0).toUpperCase() + freq.slice(1)
 }
 
+// ─── Text-to-Speech ───
+function speak(text: string) {
+  if (!window.speechSynthesis) {
+    console.warn('Speech synthesis not supported')
+    return
+  }
+  window.speechSynthesis.cancel()
+  const utterance = new SpeechSynthesisUtterance(text)
+  utterance.lang = 'en-US'
+  utterance.rate = 0.9
+  utterance.pitch = 1
+  const voices = window.speechSynthesis.getVoices()
+  const enVoice = voices.find(v => v.lang.startsWith('en'))
+  if (enVoice) {
+    utterance.voice = enVoice
+  }
+  window.speechSynthesis.speak(utterance)
+}
+
 // ─── API ───
-async function fetchWords() {
-  loading.value = true
+async function fetchWords(reset = false) {
+  if (reset) {
+    currentPage.value = 1
+    words.value = []
+  }
+  if (loading.value || loadingMore.value) return
+
+  const isFirstLoad = currentPage.value === 1 && words.value.length === 0
+  if (isFirstLoad) {
+    loading.value = true
+  } else {
+    loadingMore.value = true
+  }
   error.value = null
+
   try {
-    const res = await fetch(`${API_BASE}/words/words`)
+    const res = await fetch(`${API_BASE}/words/words?page=${currentPage.value}&limit=20`)
     if (!res.ok) throw new Error('Failed to load words')
     const data = await res.json()
-    words.value = (data.items || []).map((item: any) => ({
+
+    const newItems = (data.items || []).map((item: any) => ({
       id: item.id,
       word: item.main,
       definition: item.meaning,
@@ -96,12 +136,41 @@ async function fetchWords() {
       totalExamples: item.total_examples,
       type: item.type,
       examples: [],
+      synonyms: item.synonyms || [],
       sourceText: item.source_text
     }))
+
+    if (reset) {
+      words.value = newItems
+    } else {
+      words.value.push(...newItems)
+    }
+
+    totalPages.value = data.meta?.total_pages || 1
+    hasMore.value = data.meta?.has_next ?? false
   } catch (e: any) {
     error.value = e.message
   } finally {
     loading.value = false
+    loadingMore.value = false
+  }
+}
+
+async function loadMore() {
+  if (!hasMore.value || loadingMore.value) return
+  currentPage.value++
+  await fetchWords()
+}
+
+// Global scroll listener for infinite scroll (single scroll, no nested containers)
+function onWindowScroll() {
+  if (!hasMore.value || loadingMore.value) return
+  const scrollTop = window.scrollY || document.documentElement.scrollTop
+  const scrollHeight = document.documentElement.scrollHeight
+  const clientHeight = window.innerHeight
+  // Trigger when within 200px of bottom
+  if (scrollTop + clientHeight >= scrollHeight - 200) {
+    loadMore()
   }
 }
 
@@ -123,7 +192,14 @@ async function fetchWordDetail(id: number) {
       totalExamples: data.total_examples,
       type: data.type,
       sourceText: data.source_text,
-      examples: data.examples || []
+      examples: data.examples || [],
+      synonyms: data.synonyms || []
+    }
+    // Scroll detail panel to top after selecting
+    await nextTick()
+    const detailPanel = document.querySelector('.detail-panel')
+    if (detailPanel) {
+      detailPanel.scrollTop = 0
     }
   } catch (e) {
     alert('Could not load word detail')
@@ -158,7 +234,7 @@ async function addWordApi() {
       const err = await res.json().catch(() => ({}))
       throw new Error(err.detail || 'Failed to add word')
     }
-    await fetchWords()
+    await fetchWords(true)
     closeAdd()
   } catch (e: any) {
     alert(e.message)
@@ -251,6 +327,11 @@ function handleAddKeydown(e: KeyboardEvent) {
 
 onMounted(() => {
   fetchWords()
+  window.addEventListener('scroll', onWindowScroll)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', onWindowScroll)
 })
 </script>
 
@@ -314,12 +395,12 @@ onMounted(() => {
     <!-- Error -->
     <div v-else-if="error" class="error-state">
       <p>{{ error }}</p>
-      <button @click="fetchWords" class="retry-btn">Retry</button>
+      <button @click="fetchWords(true)" class="retry-btn">Retry</button>
     </div>
 
     <!-- Desktop: Split View -->
     <div v-else class="words-content" :class="{ 'detail-open': selectedWord && !showMobileDetail }">
-      <!-- Word List -->
+      <!-- Word List — NO internal scroll, flows naturally with the page -->
       <div class="word-list">
         <div
           v-for="word in filteredWords"
@@ -366,8 +447,14 @@ onMounted(() => {
           </div>
         </div>
 
+        <!-- Loading More Indicator -->
+        <div v-if="loadingMore" class="loading-more">
+          <div class="spinner-small"></div>
+          <span>Loading more...</span>
+        </div>
+
         <!-- Empty State -->
-        <div v-if="filteredWords.length === 0" class="empty-state">
+        <div v-if="filteredWords.length === 0 && !loadingMore" class="empty-state">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
@@ -379,9 +466,9 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Desktop Detail Panel -->
+      <!-- Desktop Detail Panel — sticky, scrolls independently ONLY if taller than viewport -->
       <transition name="slide-panel">
-        <aside v-if="selectedWord && !showMobileDetail" class="detail-panel">
+        <aside v-if="selectedWord && !showMobileDetail" class="detail-panel" style="position:fixed;right:0">
           <div class="detail-header">
             <button class="detail-close" @click="selectedWord = null">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -392,7 +479,12 @@ onMounted(() => {
 
           <div class="detail-body">
             <div class="detail-word-header">
-              <h2 class="detail-word">{{ selectedWord.word }}</h2>
+              <div class="detail-word-left">
+                <h2 class="detail-word">{{ selectedWord.word }}</h2>
+                <button class="detail-speak-btn" @click="speak(selectedWord.word)" title="Play pronunciation">
+                  <Icon icon="solar:volume-loud-linear" width="20" />
+                </button>
+              </div>
               <button
                 class="detail-fav-btn"
                 :class="{ active: selectedWord.isFavorite }"
@@ -408,6 +500,20 @@ onMounted(() => {
             </div>
 
             <p class="detail-definition">{{ selectedWord.definition }}</p>
+
+            <!-- Synonyms Section -->
+            <div v-if="selectedWord.synonyms && selectedWord.synonyms.length" class="detail-synonyms">
+              <h4 class="synonyms-title">Synonyms</h4>
+              <div class="synonyms-list">
+                <span
+                  v-for="syn in selectedWord.synonyms"
+                  :key="syn"
+                  class="synonym-tag"
+                >
+                  {{ syn }}
+                </span>
+              </div>
+            </div>
 
             <div class="detail-meta-grid">
               <div class="detail-meta-item">
@@ -485,8 +591,27 @@ onMounted(() => {
         </div>
 
         <div class="mobile-detail-content">
-          <h2 class="mobile-word">{{ selectedWord.word }}</h2>
+          <div class="mobile-word-header">
+            <h2 class="mobile-word">{{ selectedWord.word }}</h2>
+            <button class="mobile-speak-btn" @click="speak(selectedWord.word)" title="Play pronunciation">
+              <Icon icon="solar:volume-loud-linear" width="20" />
+            </button>
+          </div>
           <p class="mobile-definition">{{ selectedWord.definition }}</p>
+
+          <!-- Mobile Synonyms -->
+          <div v-if="selectedWord.synonyms && selectedWord.synonyms.length" class="mobile-synonyms">
+            <h4 class="synonyms-title">Synonyms</h4>
+            <div class="synonyms-list">
+              <span
+                v-for="syn in selectedWord.synonyms"
+                :key="syn"
+                class="synonym-tag"
+              >
+                {{ syn }}
+              </span>
+            </div>
+          </div>
 
           <div class="mobile-meta-list">
             <div class="mobile-meta-row">
@@ -614,7 +739,12 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* ─── Root ─── */
+/* ════════════════════════════════════════
+   LAYOUT PRINCIPAL — Un solo scroll fluido
+   ════════════════════════════════════════ */
+
+/* El contenedor raíz fluye naturalmente con el documento.
+   NO tiene max-height ni overflow. El único scroll es el de la página. */
 .my-words-view {
   max-width: 1200px;
   margin: 0 auto;
@@ -829,25 +959,51 @@ onMounted(() => {
   background: rgba(124, 58, 237, 0.3);
 }
 
-/* ─── Content Layout ─── */
+/* ════════════════════════════════════════
+   SPLIT VIEW — Desktop
+   ════════════════════════════════════════ */
+
 .words-content {
   display: flex;
   gap: 0;
-  min-height: 400px;
+  align-items: flex-start;
 }
 
+/* Cuando hay detail abierto, la lista ocupa ~55% */
 .words-content.detail-open .word-list {
   flex: 0 0 55%;
   max-width: 55%;
 }
 
-/* ─── Word List ─── */
+/* ─── Word List — NO internal scroll!
+   Fluye con el documento. Ocupa todo el ancho disponible. ─── */
 .word-list {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 8px;
   transition: all 0.3s ease;
+  /* SIN max-height, SIN overflow-y — fluye naturalmente */
+}
+
+/* ─── Loading More ─── */
+.loading-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  color: #9c99ab;
+  font-size: 13px;
+}
+
+.spinner-small {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(124, 58, 237, 0.2);
+  border-top-color: #7c3aed;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 /* ─── Word Card ─── */
@@ -972,7 +1128,10 @@ onMounted(() => {
   font-size: 11px;
 }
 
-/* ─── Detail Panel (Desktop) ─── */
+/* ════════════════════════════════════════
+   DETAIL PANEL — Sticky, scrolls solo si es más alto que viewport
+   ════════════════════════════════════════ */
+
 .detail-panel {
   width: 380px;
   flex-shrink: 0;
@@ -980,6 +1139,27 @@ onMounted(() => {
   border-left: 1px solid rgba(255, 255, 255, 0.06);
   padding: 24px;
   border-radius: 16px 0 0 16px;
+
+  /* Sticky: se queda pegado arriba mientras scrolleas la lista */
+  position: sticky;
+  top: 24px;
+
+  /* Solo scrollea internamente si el contenido es más alto que la ventana */
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+.detail-panel::-webkit-scrollbar {
+  width: 5px;
+}
+
+.detail-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.detail-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
 }
 
 .detail-header {
@@ -1014,12 +1194,38 @@ onMounted(() => {
   margin-bottom: 12px;
 }
 
+.detail-word-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .detail-word {
   font-size: 32px;
   font-weight: 700;
   color: #e2e0e8;
   margin: 0;
   letter-spacing: -0.5px;
+}
+
+.detail-speak-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(167, 139, 250, 0.1);
+  color: #a78bfa;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.detail-speak-btn:hover {
+  background: rgba(167, 139, 250, 0.2);
+  color: #c4b5fd;
 }
 
 .detail-fav-btn {
@@ -1050,6 +1256,42 @@ onMounted(() => {
   line-height: 1.6;
   color: #b8b5c8;
   margin-bottom: 28px;
+}
+
+/* ─── Synonyms ─── */
+.detail-synonyms {
+  margin-bottom: 28px;
+}
+
+.synonyms-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #9c99ab;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 12px 0;
+}
+
+.synonyms-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.synonym-tag {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.12);
+  color: #a78bfa;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid rgba(124, 58, 237, 0.2);
+  transition: all 0.2s ease;
+}
+
+.synonym-tag:hover {
+  background: rgba(124, 58, 237, 0.2);
+  border-color: rgba(124, 58, 237, 0.35);
 }
 
 .detail-meta-grid {
@@ -1503,12 +1745,39 @@ onMounted(() => {
   padding: 24px 20px;
 }
 
+.mobile-word-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
 .mobile-word {
   font-size: 32px;
   font-weight: 700;
   color: #e2e0e8;
-  margin: 0 0 12px 0;
+  margin: 0;
   letter-spacing: -0.5px;
+}
+
+.mobile-speak-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(167, 139, 250, 0.1);
+  color: #a78bfa;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.mobile-speak-btn:hover {
+  background: rgba(167, 139, 250, 0.2);
+  color: #c4b5fd;
 }
 
 .mobile-definition {
@@ -1516,6 +1785,11 @@ onMounted(() => {
   line-height: 1.6;
   color: #b8b5c8;
   margin: 0 0 28px 0;
+}
+
+/* Mobile Synonyms */
+.mobile-synonyms {
+  margin-bottom: 28px;
 }
 
 .mobile-meta-list {
@@ -1601,7 +1875,10 @@ onMounted(() => {
   transform: translateY(100%);
 }
 
-/* ─── Responsive ─── */
+/* ════════════════════════════════════════
+   Responsive
+   ════════════════════════════════════════ */
+
 @media (max-width: 768px) {
   .my-words-view {
     padding: 16px;

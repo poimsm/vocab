@@ -189,9 +189,38 @@ def extract_learning_intent(raw_inputs: list[str]) -> list[dict] | None:
 Extract the single English vocabulary item the user wants to save from each input.
 
 Rules:
-- Keep multi-word expressions (like phrasal verbs or collocations) properly separated by spaces. Never merge words into a single string (e.g., use "spring out", NOT "springout").
-- Clean up any equal signs, translations, or punctuation from the 'main' field.
-- Classify phrasal verbs (verb + particle) accurately as "phrasal_verb".
+1. The vocabulary item is the English word or expression being defined, translated, or explained. It is usually the first English term in the input.
+2. Ignore example sentences (after "->", "(", ":", "-", etc.) whenever the vocabulary can already be identified.
+3. Clean translations, explanations, equal signs, and punctuation from the "main" field.
+4. Preserve multi-word expressions exactly (e.g. "spring out", "come across", "a lead weight"). Never merge words (e.g. "springout").
+5. Classify verb + particle expressions as "phrasal_verb".
+
+Examples:
+"dupe = deceive" -> "dupe"
+"heretic (hereje)" -> "heretic"
+"sheer = utter = pure" -> "sheer"
+"bigot (Don't be a bigot)" -> "bigot"
+"claptrap = nonsense" -> "claptrap"
+"flushed (enrojecido)" -> "flushed"
+"make a run for it" -> "make a run for it"
+"spring out" -> "spring out"
+"a lead weight" -> "lead weight"
+"good lord!" -> "good lord"
+"what the heck?!" -> "what the heck"
+"by the way" -> "by the way"
+"look up (buscar información)" -> "look up"
+"fairly sure... bastante seguro" -> "fairly sure"
+"But... onward!" -> "onward"
+"Smack (golpear)" -> "to smack"
+"It knock the wind of out me (sin aliento)" -> "to knock out of"
+"It smacks me square in the forehead (de lleno)" -> "smack square"
+"Welt (roncha, mancha roja)" -> "welt"
+"More stuff clatter down (caen estrpitosamente)" -> "clatter down"
+"Not sure what to make of that (q pensar de ello)" -> "make of that"
+"Skewing (sesgando)" -> "to skew"
+"Note down = write down" -> "note down"
+"a jettison process" -> "jettison process"
+"to squint" -> "squint"
 
 Return a JSON array of objects matching this exact structure:
 [
@@ -209,7 +238,6 @@ Return a JSON array of objects matching this exact structure:
                 "content": json.dumps(payload, ensure_ascii=False)
             }
         ])
-
     content = response.choices[0].message.content.strip()
 
     try:
@@ -256,8 +284,7 @@ Return:
 }
 
 Rules:
-- meaning must be 6-12 words.
-- meaning must be natural conversational English.
+- meaning must be 7 words.
 - synonyms: 3-5 items.
 - frequency: common, uncommon, rare.
 - level: beginner, intermediate, advanced.

@@ -127,6 +127,43 @@ function fireAndForgetResolve(exampleId: number) {
     .catch(() => {}) // Silencioso, no nos importa si falla
 }
 
+// ─── Text-to-Speech ───
+function speak(text: string) {
+  if (!window.speechSynthesis) {
+    console.warn('Speech synthesis not supported')
+    return
+  }
+  // Cancel any ongoing speech
+  window.speechSynthesis.cancel()
+
+  const utterance = new SpeechSynthesisUtterance(text)
+  utterance.lang = 'en-US'
+  utterance.rate = 0.9
+  utterance.pitch = 1
+
+  // Try to find an English voice
+  const voices = window.speechSynthesis.getVoices()
+  const enVoice = voices.find(v => v.lang.startsWith('en'))
+  if (enVoice) {
+    utterance.voice = enVoice
+  }
+
+  window.speechSynthesis.speak(utterance)
+}
+
+function speakWord() {
+  if (selectedWord.value) {
+    speak(selectedWord.value.word)
+  }
+}
+
+function speakExample() {
+  const ex = currentExample.value
+  if (ex) {
+    speak(ex.text)
+  }
+}
+
 // ─── API ───
 async function fetchExamples() {
   if (generating.value) return
@@ -181,7 +218,7 @@ async function fetchWordDetail(wordId: number) {
       context: data.context || data.type || 'General',
       frequency: data.frequency,
       examples: data.examples || [],
-      synonyms: [] // La API no tiene synonyms aún
+      synonyms: data.synonyms || []
     }
   } catch (e) {
     alert('Could not load word detail')
@@ -271,6 +308,8 @@ function shareExample() {
 
 onMounted(() => {
   fetchExamples()
+  // Preload voices for speech synthesis
+  window.speechSynthesis?.getVoices()
 })
 </script>
 
@@ -309,6 +348,10 @@ onMounted(() => {
             <span v-else>{{ part.text }}</span>
           </template>
         </p>
+        <!-- Play full sentence audio -->
+        <button class="sentence-speak-btn" @click="speakExample" title="Play sentence">
+          <Icon icon="solar:volume-loud-linear" width="18" />
+        </button>
       </div>
 
       <!-- Progress indicator -->
@@ -352,16 +395,34 @@ onMounted(() => {
           <button class="back-btn" @click="selectedWord = null">
             <Icon icon="solar:arrow-left-linear" width="20" />
           </button>
-          <button class="bookmark-btn">
-            <Icon icon="solar:bookmark-linear" width="20" />
-          </button>
-          <button class="sound-btn">
-            <Icon icon="solar:volume-loud-linear" width="20" />
-          </button>
+          <div class="panel-header-actions">
+            <button class="sound-btn" @click="speakWord" title="Play pronunciation">
+              <Icon icon="solar:volume-loud-linear" width="20" />
+            </button>
+            <button class="bookmark-btn" title="Bookmark">
+              <Icon icon="solar:bookmark-linear" width="20" />
+            </button>
+          </div>
         </div>
 
         <h2 class="panel-word">{{ selectedWord.word }}</h2>
         <p class="panel-definition">{{ selectedWord.definition }}</p>
+
+        <!-- Synonyms Section (Desktop) -->
+        <div v-if="selectedWord.synonyms && selectedWord.synonyms.length" class="panel-section">
+          <h3 class="section-title">SYNONYMS</h3>
+          <div class="synonyms-list">
+            <span
+              v-for="syn in selectedWord.synonyms"
+              :key="syn"
+              class="synonym-tag"
+              @click="speak(syn)"
+              title="Click to hear"
+            >
+              {{ syn }}
+            </span>
+          </div>
+        </div>
 
         <div class="panel-section">
           <h3 class="section-title">EXAMPLES</h3>
@@ -413,18 +474,20 @@ onMounted(() => {
           <button class="mobile-back-btn" @click="closeMobileDetail">
             <Icon icon="solar:arrow-left-linear" width="24" />
           </button>
-          <button class="mobile-bookmark-btn">
-            <Icon icon="solar:bookmark-linear" width="22" />
-          </button>
-          <button class="mobile-sound-btn">
-            <Icon icon="solar:volume-loud-linear" width="22" />
-          </button>
+          <div class="mobile-header-actions">
+            <button class="mobile-sound-btn" @click="speakWord" title="Play pronunciation">
+              <Icon icon="solar:volume-loud-linear" width="22" />
+            </button>
+            <button class="mobile-bookmark-btn" title="Bookmark">
+              <Icon icon="solar:bookmark-linear" width="22" />
+            </button>
+          </div>
         </div>
 
         <div class="mobile-detail-content">
           <div class="mobile-word-header">
             <h2 class="mobile-word">{{ selectedWord?.word }}</h2>
-            <button class="mobile-sound-inline">
+            <button class="mobile-sound-inline" @click="speakWord" title="Play pronunciation">
               <Icon icon="solar:volume-loud-linear" width="18" />
             </button>
           </div>
@@ -435,20 +498,27 @@ onMounted(() => {
             <p class="mobile-definition">{{ selectedWord?.definition }}</p>
           </div>
 
+          <!-- Synonyms Section (Mobile) -->
+          <div class="mobile-section" v-if="selectedWord?.synonyms && selectedWord.synonyms.length">
+            <h3 class="mobile-section-title">Synonyms</h3>
+            <div class="synonyms-tags">
+              <span
+                v-for="syn in selectedWord.synonyms"
+                :key="syn"
+                class="synonym-tag"
+                @click="speak(syn)"
+                title="Tap to hear"
+              >
+                {{ syn }}
+              </span>
+            </div>
+          </div>
+
           <div class="mobile-section">
             <h3 class="mobile-section-title">Examples</h3>
             <ul class="mobile-examples-list">
               <li v-for="(ex, i) in selectedWord?.examples" :key="i">{{ ex }}</li>
             </ul>
-          </div>
-
-          <div class="mobile-section" v-if="selectedWord?.synonyms && selectedWord.synonyms.length">
-            <h3 class="mobile-section-title">Synonyms</h3>
-            <div class="synonyms-tags">
-              <span v-for="syn in selectedWord.synonyms" :key="syn" class="synonym-tag">
-                {{ syn }}
-              </span>
-            </div>
           </div>
 
           <div class="known-toggle">
@@ -464,7 +534,8 @@ onMounted(() => {
   </div>
 </template>
 
-<style scoped>.examples-view {
+<style scoped>
+.examples-view {
   display: flex;
   min-height: 100%;
   position: relative;
@@ -489,6 +560,7 @@ onMounted(() => {
   max-width: 420px;
   text-align: center;
   margin-bottom: 48px;
+  position: relative;
 }
 
 .sentence-text {
@@ -510,6 +582,31 @@ onMounted(() => {
   text-decoration: underline;
   text-decoration-color: rgba(167, 139, 250, 0.4);
   text-underline-offset: 4px;
+}
+
+/* Sentence speak button */
+.sentence-speak-btn {
+  position: absolute;
+  right: -48px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  background: transparent;
+  color: #9c99ab;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.sentence-speak-btn:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #e2e0e8;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 /* ─── Action Buttons ─── */
@@ -552,11 +649,35 @@ onMounted(() => {
 .panel-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
   margin-bottom: 20px;
 }
 
-.back-btn,
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.back-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: #9c99ab;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.back-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e0e8;
+}
+
 .bookmark-btn,
 .sound-btn {
   width: 36px;
@@ -572,15 +693,19 @@ onMounted(() => {
   transition: all 0.2s ease;
 }
 
-.back-btn:hover,
 .bookmark-btn:hover,
 .sound-btn:hover {
   background: rgba(255, 255, 255, 0.06);
   color: #e2e0e8;
 }
 
-.back-btn {
-  margin-right: auto;
+.sound-btn {
+  color: #a78bfa;
+}
+
+.sound-btn:hover {
+  color: #c4b5fd;
+  background: rgba(167, 139, 250, 0.1);
 }
 
 .panel-word {
@@ -631,6 +756,32 @@ onMounted(() => {
   left: 0;
   color: #c4b5fd;
   font-weight: 700;
+}
+
+/* ─── Synonyms ─── */
+.synonyms-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.synonym-tag {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.12);
+  color: #a78bfa;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid rgba(124, 58, 237, 0.2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.synonym-tag:hover {
+  background: rgba(124, 58, 237, 0.2);
+  border-color: rgba(124, 58, 237, 0.35);
+  color: #c4b5fd;
 }
 
 /* ─── Badges ─── */
@@ -774,6 +925,12 @@ onMounted(() => {
   justify-content: center;
 }
 
+.mobile-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .mobile-bookmark-btn,
 .mobile-sound-btn {
   width: 40px;
@@ -786,6 +943,15 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.mobile-sound-btn {
+  color: #a78bfa;
+}
+
+.mobile-sound-btn:hover {
+  background: rgba(167, 139, 250, 0.1);
+  color: #c4b5fd;
 }
 
 .mobile-detail-content {
@@ -819,6 +985,11 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.mobile-sound-inline:hover {
+  background: rgba(167, 139, 250, 0.1);
+  color: #c4b5fd;
 }
 
 .mobile-meta {
@@ -876,15 +1047,7 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 
-.synonym-tag {
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  font-size: 13px;
-  color: #b8b5c8;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
+/* Mobile synonym tags reuse desktop styles */
 .known-toggle {
   display: flex;
   align-items: center;
@@ -959,6 +1122,14 @@ onMounted(() => {
 
   .sentence-text {
     font-size: 22px;
+  }
+
+  .sentence-speak-btn {
+    position: static;
+    transform: none;
+    margin-top: 16px;
+    margin-left: auto;
+    margin-right: auto;
   }
 
   .word-panel {

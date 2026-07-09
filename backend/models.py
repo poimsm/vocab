@@ -57,6 +57,7 @@ class Word(SQLModel, table=True):
     main: str = Field(max_length=100, nullable=False, index=True)
     # Text en Postgres se maneja con str normal
     meaning: Optional[str] = Field(default=None)
+    synonyms: Optional[List[str]] = Field(default=None, sa_type=JSON)
     # word | phrase | idiom | phrasal verb
     type: Optional[str] = Field(default=None, max_length=50)
     frequency: Optional[str] = Field(default=None, max_length=50)
