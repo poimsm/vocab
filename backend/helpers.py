@@ -18,3 +18,8 @@ class TextFormatter:
 
         # Si pasan un None o un tipo de dato no esperado, lo devuelve tal cual
         return data
+
+
+def chunk_list(lst, n):
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]

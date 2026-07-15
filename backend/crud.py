@@ -1,3 +1,4 @@
+from sqlmodel import select, func
 from sqlmodel import Session, select, or_
 import re
 import random
@@ -9,7 +10,8 @@ from sqlmodel import Session, func, select
 
 import ai
 import models
-from models import Example, ExampleQueue, ExampleWord, QueueStatus, Word
+from models import (Example, ExampleQueue, ExampleWord,
+                    QueueStatus, Word, ExploreConfiguration, ExampleType)
 
 
 def paginate_query(db: Session, statement, page: int, limit: int) -> dict:
@@ -80,12 +82,20 @@ def paginate_query2(db: Session, statement, page: int, limit: int) -> dict:
 
 
 def get_words(db: Session, sort: str = "newest", page: int = 1, limit: int = 15):
-    # SQLModel prefiere agrupar tuplas o selecciones explícitas usando select()
+    # 1. Construimos el statement base
     statement = (
-        select(models.Word, func.count(
-            models.ExampleWord.example_id).label("total_examples"))
-        .filter(models.Word.is_active == True)
-        .outerjoin(models.ExampleWord)
+        select(
+            models.Word,
+            func.count(models.Example.id).label("total_examples")
+        )
+        .where(models.Word.is_active == True)
+        .outerjoin(models.ExampleWord, models.ExampleWord.word_id == models.Word.id)
+        .outerjoin(
+            models.Example,
+            (models.Example.id == models.ExampleWord.example_id) &
+            (models.Example.type == ExampleType.EXPLORE) &
+            (models.Example.is_active == True)
+        )
         .group_by(models.Word.id)
     )
 
@@ -100,11 +110,9 @@ def get_words(db: Session, sort: str = "newest", page: int = 1, limit: int = 15)
     elif sort == "alphabetical":
         statement = statement.order_by(models.Word.main.asc())
     elif sort == "most_seen":
-        # Corregido: Usa el campo directo de Word
         statement = statement.order_by(
             models.Word.times_seen.desc().nullslast())
     elif sort == "least_seen":
-        # Corregido: Usa el campo directo de Word
         statement = statement.order_by(
             models.Word.times_seen.asc().nullsfirst())
 
@@ -113,9 +121,6 @@ def get_words(db: Session, sort: str = "newest", page: int = 1, limit: int = 15)
 
 def get_word_by_id(db: Session, word_id: int):
     return db.exec(select(models.Word).filter(models.Word.id == word_id)).first()
-
-
-# Asegúrate de importar 'or_' desde sqlmodel (o desde sqlalchemy, ambas funcionan)
 
 
 def create_word(db: Session, word_data: dict):
@@ -205,19 +210,18 @@ def get_words_least_seen(db: Session, limit: int = 15):
     return db.exec(statement).all()
 
 
-def create_examples(db: Session, data: list[dict]):
+def create_examples(db: Session, data: list[dict], example_type: ExampleType = ExampleType.EXPLORE):
     examples = []
 
     for item in data:
-        # 1. Normalizar el texto del ejemplo
         text_raw = item["text"]
         normalized_text = text_raw.lower().strip()
         normalized_text = re.sub(r"[.,;:!?¿¡]$", "", normalized_text).strip()
 
-        # 2. Buscar si ya existe
         existing_example = db.exec(
             select(models.Example).where(
-                models.Example.normalized == normalized_text, models.Example.is_active == True
+                models.Example.normalized == normalized_text,
+                models.Example.is_active == True
             )
         ).first()
 
@@ -225,15 +229,14 @@ def create_examples(db: Session, data: list[dict]):
             examples.append(existing_example)
             continue
 
-        # 3. Si no existe, lo creamos
-        example = models.Example(text=text_raw, normalized=normalized_text)
+        example = models.Example(
+            text=text_raw, normalized=normalized_text, type=example_type)
         db.add(example)
         db.flush()
 
-        # 4. Crear las relaciones
         for word_data in item["words"]:
             example_word = models.ExampleWord(
-                example_id=example.id, word_id=word_data["word_id"], text_form=word_data["word"]
+                example_id=example.id, word_id=word_data["word_id"], text_form=word_data["text_form"]
             )
             db.add(example_word)
 
@@ -396,17 +399,26 @@ def resolve_and_increment_example(db: Session, example_id: int) -> Optional[Exam
 
 
 def get_explore_configuration(db: Session) -> dict:
-    total_examples = db.exec(select(func.count()).select_from(
-        Example).where(Example.is_active == True)).one()
+    total_examples = db.exec(
+        select(func.count())
+        .select_from(Example)
+        .where(Example.is_active == True, Example.type == ExampleType.EXPLORE)
+    ).one()
 
-    if total_examples <= 15:
-        return {"ai_mixed_generation_amount": 3, "ai_simple_generation_amount": 6, "recycled_words_amount": 0}
-    elif total_examples <= 30:
-        return {"ai_mixed_generation_amount": 6, "ai_simple_generation_amount": 6, "recycled_words_amount": 0}
-    elif total_examples <= 60:
-        return {"ai_mixed_generation_amount": 6, "ai_simple_generation_amount": 6, "recycled_words_amount": 3}
-    else:
-        return {"ai_mixed_generation_amount": 6, "ai_simple_generation_amount": 6, "recycled_words_amount": 8}
+    config = db.exec(
+        select(ExploreConfiguration)
+        .where(ExploreConfiguration.max_examples >= total_examples)
+        .order_by(ExploreConfiguration.max_examples.asc())
+    ).first()
+
+    if not config:
+        return {"ai_mixed_generation_amount": 6, "ai_simple_generation_amount": 6, "recycled_words_amount": 2}
+
+    return {
+        "ai_mixed_generation_amount": config.ai_mixed_generation_amount,
+        "ai_simple_generation_amount": config.ai_simple_generation_amount,
+        "recycled_words_amount": config.recycled_words_amount
+    }
 
 
 def refill_example_queue(db: Session):
@@ -429,7 +441,9 @@ def refill_example_queue(db: Session):
             if len(recycled_examples) >= recycle_amount:
                 break
             statement = select(Example).join(Example.example_words).where(
-                Example.is_active == True, ExampleWord.word_id == word.id
+                Example.is_active == True,
+                Example.type == ExampleType.EXPLORE,
+                ExampleWord.word_id == word.id
             )
             if excluded_ids:
                 statement = statement.where(Example.id.not_in(excluded_ids))

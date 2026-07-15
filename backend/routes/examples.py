@@ -1,12 +1,14 @@
 from sqlmodel import Session
 from fastapi import HTTPException, Query, Body, APIRouter, Depends
-from sqlmodel import Session  # CAMBIO: Usamos la sesión de SQLModel
-
-# CORRECCIÓN: Ajustamos las importaciones locales eliminando el prefijo app.
+from sqlmodel import Session
+from logging_config import logger
 from db import get_db
 import crud
 import ai
 import math
+import random
+from typing import List, Set
+import collections
 
 router = APIRouter()
 
@@ -46,15 +48,22 @@ def get_examples(
 @router.post("/generate")
 def generate_examples(
     word_id: int = Body(None, embed=True),
-    db: Session = Depends(get_db)  # CAMBIO: Tipado de sesión
+    db: Session = Depends(get_db)
 ):
     # CASO 1: Viene un word_id
     if word_id is not None:
         word = crud.get_word_by_id(db, word_id)
         if not word:
-            # CORRECCIÓN: Cambiado typo de status_with_code a status_code
             raise HTTPException(
                 status_code=404, detail="Palabra no encontrada")
+
+        # 🔥 DOBLE CHEQUEO: Si la palabra ya está muy vista, la desviamos a una menos vista al azar
+        UMBRAL_VISUALIZACIONES = 5
+        if word.times_seen >= UMBRAL_VISUALIZACIONES:
+            # Traemos un grupo de candidatas menos vistas y elegimos una al azar
+            candidatas = crud.get_words_least_seen(db, limit=10)
+            if candidatas:
+                word = random.choice(candidatas)
 
         raw_strings = ai.generate_examples_for_single_word(word, amount=3)
         if not raw_strings:
@@ -72,7 +81,7 @@ def generate_examples(
 
         words_to_increment = [word]
 
-    # CASO 2: No viene word_id
+    # CASO 2: No viene word_id (Mantiene tu lógica actual)
     else:
         words_to_increment = crud.get_words_least_seen(db)
         if not words_to_increment:
@@ -141,38 +150,69 @@ def toggle_example_favorite(example_id: int, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/explore")
+@router.post("/explore2")
 def explore_examples(
     total_amount: int = Body(
         15, ge=3, le=20, description="Total de ejemplos a retornar", embed=True),
     db: Session = Depends(get_db)
 ):
     # 1. Intentar obtener los ejemplos directamente de la cola
-    examples_from_queue = crud.get_examples_from_queue(db, limit=total_amount)
+    raw_queue_examples = crud.get_examples_from_queue(
+        db, limit=total_amount * 2)  # Pedimos de más para tener margen de filtrado
 
-    # Calcular si hay déficit en la cola
-    deficit = total_amount - len(examples_from_queue)
+    filtered_examples = []
+    MAX_VISTAS_PERMITIDAS = 5  # Umbral para congelar palabras muy vistas
 
-    # 2. Si faltan ejemplos, disparamos el método de rellenado (refill)
+    # 2. Doble chequeo: Filtrar ejemplos con palabras muy visualizadas
+    for e in raw_queue_examples:
+        contaminado = False
+        for ew in e.example_words:
+            if ew.word.times_seen > MAX_VISTAS_PERMITIDAS:
+                contaminado = True
+                break
+
+        if not contaminado:
+            filtered_examples.append(e)
+
+        if len(filtered_examples) >= total_amount:
+            break
+
+    # 3. Calcular si nos quedamos cortos debido al filtro (déficit)
+    deficit = total_amount - len(filtered_examples)
+
+    # 4. Si faltan ejemplos limpios, disparamos el método de rellenado (refill)
     if deficit > 0:
         crud.refill_example_queue(db)
 
         # Volvemos a consultar la cola para extraer los faltantes
-        extra_examples = crud.get_examples_from_queue(db, limit=deficit)
-        examples_from_queue.extend(extra_examples)
+        extra_examples = crud.get_examples_from_queue(db, limit=deficit * 2)
 
-    if examples_from_queue:
+        for e in extra_examples:
+            contaminado = False
+            for ew in e.example_words:
+                if ew.word.times_seen > MAX_VISTAS_PERMITIDAS:
+                    contaminado = True
+                    break
+            if not contaminado:
+                filtered_examples.append(e)
+            if len(filtered_examples) >= total_amount:
+                break
+
+    # Fallback: Si el filtro fue demasiado estricto y dejó la respuesta vacía,
+    # usamos lo que haya en la cola original para no romper la UX
+    if not filtered_examples and raw_queue_examples:
+        filtered_examples = raw_queue_examples[:total_amount]
+
+    if filtered_examples:
         db.commit()
-        # Refrescar las entidades para asegurar que los objetos de sesión estén al día
-        for e in examples_from_queue:
+        for e in filtered_examples:
             db.refresh(e)
 
-    # 4. Mapear respuesta unificada al usuario
+    # 5. Mapear respuesta unificada al usuario
     return [
         {
             "id": e.id,
             "text": e.text,
-            "origin": "queue",  # Proceden centralizadamente de la cola
             "words": [
                 {
                     "word_id": ew.word_id,
@@ -182,7 +222,145 @@ def explore_examples(
                 for ew in e.example_words
             ]
         }
-        for e in examples_from_queue
+        for e in filtered_examples
+    ]
+
+
+@router.post("/explore")
+def explore_examples(
+    total_amount: int = Body(
+        15, ge=3, le=20, description="Total de ejemplos a retornar", embed=True),
+    db: Session = Depends(get_db)
+):
+    # 1. Traemos un pool generoso de la cola para tener de dónde elegir y filtrar
+    # Pedimos el triple del tamaño solicitado para garantizar diversidad
+    raw_queue_examples = crud.get_examples_from_queue(
+        db, limit=total_amount * 3)
+
+    # Si la cola está vacía, hacemos un refill preventivo de inmediato
+    if not raw_queue_examples:
+        logger.info("Cola vacía al iniciar. Disparando refill preventivo.")
+        crud.refill_example_queue(db)
+        raw_queue_examples = crud.get_examples_from_queue(
+            db, limit=total_amount * 3)
+
+    # Helper para calcular la puntuación de un ejemplo
+    # Queremos puntuaciones BAJAS (prioridad alta).
+    # - Si tiene palabras con 0 vistas: Puntuación excelente (0-1)
+    # - Si tiene palabras con > 5 vistas: Penalización alta (+10 por cada palabra "quemada")
+    def calculate_example_score(example) -> float:
+        if not example.example_words:
+            return 999.0  # Sin palabras asociadas, prioridad ínfima
+
+        views = [ew.word.times_seen for ew in example.example_words]
+        min_views = min(views)
+        avg_views = sum(views) / len(views)
+
+        # Penalización por palabras que superan el límite óptimo (5 vistas)
+        penalty = sum(15.0 for v in views if v > 5)
+
+        # El score ideal premia que tenga palabras sin ver (min_views == 0)
+        # y penaliza las palabras muy vistas.
+        return min_views + (avg_views * 0.1) + penalty
+
+    # 2. Lógica de selección inteligente con control de diversidad
+    def select_balanced_examples(candidates, limit: int) -> List:
+        # Ordenamos candidatos: los mejores scores (más bajos) van primero
+        sorted_candidates = sorted(candidates, key=calculate_example_score)
+
+        selected = []
+        # Rastreador para evitar saturar el lote con la misma palabra
+        # Permite máximo 2 ejemplos de la misma palabra en un lote de 15
+        word_usage_counter = collections.Counter()
+        MAX_REPETITIONS_PER_WORD = 2
+
+        for e in sorted_candidates:
+            # Analizamos si este ejemplo introduce palabras que ya hemos usado mucho en este lote
+            has_overused_word = False
+            for ew in e.example_words:
+                if word_usage_counter[ew.word_id] >= MAX_REPETITIONS_PER_WORD:
+                    has_overused_word = True
+                    break
+
+            # Si contiene una palabra ya muy repetida en esta respuesta, la saltamos temporalmente
+            if has_overused_word:
+                continue
+
+            # Si pasa el filtro de diversidad, lo agregamos
+            selected.append(e)
+            for ew in e.example_words:
+                word_usage_counter[ew.word_id] += 1
+
+            if len(selected) >= limit:
+                break
+
+        # Si por ser estrictos con la diversidad no llenamos el cupo,
+        # hacemos una segunda pasada relajando la regla de diversidad
+        if len(selected) < limit:
+            for e in sorted_candidates:
+                if e not in selected:
+                    selected.append(e)
+                if len(selected) >= limit:
+                    break
+
+        return selected
+
+    # Procesamos nuestra primera selección
+    filtered_examples = select_balanced_examples(
+        raw_queue_examples, total_amount)
+
+    # 3. ¿Déficit? Si no alcanzamos el total_amount, hacemos refill y buscamos más
+    deficit = total_amount - len(filtered_examples)
+    if deficit > 0:
+        logger.info(
+            f"Déficit de {deficit} ejemplos. Ejecutando refill de la cola.")
+        crud.refill_example_queue(db)
+
+        # Traemos nuevos refuerzos
+        extra_examples = crud.get_examples_from_queue(
+            db, limit=total_amount * 3)
+
+        # Unimos los ejemplos actuales con los nuevos asegurando no duplicar IDs físicos de ejemplos
+        all_candidates = {e.id: e for e in (
+            filtered_examples + extra_examples)}.values()
+
+        # Volvemos a correr la selección balanceada sobre el pool completo agrandado
+        filtered_examples = select_balanced_examples(
+            all_candidates, total_amount)
+
+    # 4. Guardar cambios (incrementar times_seen de las palabras que el usuario va a ver)
+    if filtered_examples:
+        try:
+            # Registramos la visualización de las palabras incluidas en este lote
+            for e in filtered_examples:
+                for ew in e.example_words:
+                    ew.word.times_seen += 1  # Incrementamos vista
+                    db.add(ew.word)
+            db.commit()
+
+            # Refrescamos la sesión para devolver los datos actualizados
+            for e in filtered_examples:
+                db.refresh(e)
+        except Exception as write_error:
+            db.rollback()
+            logger.error(
+                f"Error al actualizar vistas de palabras: {write_error}")
+
+    # 5. Mapear respuesta unificada al usuario
+    return [
+        {
+            "id": e.id,
+            "text": e.text,
+            "words": [
+                {
+                    "word_id": ew.word_id,
+                    "main": ew.word.main,
+                    "text_form": ew.text_form
+                }
+                for ew in e.example_words
+            ]
+        }
+        for e in filtered_examples
     ]
 
 

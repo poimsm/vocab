@@ -2,7 +2,7 @@ import enum
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 from sqlmodel import Field, SQLModel, Relationship
-from sqlalchemy import JSON
+from sqlalchemy import JSON, Integer
 
 
 class WordLevel:
@@ -82,6 +82,11 @@ class Word(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc))
 
 
+class ExampleType(int, enum.Enum):
+    INITIAL = 0
+    EXPLORE = 1
+
+
 class Example(SQLModel, table=True):
     __tablename__: str = "examples"
 
@@ -89,12 +94,18 @@ class Example(SQLModel, table=True):
     text: str = Field(nullable=False)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc))
-    type: Optional[str] = Field(default=None, max_length=50)
     normalized: Optional[str] = Field(
         default=None, max_length=255, unique=True, index=True)
     is_active: bool = Field(default=True)
     is_favorite: bool = Field(default=False)
     times_seen: int = Field(default=0)
+
+    type: ExampleType = Field(
+        default=ExampleType.EXPLORE,
+        sa_type=Integer,
+        index=True,
+        sa_column_kwargs={"server_default": str(ExampleType.EXPLORE.value)}
+    )
 
     example_words: List[ExampleWord] = Relationship(back_populates="example")
 
@@ -116,6 +127,19 @@ class ExampleQueue(SQLModel, table=True):
     example: "Example" = Relationship()
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ExploreConfiguration(SQLModel, table=True):
+    __tablename__: str = "explore_configurations"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    # El límite de ejemplos para este rango (ej: 30, 60, 120).
+    # Usamos un valor muy alto o Nullable si quieres representar el "else" (infinito).
+    max_examples: int = Field(nullable=False, unique=True, index=True)
+
+    ai_mixed_generation_amount: int = Field(default=0)
+    ai_simple_generation_amount: int = Field(default=0)
+    recycled_words_amount: int = Field(default=0)
 
 
 class Activity(SQLModel, table=True):

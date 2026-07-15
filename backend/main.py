@@ -1,11 +1,12 @@
 from fastapi import FastAPI
+from logging_config import logger
+
 from fastapi.middleware.cors import CORSMiddleware
 
 from sqlmodel import SQLModel
 from db import engine
 import models
 
-# CORRECCIÓN: Eliminamos el prefijo 'app.' porque están al mismo nivel que main.py
 from db import engine
 from routes import (
     words,
@@ -26,7 +27,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 👇 Tus rutas configuradas correctamente
+# Rutas
 app.include_router(words.router, prefix="/words", tags=["words"])
 app.include_router(examples.router, prefix="/examples", tags=["examples"])
 
@@ -34,3 +35,4 @@ app.include_router(examples.router, prefix="/examples", tags=["examples"])
 @app.on_event("startup")
 def startup():
     SQLModel.metadata.create_all(engine)
+    logger.info("¡El backend de Vocab se esta iniciando correctamente!")
