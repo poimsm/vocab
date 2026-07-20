@@ -5,6 +5,20 @@ from sqlmodel import Field, SQLModel, Relationship
 from sqlalchemy import JSON, Integer
 
 
+class User(SQLModel, table=True):
+    __tablename__: str = "users"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    email: str = Field(unique=True, index=True, nullable=False)
+    hashed_password: str = Field(nullable=False)
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+
+    words: List["Word"] = Relationship(back_populates="user")
+    activities: List["Activity"] = Relationship(back_populates="user")
+
+
 class WordLevel:
     BEGINNER = 1
     INTERMEDIATE = 2
@@ -45,7 +59,6 @@ class ExampleWord(SQLModel, table=True):
     word_id: int = Field(foreign_key="words.id", primary_key=True)
     text_form: str = Field(max_length=255, nullable=False)
 
-    # Relaciones inversas en SQLModel usando Relationship
     example: "Example" = Relationship(back_populates="example_words")
     word: "Word" = Relationship(back_populates="example_words")
 
@@ -55,10 +68,8 @@ class Word(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     main: str = Field(max_length=100, nullable=False, index=True)
-    # Text en Postgres se maneja con str normal
     meaning: Optional[str] = Field(default=None)
     synonyms: Optional[List[str]] = Field(default=None, sa_type=JSON)
-    # word | phrase | idiom | phrasal verb
     type: Optional[str] = Field(default=None, max_length=50)
     frequency: Optional[str] = Field(default=None, max_length=50)
     level: int = Field(default=WordLevel.INTERMEDIATE)
@@ -74,8 +85,8 @@ class Word(SQLModel, table=True):
     is_active: bool = Field(default=True)
     is_learned: bool = Field(default=False)
 
-    # Relaciones
-    # sa_relationship_kwargs={"uselist": False} define la relación 1 a 1
+    user_id: Optional[int] = Field(default=None, foreign_key="users.id")
+    user: User = Relationship(back_populates="words")
     example_words: List[ExampleWord] = Relationship(back_populates="word")
 
     created_at: datetime = Field(
@@ -133,8 +144,6 @@ class ExploreConfiguration(SQLModel, table=True):
     __tablename__: str = "explore_configurations"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    # El límite de ejemplos para este rango (ej: 30, 60, 120).
-    # Usamos un valor muy alto o Nullable si quieres representar el "else" (infinito).
     max_examples: int = Field(nullable=False, unique=True, index=True)
 
     ai_mixed_generation_amount: int = Field(default=0)
@@ -148,8 +157,10 @@ class Activity(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     action: str = Field(max_length=100, nullable=False)
 
-    # 🔥 CORRECCIÓN: Le decimos explícitamente a SQLModel que use el tipo JSON de SQLAlchemy
     payload: Optional[Dict[str, Any]] = Field(default=None, sa_type=JSON)
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc))
+
+    user_id: Optional[int] = Field(default=None, foreign_key="users.id")
+    user: User = Relationship(back_populates="activities")

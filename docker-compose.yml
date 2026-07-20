@@ -20,9 +20,10 @@ services:
       dockerfile: ./backend/Dockerfile
     container_name: fastapi_container
     restart: always
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres_db:5432/${DB_NAME}
-      - AI_KEY=${AI_KEY}
     ports:
       - "8000:8000"
     volumes:

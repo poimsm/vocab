@@ -11,8 +11,9 @@ from fastapi import (APIRouter, Depends, HTTPException,
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session
 from db import get_db, engine
-from models import WordLevel, ExampleType
+from models import WordLevel, ExampleType, User
 from helpers import TextFormatter, chunk_list
+from auth import get_current_user
 
 router = APIRouter()
 
@@ -22,9 +23,11 @@ def get_words(
     sort: str = "newest",
     page: int = Query(1, ge=1),
     limit: int = Query(15, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    paginated_data = crud.get_words(db, sort=sort, page=page, limit=limit)
+    paginated_data = crud.get_words(
+        db, current_user.id, sort=sort, page=page, limit=limit)
 
     paginated_data["items"] = [
         {
@@ -49,7 +52,8 @@ def get_words(
 @router.get("/words/{word_id}")
 def get_word(
     word_id: int = Path(..., ge=1),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     word = crud.get_word_by_id(db, word_id)
 
@@ -85,7 +89,7 @@ def get_word(
 
 
 @router.post("")
-def create_word(word: schemas.WordCreate, db: Session = Depends(get_db)):
+def create_word(word: schemas.WordCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     extracted = ai.extract_learning_intent(word.text)
 
     if not extracted:
@@ -103,7 +107,7 @@ def create_word(word: schemas.WordCreate, db: Session = Depends(get_db)):
         "source_text": word.text
     }
 
-    new_word = crud.create_word(db, word_data)
+    new_word = crud.create_word(db, word_data, current_user.id)
 
     if new_word and enriched.get("examples"):
         raw_examples = [
@@ -119,105 +123,7 @@ def create_word(word: schemas.WordCreate, db: Session = Depends(get_db)):
     return new_word
 
 
-def process_bulk_words_task2(texts: List[str]):
-    # Creamos una sesión manual y aislada usando engine
-    with Session(engine) as db:
-        try:
-            for text in texts:
-                extracted = ai.extract_learning_intent(text)
-                if not extracted:
-                    continue
-
-                enriched = ai.enrich_word(extracted["main"])
-
-                word_data = {
-                    "main": extracted["main"],
-                    "type": extracted["type"],
-                    "meaning": enriched.get("meaning"),
-                    "synonyms": enriched.get("synonyms", []),
-                    "frequency": enriched.get("frequency"),
-                    "level": WordLevel.to_int(enriched.get("level")),
-                    "context": enriched.get("category"),
-                    "source_text": text
-                }
-
-                new_word = crud.create_word(db, word_data)
-
-                if new_word and enriched.get("examples"):
-                    raw_examples = [
-                        {
-                            "text": text_string,
-                            "words": [{"word_id": new_word.id, "word": new_word.main}]
-                        }
-                        for text_string in enriched.get("examples", [])
-                    ]
-                    crud.create_examples(
-                        db, raw_examples, example_type=ExampleType.INITIAL)
-
-                time.sleep(2)
-        except Exception as e:
-            logger.info(f"Error en background: {e}")
-        # Aquí el bloque 'with' cierra la sesión automáticamente al terminar
-
-
-def process_bulk_words_task3(texts: List[str]):
-    with Session(engine) as db:
-        try:
-            logger.info("Inicio bulk.")
-            logger.info(texts)
-            extracted_list = ai.extract_learning_intent(texts)
-            logger.info(extracted_list)
-            if not extracted_list or not isinstance(extracted_list, list):
-                logger.info("No se pudo extraer el lote de palabras.")
-                return
-
-            logger.info("Inicio bulk.")
-
-            for extracted in extracted_list:
-                logger.info("Procesando bulk.")
-                try:
-                    idx = extracted.get("raw_index", 0)
-                    source_text = texts[idx] if idx < len(
-                        texts) else "Bulk input"
-
-                    enriched = ai.enrich_word(extracted["main"])
-
-                    word_data = {
-                        "main": extracted["main"],
-                        "type": extracted["type"],
-                        "meaning": enriched.get("meaning"),
-                        "synonyms": enriched.get("synonyms", []),
-                        "frequency": enriched.get("frequency"),
-                        "level": WordLevel.to_int(enriched.get("level")),
-                        "context": enriched.get("category"),
-                        "source_text": source_text
-                    }
-
-                    new_word = crud.create_word(db, word_data)
-
-                    if new_word and enriched.get("examples"):
-                        raw_examples = [
-                            {
-                                "text": text_string,
-                                "words": [{"word_id": new_word.id, "word": new_word.main}]
-                            }
-                            for text_string in enriched.get("examples", [])
-                        ]
-                        crud.create_examples(
-                            db, raw_examples, example_type=ExampleType.INITIAL)
-
-                    time.sleep(0.5)
-
-                except Exception as item_error:
-                    logger.info(
-                        f"Error procesando palabra {extracted.get('main')}: {item_error}")
-                    continue
-
-        except Exception as e:
-            logger.info(f"Error crítico en background task: {e}")
-
-
-def process_bulk_words_task(texts: List[str]):
+def process_bulk_words_task(texts: List[str], user_id):
     logger.info(
         f"Iniciando procesamiento por lotes (bulk) para {len(texts)} líneas.")
 
@@ -298,7 +204,7 @@ def process_bulk_words_task(texts: List[str]):
                         }
 
                         # Guardamos palabra
-                        new_word = crud.create_word(db, word_data)
+                        new_word = crud.create_word(db, word_data, user_id)
 
                         # Guardamos sus ejemplos iniciales si se creó con éxito
                         if new_word and enriched.get("examples"):
@@ -335,48 +241,15 @@ def process_bulk_words_task(texts: List[str]):
 def create_words_bulk(
     texts: List[str],
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     # Lanzamos la tarea pasando solo los textos
-    background_tasks.add_task(process_bulk_words_task, texts)
+    background_tasks.add_task(process_bulk_words_task, texts, current_user.id)
 
     return {
         "status": "processing",
         "message": f"Processing {len(texts)} texts in the background."
-    }
-
-
-@router.post("/bulk2")
-# CAMBIO: Tipado de sesión
-def create_words_bulk2(texts: List[str], db: Session = Depends(get_db)):
-    created_words = []
-
-    for text in texts:
-        extracted = ai.extract_learning_intent(text)
-
-        if not extracted:
-            continue
-
-        enriched = ai.enrich_word(extracted["main"])
-
-        word_data = {
-            "main": extracted["main"],
-            "type": extracted["type"],
-            "meaning": enriched.get("meaning"),
-            "frequency": enriched.get("frequency"),
-            "level": WordLevel.to_int(enriched.get("level")),
-            "context": enriched.get("category"),
-            "source_text": text
-        }
-
-        new_word = crud.create_word(db, word_data)
-
-        if new_word:
-            created_words.append(new_word)
-
-    return {
-        "created": len(created_words),
-        "words": created_words
     }
 
 

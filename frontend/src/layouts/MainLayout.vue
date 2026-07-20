@@ -1,29 +1,40 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { Icon } from '@iconify/vue'
-import { useNavigationStore } from '@/stores/navigation'
+import { useRouter, useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
-const nav = useNavigationStore()
+const router = useRouter()
+const route = useRoute()
+const authStore = useAuthStore()
+
 const sidebarCollapsed = ref(false)
 
 function toggleSidebar() {
   sidebarCollapsed.value = !sidebarCollapsed.value
 }
 
+function handleLogout() {
+  authStore.logout()
+  router.push({ name: 'login' })
+}
+
+// Mapeamos los módulos a las propiedades "to" usando el "name" de tus rutas
 const modules = [
-  { id: 'words', label: 'My Words', icon: 'solar:book-bookmark-linear' },
-  { id: 'search', label: 'Search', icon: 'iconamoon:search-light' },
-  { id: 'examples', label: 'Examples', icon: 'solar:chat-round-line-linear' },
-  { id: 'clusters', label: 'Clusters', icon: 'solar:widget-3-linear' },
-  { id: 'roleplay', label: 'Roleplay', icon: 'solar:users-group-rounded-linear' },
-  { id: 'monsters', label: 'Monsters', icon: 'solar:ghost-linear' }
+  { id: 'words', label: 'My Words', icon: 'solar:book-bookmark-linear', to: { name: 'my-words' } },
+  { id: 'examples', label: 'Examples', icon: 'solar:chat-round-line-linear', to: { name: 'examples' } },
+  // Deja estos listos o apunta temporalmente a 'home' si aún no creas sus páginas
+  { id: 'search', label: 'Search', icon: 'iconamoon:search-light', to: { name: 'home' } },
+  { id: 'clusters', label: 'Clusters', icon: 'solar:widget-3-linear', to: { name: 'home' } },
+  { id: 'roleplay', label: 'Roleplay', icon: 'solar:users-group-rounded-linear', to: { name: 'home' } },
+  { id: 'monsters', label: 'Monsters', icon: 'solar:ghost-linear', to: { name: 'home' } }
 ]
 </script>
 
 <template>
   <div class="layout" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
-    <!-- Desktop Sidebar -->
-    <aside class="sidebar">
+    <!-- Desktop Sidebar (Solo visible si el usuario está autenticado) -->
+    <aside v-if="authStore.isAuthenticated" class="sidebar">
       <div class="sidebar-top" :class="{ 'sidebar-top-expanded': !sidebarCollapsed }">
         <div class="logo">
           <div class="logo-bear">
@@ -44,40 +55,75 @@ const modules = [
         </button>
       </div>
 
+      <!-- Navegación de Escritorio -->
       <nav class="sidebar-nav">
-        <button
+        <router-link
           v-for="module in modules"
           :key="module.id"
-          class="nav-item"
-          :class="{ active: nav.activeModule === module.id }"
-          @click="nav.setActiveModule(module.id)"
-          :title="sidebarCollapsed ? module.label : ''"
+          :to="module.to"
+          custom
+          v-slot="{ navigate, href }"
+        >
+          <a
+            :href="href"
+            @click="navigate"
+            class="nav-item"
+            :class="{ active: route.name === module.to.name }"
+            :title="sidebarCollapsed ? module.label : ''"
+          >
+            <span class="nav-icon">
+              <Icon :icon="module.icon" width="20" />
+            </span>
+            <span class="nav-label">{{ module.label }}</span>
+          </a>
+        </router-link>
+      </nav>
+
+      <!-- Botón de Cerrar Sesión en Escritorio -->
+      <div class="sidebar-footer">
+        <button 
+          class="logout-btn" 
+          @click="handleLogout" 
+          :title="sidebarCollapsed ? 'Logout' : ''"
         >
           <span class="nav-icon">
-            <Icon :icon="module.icon" width="20" />
+            <Icon icon="solar:logout-3-linear" width="20" />
           </span>
-          <span class="nav-label">{{ module.label }}</span>
+          <span class="nav-label">Logout</span>
         </button>
-      </nav>
+      </div>
     </aside>
 
     <div class="main">
-      <!-- Mobile Navigation -->
-      <div class="mobile-nav">
-        <button
+      <!-- Mobile Navigation (Solo visible si el usuario está autenticado) -->
+      <div v-if="authStore.isAuthenticated" class="mobile-nav">
+        <router-link
           v-for="module in modules"
           :key="module.id"
-          class="mobile-tab"
-          :class="{ active: nav.activeModule === module.id }"
-          @click="nav.setActiveModule(module.id)"
+          :to="module.to"
+          custom
+          v-slot="{ navigate, href }"
         >
-          <Icon :icon="module.icon" width="18" />
-          <span>{{ module.label }}</span>
+          <a
+            :href="href"
+            @click="navigate"
+            class="mobile-tab"
+            :class="{ active: route.name === module.to.name }"
+          >
+            <Icon :icon="module.icon" width="18" />
+            <span>{{ module.label }}</span>
+          </a>
+        </router-link>
+        
+        <!-- Botón Logout Móvil -->
+        <button @click="handleLogout" class="mobile-tab mobile-logout">
+          <Icon icon="solar:logout-3-linear" width="18" />
         </button>
       </div>
 
+      <!-- Aquí renderizamos de forma dinámica las páginas inyectadas por el Router -->
       <div class="content">
-        <slot />
+        <router-view />
       </div>
     </div>
   </div>
@@ -211,7 +257,7 @@ const modules = [
   gap: 2px;
 }
 
-.nav-item {
+.nav-item, .logout-btn {
   border: 0;
   background: transparent;
   display: flex;
@@ -225,9 +271,10 @@ const modules = [
   transition: background 0.15s ease, color 0.15s ease;
   white-space: nowrap;
   position: relative;
+  text-decoration: none;
 }
 
-.nav-item:hover {
+.nav-item:hover, .logout-btn:hover {
   background: rgba(255, 255, 255, 0.06);
   color: #e2e0e8;
 }
@@ -235,6 +282,21 @@ const modules = [
 .nav-item.active {
   background: rgba(124, 58, 237, 0.15);
   color: #a78bfa;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.logout-btn {
+  width: 100%;
+  color: #f87171;
+}
+.logout-btn:hover {
+  background: rgba(248, 113, 113, 0.1);
+  color: #f87171;
 }
 
 .nav-icon {
@@ -261,7 +323,8 @@ const modules = [
 }
 
 /* Center icons when collapsed */
-.layout.sidebar-collapsed .nav-item {
+.layout.sidebar-collapsed .nav-item,
+.layout.sidebar-collapsed .logout-btn {
   justify-content: center;
   padding: 10px 0;
 }
@@ -325,6 +388,7 @@ const modules = [
     color: #9c99ab;
     font-size: 13px;
     transition: all 0.2s ease;
+    text-decoration: none;
   }
 
   .mobile-tab:hover {
@@ -335,6 +399,12 @@ const modules = [
   .mobile-tab.active {
     background: rgba(124, 58, 237, 0.2);
     color: #a78bfa;
+  }
+  
+  .mobile-logout {
+    color: #f87171;
+    background: rgba(248, 113, 113, 0.05);
+    margin-left: auto;
   }
 
   .content {

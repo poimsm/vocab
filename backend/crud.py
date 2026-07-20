@@ -81,14 +81,14 @@ def paginate_query2(db: Session, statement, page: int, limit: int) -> dict:
     }
 
 
-def get_words(db: Session, sort: str = "newest", page: int = 1, limit: int = 15):
+def get_words(db: Session, user_id: int, sort: str = "newest", page: int = 1, limit: int = 15):
     # 1. Construimos el statement base
     statement = (
         select(
             models.Word,
             func.count(models.Example.id).label("total_examples")
         )
-        .where(models.Word.is_active == True)
+        .where(models.Word.is_active == True, models.Word.user_id == user_id)
         .outerjoin(models.ExampleWord, models.ExampleWord.word_id == models.Word.id)
         .outerjoin(
             models.Example,
@@ -123,7 +123,7 @@ def get_word_by_id(db: Session, word_id: int):
     return db.exec(select(models.Word).filter(models.Word.id == word_id)).first()
 
 
-def create_word(db: Session, word_data: dict):
+def create_word(db: Session, word_data: dict, user_id: int):
     main_raw = word_data.get("main", "").strip()
     normalized = main_raw.lower()
     source_text = word_data.get("source_text", "").strip(
@@ -138,6 +138,7 @@ def create_word(db: Session, word_data: dict):
 
     existing = db.exec(
         select(models.Word).where(
+            models.Word.user_id == user_id,
             models.Word.is_active == True,
             or_(*conditions)
         )
@@ -146,7 +147,11 @@ def create_word(db: Session, word_data: dict):
     if existing:
         return None
 
-    new_word = models.Word(**word_data, normalized=normalized)
+    new_word = models.Word(
+        **word_data,
+        user_id=user_id,
+        normalized=normalized
+    )
 
     db.add(new_word)
     db.commit()
