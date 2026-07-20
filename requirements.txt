@@ -9,3 +9,5 @@ pyjwt
 email-validator
 python-multipart
 pwdlib[argon2]
+celery
+redis
