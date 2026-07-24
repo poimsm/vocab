@@ -38,13 +38,14 @@ async function handleLogin() {
     isLoading.value = true
     errorMessage.value = ''
 
-    // Preparar datos en formato Form URL Encoded exigido por FastAPI
-    const formData = new FormData()
-    formData.append('username', email.value)
-    formData.append('password', password.value)
+    // Creamos un objeto JSON simple en lugar de FormData
+    const loginData = {
+        email: email.value,
+        password: password.value
+    }
 
     try {
-        const success = await authStore.login(formData)
+        const success = await authStore.login(loginData)
         if (success) {
             router.push({ name: 'my-words' }) // Redirigir a la zona protegida
         }
