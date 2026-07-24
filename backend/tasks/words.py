@@ -4,7 +4,7 @@ from typing import List
 from sqlmodel import Session
 from celery_app import celery_app
 from db import engine
-from models import WordLevel, ExampleType
+from models import WordLevel, ExampleType, BatchSource
 from helpers import chunk_list
 import crud
 import ai
@@ -22,18 +22,26 @@ def process_bulk_words_task(texts: List[str], user_id: int):
 
     with Session(engine) as db:
         try:
+            # Obtener o crear el lote propicio inicial para el usuario
+            current_batch = crud.get_or_create_propitious_batch(
+                db, 
+                user_id=user_id, 
+                source=BatchSource.BULK_IMPORT,
+                title="Importación masiva"
+            )
+
             for chunk_idx, text_chunk in enumerate(text_chunks):
                 start_index = chunk_idx * CHUNK_SIZE
 
                 logger.info(
-                    f"--- Procesando Lote {chunk_idx + 1}/{len(text_chunks)} (Tamaño: {len(text_chunk)}) ---"
+                    f"--- Procesando Chunk {chunk_idx + 1}/{len(text_chunks)} (Tamaño: {len(text_chunk)}) ---"
                 )
 
                 # Step 1: Extraer intenciones de aprendizaje
                 extracted_list = ai.extract_learning_intent(text_chunk)
                 if not extracted_list or not isinstance(extracted_list, list):
                     logger.warning(
-                        f"No se pudieron extraer palabras para el lote {chunk_idx + 1}. Saltando."
+                        f"No se pudieron extraer palabras para el chunk {chunk_idx + 1}. Saltando."
                     )
                     continue
 
@@ -42,16 +50,13 @@ def process_bulk_words_task(texts: List[str], user_id: int):
                     item["main"] for item in extracted_list if item.get("main")
                 ]
                 if not words_to_enrich:
-                    logger.info(
-                        "No se encontraron palabras válidas en este lote.")
+                    logger.info("No se encontraron palabras válidas en este chunk.")
                     continue
 
                 # Step 3: Enriquecer con IA
                 enriched_results = ai.enrich_words_bulk(words_to_enrich)
                 if not enriched_results:
-                    logger.warning(
-                        f"No se pudo enriquecer el lote actual. Saltando."
-                    )
+                    logger.warning("No se pudo enriquecer el chunk actual. Saltando.")
                     continue
 
                 enriched_map = {
@@ -60,7 +65,7 @@ def process_bulk_words_task(texts: List[str], user_id: int):
                     if "word" in res
                 }
 
-                # Step 4: Guardar en Base de Datos
+                # Step 4: Guardar en Base de Datos asignando Lote
                 for extracted in extracted_list:
                     main_word = extracted.get("main")
                     if not main_word:
@@ -73,6 +78,17 @@ def process_bulk_words_task(texts: List[str], user_id: int):
                                 f"La IA omitió los detalles para '{main_word}'."
                             )
                             continue
+
+                        # Validar si el lote actual ya alcanzó su capacidad (ej. 20 palabras)
+                        # Si está lleno, se crea/asigna un nuevo Batch dinámicamente
+                        if len(current_batch.words) >= current_batch.capacity:
+                            logger.info(f"El lote actual #{current_batch.id} alcanzó su capacidad ({current_batch.capacity}). Creando uno nuevo.")
+                            current_batch = crud.get_or_create_propitious_batch(
+                                db,
+                                user_id=user_id,
+                                source=BatchSource.BULK_IMPORT,
+                                title="Importación masiva"
+                            )
 
                         local_idx = extracted.get("raw_index", 0)
                         absolute_idx = start_index + local_idx
@@ -91,27 +107,32 @@ def process_bulk_words_task(texts: List[str], user_id: int):
                             "level": WordLevel.to_int(enriched.get("level")),
                             "context": enriched.get("category"),
                             "source_text": source_text,
+                            "batch_id": current_batch.id,  # <-- ASIGNACIÓN DE BATCH
                         }
 
                         new_word = crud.create_word(db, word_data, user_id)
 
-                        if new_word and enriched.get("examples"):
-                            raw_examples = [
-                                {
-                                    "text": text_string,
-                                    "words": [
-                                        {"word_id": new_word.id, "text_form": ""}
-                                    ],
-                                }
-                                for text_string in enriched.get("examples", [])
-                            ]
-                            crud.create_examples(
-                                db, raw_examples, example_type=ExampleType.INITIAL
-                            )
-                            logger.info(f"✓ Guardada: '{new_word.main}'")
+                        if new_word:
+                            # Refrescar la relación de palabras del lote en memoria para el conteo de capacidad
+                            db.refresh(current_batch)
+
+                            if enriched.get("examples"):
+                                raw_examples = [
+                                    {
+                                        "text": text_string,
+                                        "words": [
+                                            {"word_id": new_word.id, "text_form": ""}
+                                        ],
+                                    }
+                                    for text_string in enriched.get("examples", [])
+                                ]
+                                crud.create_examples(
+                                    db, raw_examples, example_type=ExampleType.INITIAL
+                                )
+                            logger.info(f"✓ Guardada: '{new_word.main}' en Batch #{current_batch.id}")
                         else:
                             logger.info(
-                                f"⚠ Saltada (Duplicada o sin ejemplos): '{main_word}'"
+                                f"⚠ Saltada (Duplicada): '{main_word}'"
                             )
 
                     except Exception as item_error:
@@ -120,12 +141,17 @@ def process_bulk_words_task(texts: List[str], user_id: int):
                         )
                         continue
 
-                # Pausa preventiva entre lotes internos de la misma solicitud
+                # Pausa preventiva entre chunks
                 if chunk_idx < len(text_chunks) - 1:
                     time.sleep(1.0)
+
+            # Actualizar las métricas y estado del último lote procesado
+            if current_batch and current_batch.id:
+                crud.update_batch_metrics(db, current_batch.id)
 
             logger.info("[Celery Bulk] Procesamiento completado exitosamente.")
 
         except Exception as e:
             logger.error(
-                f"Error crítico en la tarea Celery bulk: {e}", exc_info=True)
+                f"Error crítico en la tarea Celery bulk: {e}", exc_info=True
+            )

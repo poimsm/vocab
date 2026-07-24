@@ -1,13 +1,17 @@
 import collections
 from typing import List
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlmodel import Session
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, BackgroundTasks
+from sqlalchemy.orm import joinedload
+from sqlmodel import Session, select, func
 
 import crud
 from db import get_db
 from logging_config import logger
 from tasks.examples import refill_queue_task
+from schemas.explore import ExploreResponse, ExploreExampleSchema, ExploreWordSchema
+from auth import get_current_user
+from models import User, ExampleQueue, Example, Word, Batch, QueueStatus, ExampleWord
 
 router = APIRouter()
 
@@ -69,121 +73,124 @@ def toggle_example_favorite(example_id: int, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/explore")
-def explore_examples(
-    total_amount: int = Body(
-        15, ge=3, le=20, description="Total de ejemplos a retornar", embed=True
-    ),
+@router.get("/explore", response_model=ExploreResponse)
+def get_explore_feed(
+    limit: int = 5,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    # 1. Obtenemos candidatos de la cola para filtrar
-    raw_queue_examples = crud.get_examples_from_queue(
-        db, limit=total_amount * 3
-    )
+    """
+    Obtiene el lote actual de ejemplos/oraciones para el Explore,
+    basado en la jerarquía de Lotes (Batch) y palabras prioritarias.
+    """
 
-    # Si la cola está vacía, delegamos el refill pesado a Celery en segundo plano
-    if not raw_queue_examples:
-        logger.info("Cola vacía al iniciar. Encolando refill en Celery.")
-        refill_queue_task.delay()
-        raw_queue_examples = crud.get_examples_from_queue(
-            db, limit=total_amount * 3
+    # 1. Obtener ejemplos listos desde la cola de ejemplos (ExampleQueue) del usuario
+    queued_items = db.exec(
+        select(ExampleQueue)
+        .join(Example)
+        .where(
+            ExampleQueue.user_id == current_user.id,
+            ExampleQueue.status == QueueStatus.PENDING
         )
+        .options(
+            joinedload(ExampleQueue.example).joinedload(Example.example_words).joinedload(ExampleWord.word)
+        )
+        .order_by(ExampleQueue.created_at.asc())
+        .limit(limit)
+    ).unique().all()
 
-    # Helper para calcular la puntuación de un ejemplo (puntuaciones BAJAS = prioridad alta)
-    def calculate_example_score(example) -> float:
-        if not example.example_words:
-            return 999.0
+    # 2. Si la cola está vacía o tiene muy pocos elementos, ejecutamos el generador de emergencia
+    if len(queued_items) < limit:
+        # Obtenemos las palabras prioritarias respetando la lógica de Lotes + Transición
+        priority_words = crud.get_priority_words_via_batches(
+            db, user_id=current_user.id, limit=8)
+        
+        logger.info(f"priority_words {len(priority_words)}")
 
-        views = [ew.word.times_seen for ew in example.example_words]
-        min_views = min(views)
-        avg_views = sum(views) / len(views)
-
-        # Penalización por palabras que superan las 5 vistas
-        penalty = sum(15.0 for v in views if v > 5)
-
-        return min_views + (avg_views * 0.1) + penalty
-
-    # 2. Selección balanceada con control de diversidad
-    def select_balanced_examples(candidates, limit: int) -> List:
-        sorted_candidates = sorted(candidates, key=calculate_example_score)
-
-        selected = []
-        word_usage_counter = collections.Counter()
-        MAX_REPETITIONS_PER_WORD = 2
-
-        for e in sorted_candidates:
-            has_overused_word = any(
-                word_usage_counter[ew.word_id] >= MAX_REPETITIONS_PER_WORD
-                for ew in e.example_words
+        if not priority_words:
+            # El usuario no tiene palabras agregadas aún
+            return ExploreResponse(
+                examples=[],
+                active_batch_id=None,
+                active_batch_title=None,
+                total_queue_remaining=0
             )
 
-            if has_overused_word:
-                continue
+        # Generar o rellenar la cola en segundo plano vía Celery para que la API no se bloquee
+        refill_queue_task.delay(user_id=current_user.id)
 
-            selected.append(e)
-            for ew in e.example_words:
-                word_usage_counter[ew.word_id] += 1
+    # 3. Formatear los ejemplos recuperados de la cola
+    formatted_examples: List[ExploreExampleSchema] = []
 
-            if len(selected) >= limit:
-                break
+    for item in queued_items:
+        example = item.example
+        logger.info(f"Example {example.id}: example_words count = {len(example.example_words) if example.example_words else 0}")
 
-        # Si no llenamos el cupo por el filtro estricto, hacemos una segunda pasada relajada
-        if len(selected) < limit:
-            for e in sorted_candidates:
-                if e not in selected:
-                    selected.append(e)
-                if len(selected) >= limit:
-                    break
+        # Mapeamos las palabras involucradas en este ejemplo
+        words_in_example = []
+        has_unlearned_word = False
+        for word in example.words:  # Asumiendo relación N:M entre Example y Word
+            words_in_example.append(
+                ExploreWordSchema(
+                    id=word.id,
+                    main=word.main,
+                    type=word.type,
+                    meaning=word.meaning,
+                    level=word.level,
+                    is_boosted=word.is_boosted,
+                    batch_id=word.batch_id
+                )
+            )
+            # Verificar si al menos una palabra no ha sido aprendida
+            if not word.is_learned:
+                has_unlearned_word = True
 
-        return selected
+        # Solo incluir el ejemplo si tiene al menos una palabra no aprendida
+        if has_unlearned_word:
+            formatted_examples.append(
+                ExploreExampleSchema(
+                    id=example.id,
+                    text=example.text,
+                    target_words=words_in_example
+                )
+            )
 
-    filtered_examples = select_balanced_examples(
-        raw_queue_examples, total_amount
+            # Marcar como entregado de la cola ExampleQueue
+            item.status = QueueStatus.SENT
+            db.add(item)
+        else:
+            # Si todas las palabras ya fueron aprendidas, marcar como RESOLVED
+            logger.info(f"Example {example.id}: todas sus palabras son learned, marcando como RESOLVED")
+            item.status = QueueStatus.RESOLVED
+            db.add(item)        
+
+    db.commit()
+
+    # 4. Obtener la metadata del Lote Activo principal para contexto en el Frontend
+    active_batch = db.exec(
+        select(Batch)
+        .where(Batch.user_id == current_user.id, Batch.status == "active")
+        .order_by(Batch.priority.desc(), Batch.created_at.asc())
+    ).first()
+
+    # Contar cuántos elementos quedan en la cola
+    remaining_count = db.exec(
+        select(func.count(ExampleQueue.id)).where(
+            ExampleQueue.user_id == current_user.id)
+    ).one() or 0
+
+    return ExploreResponse(
+        examples=formatted_examples,
+        active_batch_id=active_batch.id if active_batch else None,
+        active_batch_title=active_batch.title if active_batch else None,
+        total_queue_remaining=remaining_count
     )
-
-    # 3. Control de déficit: Si quedan menos ejemplos de los solicitados,
-    # disparamos el refill asíncrono para reponer inventario sin bloquear la respuesta.
-    deficit = total_amount - len(filtered_examples)
-    if deficit > 0:
-        logger.info(f"Déficit de {deficit} ejemplos. Encolando refill en Celery.")
-        refill_queue_task.delay()
-
-    # 4. Incrementar vistas de palabras entregadas al usuario
-    if filtered_examples:
-        try:
-            for e in filtered_examples:
-                for ew in e.example_words:
-                    ew.word.times_seen += 1
-                    db.add(ew.word)
-            db.commit()
-
-            for e in filtered_examples:
-                db.refresh(e)
-        except Exception as write_error:
-            db.rollback()
-            logger.error(f"Error al actualizar vistas de palabras: {write_error}")
-
-    # 5. Respuesta mapeada
-    return [
-        {
-            "id": e.id,
-            "text": e.text,
-            "words": [
-                {
-                    "word_id": ew.word_id,
-                    "main": ew.word.main,
-                    "text_form": ew.text_form,
-                }
-                for ew in e.example_words
-            ],
-        }
-        for e in filtered_examples
-    ]
 
 
 @router.patch("/{example_id}/resolve-pending")
-def resolve_example_pending(example_id: int, db: Session = Depends(get_db)):
-    example = crud.resolve_and_increment_example(db, example_id)
+def resolve_example_pending(example_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    example = crud.resolve_and_increment_example(db, example_id=example_id, user_id=current_user.id)
 
     if not example:
         raise HTTPException(

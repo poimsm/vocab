@@ -169,20 +169,26 @@ async function fetchExamples() {
   error.value = null
 
   try {
-    const response = await api.post('/examples/explore', {
-      total_amount: BATCH_SIZE
+    const response = await api.get('/examples/explore', {
+      params: {
+        limit: BATCH_SIZE
+      }
     })
 
     const data = response.data
 
-    const newExamples: ExampleItem[] = (data || []).map((item: any) => ({
+    // 1. Accedemos a data.examples (con fallback a array vacío si no existe)
+    const rawExamples = data.examples || []
+
+    // 2. Mapeamos respetando la estructura real que envía la API
+    const newExamples: ExampleItem[] = rawExamples.map((item: any) => ({
       id: item.id,
       text: item.text,
-      origin: item.origin,
-      words: (item.words || []).map((w: any) => ({
-        word_id: w.word_id,
+      origin: data.active_batch_title || 'General',
+      words: (item.target_words || []).map((w: any) => ({
+        word_id: w.id,
         main: w.main,
-        text_form: w.text_form
+        text_form: w.main // O la propiedad que represente la forma inflectada
       }))
     }))
 
@@ -197,7 +203,6 @@ async function fetchExamples() {
     generating.value = false
   }
 }
-
 
 async function fetchWordDetail(wordId: number) {
   try {

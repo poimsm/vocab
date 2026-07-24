@@ -1,22 +1,36 @@
-from sqlmodel import select, func
-from sqlmodel import Session, select, or_
-import re
 import random
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import joinedload
-from sqlmodel import Session, func, select
+from sqlmodel import Session, func, or_, select
+
+from logging_config import logger
+
+import crud
 
 import ai
 import models
-from models import (Example, ExampleQueue, ExampleWord,
-                    QueueStatus, Word, ExploreConfiguration, ExampleType)
+from models import (
+    Batch,
+    BatchSource,
+    BatchStatus,
+    Example,
+    ExampleQueue,
+    ExampleType,
+    ExampleWord,
+    ExploreConfiguration,
+    QueueStatus,
+    Word,
+)
 
+# ==========================================
+# PAGINACIÓN
+# ==========================================
 
 def paginate_query(db: Session, statement, page: int, limit: int) -> dict:
     """Toma un statement de SQLModel, aplica paginación y devuelve
-
     la estructura estándar con metadatos.
     """
     if page < 1:
@@ -24,46 +38,11 @@ def paginate_query(db: Session, statement, page: int, limit: int) -> dict:
     if limit < 1:
         limit = 15
 
-    # 1. Contar el total usando una subconsulta limpia
-    count_statement = select(func.count()).select_from(statement.subquery())
-    total_items = db.exec(count_statement).one()
-
-    # 2. Calcular el desplazamiento (offset)
-    offset = (page - 1) * limit
-
-    # 3. Obtener los registros de la página actual
-    paginated_statement = statement.offset(offset).limit(limit)
-    items = db.exec(paginated_statement).unique().all()
-
-    # 4. Calcular el total de páginas
-    total_pages = (total_items + limit - 1) // limit if total_items > 0 else 0
-
-    return {
-        "items": items,
-        "meta": {
-            "total_items": total_items,
-            "total_pages": total_pages,
-            "current_page": page,
-            "limit": limit,
-            "has_next": page < total_pages,
-            "has_prev": page > 1,
-        },
-    }
-
-
-def paginate_query2(db: Session, statement, page: int, limit: int) -> dict:
-    if page < 1:
-        page = 1
-    if limit < 1:
-        limit = 15
-
     count_statement = select(func.count()).select_from(statement.subquery())
     total_items = db.exec(count_statement).one()
 
     offset = (page - 1) * limit
     paginated_statement = statement.offset(offset).limit(limit)
-
-    # Agregamos .unique() aquí para limpiar los resultados con joinedload
     items = db.exec(paginated_statement).unique().all()
 
     total_pages = (total_items + limit - 1) // limit if total_items > 0 else 0
@@ -80,9 +59,13 @@ def paginate_query2(db: Session, statement, page: int, limit: int) -> dict:
         },
     }
 
+
+
+# ==========================================
+# PALABRAS (WORDS)
+# ==========================================
 
 def get_words(db: Session, user_id: int, sort: str = "newest", page: int = 1, limit: int = 15):
-    # 1. Construimos el statement base
     statement = (
         select(
             models.Word,
@@ -110,11 +93,9 @@ def get_words(db: Session, user_id: int, sort: str = "newest", page: int = 1, li
     elif sort == "alphabetical":
         statement = statement.order_by(models.Word.main.asc())
     elif sort == "most_seen":
-        statement = statement.order_by(
-            models.Word.times_seen.desc().nullslast())
+        statement = statement.order_by(models.Word.times_seen.desc().nullslast())
     elif sort == "least_seen":
-        statement = statement.order_by(
-            models.Word.times_seen.asc().nullsfirst())
+        statement = statement.order_by(models.Word.times_seen.asc().nullsfirst())
 
     return paginate_query(db, statement, page, limit)
 
@@ -126,8 +107,7 @@ def get_word_by_id(db: Session, word_id: int):
 def create_word(db: Session, word_data: dict, user_id: int):
     main_raw = word_data.get("main", "").strip()
     normalized = main_raw.lower()
-    source_text = word_data.get("source_text", "").strip(
-    ) if word_data.get("source_text") else None
+    source_text = word_data.get("source_text", "").strip() if word_data.get("source_text") else None
 
     conditions = [models.Word.normalized == normalized]
 
@@ -160,7 +140,6 @@ def create_word(db: Session, word_data: dict, user_id: int):
 
 
 def increment_words_seen(db: Session, words: List[Word]):
-    """Incrementa las visualizaciones directamente en el modelo Word."""
     for w in words:
         w.times_seen += 1
         w.last_seen_at = datetime.now(timezone.utc)
@@ -204,55 +183,59 @@ def toggle_word_favorite(db: Session, word_id: int):
     return word
 
 
-def get_words_least_seen(db: Session, limit: int = 15):
-    # Corregido: Removido outerjoin obsoleto, usa Word.times_seen
+def get_words_least_seen(db: Session, user_id: int, limit: int = 15):
     statement = (
         select(models.Word)
-        .filter(models.Word.is_active == True)
+        .filter(models.Word.user_id == user_id, models.Word.is_active == True)
         .order_by(models.Word.times_seen.asc().nullsfirst())
         .limit(limit)
     )
     return db.exec(statement).all()
 
 
-def create_examples(db: Session, data: list[dict], example_type: ExampleType = ExampleType.EXPLORE):
-    examples = []
+def get_words_least_seen_ordered(db: Session, user_id: int, limit: int = 10) -> List[Word]:
+    statement = (
+        select(Word)
+        .where(Word.user_id == user_id, Word.is_active == True)
+        .order_by(Word.times_seen.asc())
+        .limit(limit * 3)
+    )
+    results = db.exec(statement).all()
+    if not results:
+        return []
+    return random.sample(results, min(len(results), limit))
 
-    for item in data:
-        text_raw = item["text"]
-        normalized_text = text_raw.lower().strip()
-        normalized_text = re.sub(r"[.,;:!?¿¡]$", "", normalized_text).strip()
 
-        existing_example = db.exec(
-            select(models.Example).where(
-                models.Example.normalized == normalized_text,
-                models.Example.is_active == True
-            )
-        ).first()
+# ==========================================
+# EJEMPLOS (EXAMPLES)
+# ==========================================
 
-        if existing_example:
-            examples.append(existing_example)
-            continue
-
-        example = models.Example(
-            text=text_raw, normalized=normalized_text, type=example_type)
+def create_examples(db: Session, raw_examples: List[dict], example_type: ExampleType = ExampleType.EXPLORE) -> List[Example]:
+    created = []
+    for item in raw_examples:
+        example = Example(
+            text=item["text"],
+            type=example_type
+        )
         db.add(example)
-        db.flush()
+        db.flush()  # 🚨 Importante: genera el ID del Example antes de asociar relaciones
 
-        for word_data in item["words"]:
-            example_word = models.ExampleWord(
-                example_id=example.id, word_id=word_data["word_id"], text_form=word_data["text_form"]
-            )
-            db.add(example_word)
+        # Crear la relación N:M en ExampleWord
+        # Buscar "words" (retorno de IA) o "target_words" (alternativa)
+        words_list = item.get("words", item.get("target_words", []))
+        for word in words_list:
+            word_id = word.get("word_id") if isinstance(word, dict) else (word.id if hasattr(word, "id") else word)
+            if word_id:
+                assoc = ExampleWord(
+                    example_id=example.id,
+                    word_id=word_id,
+                    text_form=word.get("text_form", "") if isinstance(word, dict) else ""
+                )
+                db.add(assoc)
 
-        examples.append(example)
+        created.append(example)
 
-    db.commit()
-
-    for example in examples:
-        db.refresh(example)
-
-    return examples
+    return created
 
 
 def get_examples(db: Session, sort: str = "newest", word_id: int = None, page: int = 1, limit: int = 15):
@@ -260,7 +243,8 @@ def get_examples(db: Session, sort: str = "newest", word_id: int = None, page: i
 
     if word_id is not None:
         statement = statement.join(models.Example.example_words).filter(
-            models.ExampleWord.word_id == word_id)
+            models.ExampleWord.word_id == word_id
+        )
 
     if sort == "newest":
         statement = statement.order_by(models.Example.id.desc())
@@ -270,10 +254,12 @@ def get_examples(db: Session, sort: str = "newest", word_id: int = None, page: i
         statement = statement.order_by(models.Example.text.asc())
     elif sort == "favorites":
         statement = statement.order_by(
-            models.Example.is_favorite.desc(), models.Example.id.desc())
+            models.Example.is_favorite.desc(), models.Example.id.desc()
+        )
 
     statement = statement.options(joinedload(
-        models.Example.example_words).joinedload(models.ExampleWord.word))
+        models.Example.example_words).joinedload(models.ExampleWord.word)
+    )
 
     return paginate_query(db, statement, page, limit)
 
@@ -330,85 +316,206 @@ def get_examples_balanced_by_least_seen(db: Session, limit: int = 5) -> List[Exa
 
 
 def increment_examples_seen(db: Session, examples: List[Example]):
-    """Incrementa en 1 el contador times_seen de una lista de ejemplos."""
     for example in examples:
         example.times_seen += 1
         db.add(example)
     db.commit()
 
 
-def get_words_least_seen_ordered(db: Session, limit: int = 10) -> List[Word]:
-    # Pedimos el triple de lo necesario para tener un "pool" de variedad
-    statement = (
-        select(Word)
-        .where(Word.is_active == True)
-        .order_by(Word.times_seen.asc())
-        .limit(limit * 3)
-    )
-    results = db.exec(statement).all()
-    # Mezclamos el resultado para no darle siempre prioridad a los mismos IDs bajos
-    return random.sample(results, min(len(results), limit))
+# ==========================================
+# BATCHES (LOTES) Y PRIORIZACIÓN
+# ==========================================
 
+def get_or_create_propitious_batch(
+    db: Session, 
+    user_id: int, 
+    source: BatchSource = BatchSource.ORGANIC,
+    title: Optional[str] = None
+) -> Batch:
+    if source == BatchSource.ORGANIC:
+        open_batch = db.exec(
+            select(Batch)
+            .where(
+                Batch.user_id == user_id,
+                Batch.status == BatchStatus.OPEN,
+                Batch.source == BatchSource.ORGANIC
+            )
+            .order_by(Batch.created_at.desc())
+        ).first()
 
-def get_pending_examples(db: Session, limit: int = 15) -> List[Example]:
-    statement = (
-        select(Example)
-        .where(Example.is_active == True, Example.is_pending == True)
-        .options(joinedload(Example.example_words).joinedload(ExampleWord.word))
-        .order_by(Example.times_seen.asc(), Example.created_at.desc())
-        .limit(limit)
-    )
-    return db.exec(statement).unique().all()
+        if open_batch and len(open_batch.words) < open_batch.capacity:
+            return open_batch
 
+        if open_batch:
+            open_batch.status = BatchStatus.ACTIVE
+            db.add(open_batch)
 
-def resolve_and_increment_example(db: Session, example_id: int) -> Optional[Example]:
-    statement = (
-        select(Example)
-        .where(Example.id == example_id)
-        .options(joinedload(Example.example_words).joinedload(ExampleWord.word))
-    )
-    example = db.exec(statement).first()
-    if not example:
-        return None
-
-    # 1. Cambiar estado del ejemplo base
-    example.times_seen += 1
-    db.add(example)
-
-    # 2. Incrementar visualizaciones de palabras asociadas directamente en Word
-    seen_word_ids = set()
-    for ew in example.example_words:
-        word = ew.word
-        if word and word.id not in seen_word_ids:
-            word.times_seen += 1
-            word.last_seen_at = datetime.now(timezone.utc)
-            db.add(word)
-            seen_word_ids.add(word.id)
-
-    # 3. Buscar registro en la cola y pasarlo a RESOLVED
-    queue_item = db.exec(
-        select(ExampleQueue).where(
-            ExampleQueue.example_id == example_id,
-            ExampleQueue.status == QueueStatus.SENT,
-            ExampleQueue.is_active == True,
+        count_batches = db.exec(
+            select(func.count(Batch.id)).where(Batch.user_id == user_id)
+        ).one() or 0
+        
+        new_batch = Batch(
+            user_id=user_id,
+            title=f"Lote {count_batches + 1}",
+            source=BatchSource.ORGANIC,
+            status=BatchStatus.OPEN
         )
-    ).first()
+        db.add(new_batch)
+        db.commit()
+        db.refresh(new_batch)
+        return new_batch
 
-    if queue_item:
-        queue_item.status = QueueStatus.RESOLVED
-        db.add(queue_item)
+    else:
+        count_batches = db.exec(
+            select(func.count(Batch.id)).where(Batch.user_id == user_id)
+        ).one() or 0
 
+        new_batch = Batch(
+            user_id=user_id,
+            title=title or f"Importación {count_batches + 1}",
+            source=BatchSource.BULK_IMPORT,
+            status=BatchStatus.ACTIVE
+        )
+        db.add(new_batch)
+        db.commit()
+        db.refresh(new_batch)
+        return new_batch
+
+
+def update_batch_metrics(db: Session, batch_id: int):
+    batch = db.get(Batch, batch_id)
+    if not batch or not batch.words:
+        return
+
+    total_words = len(batch.words)
+    learned_words = sum(1 for w in batch.words if w.is_learned)
+    
+    batch.mastery_progress = round((learned_words / total_words) * 100, 2)
+
+    if batch.mastery_progress >= 100.0 and batch.status != BatchStatus.COMPLETED:
+        batch.status = BatchStatus.COMPLETED
+        batch.completed_at = datetime.now(timezone.utc)
+    elif batch.mastery_progress < 100.0 and batch.status == BatchStatus.COMPLETED:
+        batch.status = BatchStatus.ACTIVE
+        batch.completed_at = None
+
+    db.add(batch)
     db.commit()
-    db.refresh(example)
-    return example
 
 
-def get_explore_configuration(db: Session) -> dict:
+def get_priority_words_via_batches(db: Session, user_id: int, limit: int = 10) -> List[Word]:
+    # 1. BOOST (Solo activas y NO aprendidas)
+    boosted_words = db.exec(
+        select(Word)
+        .where(
+            Word.user_id == user_id, 
+            Word.is_active == True, 
+            Word.is_boosted == True,
+            Word.is_learned == False  # <--- Excluir aprendidas
+        )
+        .limit(3)
+    ).all()
+
+    # 2. LOTES (ACTIVE u OPEN) - Ordenar por antigüedad (más antiguos primero)
+    active_batches = db.exec(
+        select(Batch)
+        .where(
+            Batch.user_id == user_id,
+            Batch.status.in_([BatchStatus.ACTIVE, BatchStatus.OPEN])
+        )
+        .order_by(
+            Batch.created_at.asc(),  # Más antiguos primero (PRIORIDAD)
+            Batch.status.asc(),       # ACTIVE antes que OPEN
+            Batch.priority.desc()     # Luego por prioridad
+        )
+        .limit(3)  # Traer hasta 3 batches para tener más flexibilidad en transición
+    ).all()
+
+    primary_batch_words: List[Word] = []
+    secondary_batch_words: List[Word] = []
+
+    if active_batches:
+        primary_batch = active_batches[0]
+
+        # Solo tomamos palabras Pendientes de aprender
+        unlearned_primary = db.exec(
+            select(Word)
+            .where(
+                Word.batch_id == primary_batch.id,
+                Word.is_active == True,
+                Word.is_learned == False, # <--- Excluir aprendidas
+                Word.is_boosted == False
+            )
+            .order_by(Word.current_cycle_seen.asc(), Word.last_seen_at.asc().nullsfirst())
+        ).all()
+
+        THRESHOLD_FOR_TRANSITION = 4
+
+        if len(unlearned_primary) <= THRESHOLD_FOR_TRANSITION and len(active_batches) > 1:
+            # El batch primario está casi completo, comenzar a introducir el siguiente
+            primary_batch_words = unlearned_primary
+            needed_from_next = limit - len(boosted_words) - len(primary_batch_words)
+
+            if needed_from_next > 0:
+                next_batch = active_batches[1]
+                secondary_batch_words = db.exec(
+                    select(Word)
+                    .where(
+                        Word.batch_id == next_batch.id,
+                        Word.is_active == True,
+                        Word.is_learned == False,
+                        Word.is_boosted == False
+                    )
+                    .order_by(Word.current_cycle_seen.asc(), Word.last_seen_at.asc().nullsfirst())
+                    .limit(needed_from_next)
+                ).all()
+        else:
+            # Batch primario aún tiene muchas palabras, enfocarse en él
+            primary_batch_words = unlearned_primary[:6]
+
+    # 3. OLEAJE ANTIGUO (Repaso de palabras de lotes completados que AÚN no estén aprendidas)
+    batch_words_count = len(primary_batch_words) + len(secondary_batch_words)
+    needed_old = max(limit - len(boosted_words) - batch_words_count, 0)
+
+    old_words = []
+    if needed_old > 0:
+        old_words = db.exec(
+            select(Word)
+            .join(Batch)
+            .where(
+                Word.user_id == user_id,
+                Word.is_active == True,
+                Word.is_learned == False, # <--- Excluir aprendidas si no deseas repasarlas
+                Word.is_boosted == False,
+                Batch.status == BatchStatus.COMPLETED
+            )
+            .order_by(Word.last_seen_at.asc().nullsfirst())
+            .limit(needed_old)
+        ).all()
+
+    # 4. CONSOLIDAR
+    candidate_dict = {
+        w.id: w for w in (boosted_words + primary_batch_words + secondary_batch_words + old_words)
+    }
+
+    return list(candidate_dict.values())
+
+# ==========================================
+# COLA DE EXPLORACIÓN (EXAMPLE QUEUE MULTI-USER)
+# ==========================================
+
+def get_explore_configuration(db: Session, user_id: int) -> dict:
     total_examples = db.exec(
         select(func.count())
         .select_from(Example)
-        .where(Example.is_active == True, Example.type == ExampleType.EXPLORE)
-    ).one()
+        .join(Example.example_words)
+        .join(ExampleWord.word)
+        .where(
+            Word.user_id == user_id,
+            Example.is_active == True, 
+            Example.type == ExampleType.EXPLORE
+        )
+    ).one() or 0
 
     config = db.exec(
         select(ExploreConfiguration)
@@ -426,95 +533,117 @@ def get_explore_configuration(db: Session) -> dict:
     }
 
 
-def refill_example_queue(db: Session):
-    config = get_explore_configuration(db)
+def refill_example_queue(db: Session, user_id: int):
+    config = get_explore_configuration(db, user_id)
     ai_mixed_amount = config.get("ai_mixed_generation_amount", 0)
     ai_simple_amount = config.get("ai_simple_generation_amount", 0)
     recycle_amount = config.get("recycled_words_amount", 0)
 
+    # 🚨 CLAVE 1: Excluir TODO el historial de ExampleQueue del usuario
+    # (PENDING, SENT y RESOLVED). Esto evita re-encolar lo mismo o borrar historial.
     queue_statement = select(ExampleQueue.example_id).where(
-        ExampleQueue.is_active == True, ExampleQueue.status.in_(
-            [QueueStatus.PENDING, QueueStatus.SENT])
+        ExampleQueue.user_id == user_id
     )
     excluded_ids = list(db.exec(queue_statement).all())
+    logger.info(f"[refill_example_queue] User {user_id}: excluded_ids count = {len(excluded_ids)}, ids = {excluded_ids[:10]}")
 
-    # 1. RECICLAR EJEMPLOS
+    # 🚨 CLAVE 2: Obtener solo palabras prioritarias NO APRENDIDAS (is_learned = False)
+    total_words_needed = (recycle_amount * 2) + ai_simple_amount + ai_mixed_amount
+    priority_words = crud.get_priority_words_via_batches(
+        db, user_id=user_id, limit=max(total_words_needed, 8)
+    )
+
+    if not priority_words:
+        return
+
+    # 1. RECICLAR EJEMPLOS EXISTENTES (Que el usuario NUNCA haya visto)
     recycled_examples = []
     if recycle_amount > 0:
-        words = get_words_least_seen_ordered(db, limit=recycle_amount * 3)
-        for word in words:
+        for word in priority_words:
             if len(recycled_examples) >= recycle_amount:
                 break
-            statement = select(Example).join(Example.example_words).where(
-                Example.is_active == True,
-                Example.type == ExampleType.EXPLORE,
-                ExampleWord.word_id == word.id
+            
+            statement = (
+                select(Example)
+                .join(Example.example_words)
+                .join(ExampleWord.word)
+                .where(
+                    Example.is_active == True,
+                    Example.type == ExampleType.EXPLORE,
+                    ExampleWord.word_id == word.id,
+                    Word.is_learned == False, # No incluir si ya se aprendió
+                    Word.is_active == True
+                )
             )
+            
+            # Garantiza no repetir ejemplos ya presentes en la cola del usuario
             if excluded_ids:
                 statement = statement.where(Example.id.not_in(excluded_ids))
+                
             statement = statement.order_by(
-                Example.times_seen.asc(), Example.created_at.desc()).limit(1)
+                Example.times_seen.asc(), Example.created_at.desc()
+            ).limit(1)
 
             best_example = db.exec(statement).first()
             if best_example:
                 recycled_examples.append(best_example)
                 excluded_ids.append(best_example.id)
 
-    # 2. GENERAR EJEMPLOS CON IA
+    # 2. GENERAR NUEVOS EJEMPLOS CON IA
     new_examples = []
     total_ai_required = ai_simple_amount + ai_mixed_amount
+    
     if total_ai_required > 0:
-        words_for_ai = get_words_least_seen_ordered(
-            db, limit=total_ai_required * 2)
+        words_for_ai = priority_words[:total_ai_required * 2]
         current_index = 0
 
-        if ai_simple_amount > 0:
-            words_for_simple = words_for_ai[current_index:
-                                            current_index + ai_simple_amount]
+        # Simple
+        if ai_simple_amount > 0 and len(words_for_ai) >= current_index:
+            words_for_simple = words_for_ai[current_index : current_index + ai_simple_amount]
             if words_for_simple:
                 raw_simple = ai.generate_examples_from_words(words_for_simple)
-                new_examples.extend(create_examples(
-                    db, raw_simple[:ai_simple_amount]))
-                current_index += ai_simple_amount
+                new_examples.extend(create_examples(db, raw_simple[:ai_simple_amount]))
+                current_index += len(words_for_simple)
 
-        if ai_mixed_amount > 0:
-            words_for_mixed = words_for_ai[current_index:
-                                           current_index + ai_mixed_amount]
+        # Mixta
+        if ai_mixed_amount > 0 and len(words_for_ai) >= current_index:
+            words_for_mixed = words_for_ai[current_index : current_index + ai_mixed_amount]
             if words_for_mixed:
-                raw_mixed = ai.generate_mixed_examples_from_words(
-                    words_for_mixed)
-                new_examples.extend(create_examples(
-                    db, raw_mixed[:ai_mixed_amount]))
+                raw_mixed = ai.generate_mixed_examples_from_words(words_for_mixed)
+                new_examples.extend(create_examples(db, raw_mixed[:ai_mixed_amount]))
 
-    # 3. ENCOLAR EN ESTADO PENDING
+    # 3. ENCOLAR EN ESTADO PENDING SIN BORRAR REGISTROS PREVIOS
     all_candidates = recycled_examples + new_examples
+    newly_queued = 0
     for example in all_candidates:
-        already_waiting = db.exec(
+        already_in_queue = db.exec(
             select(ExampleQueue).where(
-                ExampleQueue.example_id == example.id,
-                ExampleQueue.is_active == True,
-                ExampleQueue.status.in_(
-                    [QueueStatus.PENDING, QueueStatus.SENT]),
+                ExampleQueue.user_id == user_id,
+                ExampleQueue.example_id == example.id
             )
         ).first()
 
-        if not already_waiting:
+        if not already_in_queue:
             queue_item = ExampleQueue(
-                example_id=example.id, status=QueueStatus.PENDING)
+                user_id=user_id,
+                example_id=example.id,
+                status=QueueStatus.PENDING
+            )
             db.add(queue_item)
+            newly_queued += 1
 
     db.commit()
+    logger.info(f"[refill_example_queue] User {user_id}: newly queued {newly_queued} examples (recycled={len(recycled_examples)}, new_ai={len(new_examples)})")
 
-
-def get_examples_from_queue(db: Session, limit: int) -> List[Example]:
-    """
-    Busca ejemplos que ya fueron enviados (SENT) pero no resueltos para reutilizarlos.
-    Si no completan el límite, extrae el resto de los que están en PENDING.
-    """
-    # 1. Intentar recuperar primero los que se quedaron huérfanos en SENT
+def get_examples_from_queue(db: Session, user_id: int, limit: int) -> List[Example]:
+    # 1. Recuperar ítems huérfanos/no resueltos en SENT del usuario
     reusable_statement = (
         select(ExampleQueue)
-        .where(ExampleQueue.is_active == True, ExampleQueue.status == QueueStatus.SENT)
+        .where(
+            ExampleQueue.user_id == user_id,
+            ExampleQueue.is_active == True,
+            ExampleQueue.status == QueueStatus.SENT
+        )
         .order_by(ExampleQueue.created_at.asc())
         .limit(limit)
     )
@@ -523,17 +652,20 @@ def get_examples_from_queue(db: Session, limit: int) -> List[Example]:
     needed = limit - len(reusable_items)
     queue_items = list(reusable_items)
 
-    # 2. Si faltan para cumplir el lote, jalamos de los PENDING
+    # 2. Extraer el resto de PENDING del usuario
     if needed > 0:
         pending_statement = (
             select(ExampleQueue)
-            .where(ExampleQueue.is_active == True, ExampleQueue.status == QueueStatus.PENDING)
+            .where(
+                ExampleQueue.user_id == user_id,
+                ExampleQueue.is_active == True,
+                ExampleQueue.status == QueueStatus.PENDING
+            )
             .order_by(ExampleQueue.created_at.asc())
             .limit(needed)
         )
         pending_items = db.exec(pending_statement).all()
 
-        # A los nuevos que extraemos de PENDING, los pasamos a SENT
         for item in pending_items:
             item.status = QueueStatus.SENT
             db.add(item)
@@ -544,7 +676,7 @@ def get_examples_from_queue(db: Session, limit: int) -> List[Example]:
     if not queue_items:
         return []
 
-    # 3. Construir y retornar los objetos Example ordenados como venían
+    # 3. Retornar objetos Example
     example_ids = [item.example_id for item in queue_items]
     examples = db.exec(
         select(Example)
@@ -553,3 +685,287 @@ def get_examples_from_queue(db: Session, limit: int) -> List[Example]:
     )
     examples_dict = {e.id: e for e in examples.unique().all()}
     return [examples_dict[eid] for eid in example_ids if eid in examples_dict]
+
+
+
+# Umbral para considerar una palabra como aprendida en el ciclo
+TARGET_CYCLE_SEEN = 1
+
+def resolve_and_increment_example(db: Session, example_id: int, user_id: int) -> Optional[Example]:
+    statement = (
+        select(Example)
+        .where(Example.id == example_id)
+        .options(joinedload(Example.example_words).joinedload(ExampleWord.word))
+    )
+    example = db.exec(statement).first()
+    if not example:
+        return None
+
+    now_utc = datetime.now(timezone.utc)
+
+    # 1. Incrementar contador del ejemplo
+    example.times_seen += 1
+    db.add(example)
+
+    # 2. Incrementar contadores en palabras y evaluar si están aprendidas
+    seen_word_ids = set()
+    affected_batch_ids = set()
+
+    for ew in example.example_words:
+        word = ew.word
+        if word and word.id not in seen_word_ids:
+            seen_word_ids.add(word.id)
+
+            word.times_seen += 1
+            word.current_cycle_seen += 1
+            word.last_seen_at = now_utc
+
+            # ✅ EVALUACIÓN AUTOMÁTICA DE IS_LEARNED
+            if word.current_cycle_seen >= TARGET_CYCLE_SEEN and not word.is_learned:
+                word.is_learned = True
+                logger.info(f"[resolve_and_increment_example] Word {word.id} ({word.main}) marcada como LEARNED (current_cycle_seen={word.current_cycle_seen})")
+
+            db.add(word)
+
+            if word.batch_id:
+                affected_batch_ids.add(word.batch_id)
+
+    # 3. Marcar en la cola del usuario como RESOLVED
+    queue_item = db.exec(
+        select(ExampleQueue).where(
+            ExampleQueue.user_id == user_id,
+            ExampleQueue.example_id == example_id,
+            ExampleQueue.status == QueueStatus.SENT,
+            ExampleQueue.is_active == True,
+        )
+    ).first()
+
+    if queue_item:
+        queue_item.status = QueueStatus.RESOLVED
+        db.add(queue_item)
+
+    # 4. OPCIONAL: Evaluar si el Lote (Batch) se completó
+    for batch_id in affected_batch_ids:
+        _check_and_update_batch_status(db, batch_id)
+
+    db.commit()
+    db.refresh(example)
+    return example
+
+
+def _check_and_update_batch_status(db: Session, batch_id: int):
+    batch = db.get(Batch, batch_id)
+    if not batch or batch.status == BatchStatus.COMPLETED:
+        return
+
+    # Contar total de palabras y palabras aprendidas en este lote
+    total_words = db.exec(
+        select(func.count(Word.id)).where(Word.batch_id == batch_id, Word.is_active == True)
+    ).one() or 0
+
+    if total_words == 0:
+        return
+
+    learned_words = db.exec(
+        select(func.count(Word.id)).where(
+            Word.batch_id == batch_id, 
+            Word.is_active == True, 
+            Word.is_learned == True
+        )
+    ).one() or 0
+
+    # Calcular progreso (0.0 a 100.0)
+    batch.mastery_progress = round((learned_words / total_words) * 100, 2)
+
+    # Si al menos el 80% o el 100% están aprendidas, completamos el lote
+    if batch.mastery_progress >= 80.0:
+        batch.status = BatchStatus.COMPLETED
+        batch.completed_at = datetime.now(timezone.utc)
+
+        # Activar el siguiente lote disponible si no hay ninguno activo
+        _activate_next_open_batch(db, user_id=batch.user_id)
+
+    db.add(batch)
+
+
+def _activate_next_open_batch(db: Session, user_id: int):
+    # Verificamos si ya hay un lote activo
+    has_active = db.exec(
+        select(Batch).where(Batch.user_id == user_id, Batch.status == BatchStatus.ACTIVE)
+    ).first()
+
+    if not has_active:
+        # Promovemos el lote OPEN de mayor prioridad
+        next_batch = db.exec(
+            select(Batch)
+            .where(Batch.user_id == user_id, Batch.status == BatchStatus.OPEN)
+            .order_by(Batch.priority.desc(), Batch.created_at.asc())
+        ).first()
+
+        if next_batch:
+            next_batch.status = BatchStatus.ACTIVE
+            db.add(next_batch)
+
+
+# ==========================================
+# MEMORIA ESPACIADA (SPACED REPETITION)
+# ==========================================
+
+def reopen_batches_for_spaced_repetition(db: Session, user_id: int) -> dict:
+    """
+    Reabre gradualmente batches completados antiguos para memoria espaciada.
+
+    Estrategia:
+    - Cada día, reabre solo 1 batch completado (el más antiguo)
+    - Marca todas sus palabras como is_learned=False (para revisión)
+    - Cambia su estado a OPEN
+
+    Esto permite que el usuario revise palabras "antiguas" de forma gradual.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    # Obtener batches COMPLETED del usuario, ordenados por antigüedad
+    completed_batches = db.exec(
+        select(Batch)
+        .where(
+            Batch.user_id == user_id,
+            Batch.status == BatchStatus.COMPLETED
+        )
+        .order_by(Batch.completed_at.asc())  # Más antiguos primero
+    ).all()
+
+    if not completed_batches:
+        logger.info(f"[reopen_batches_spaced_repetition] Usuario {user_id}: Sin batches completados para reabrir")
+        return {"reopened": 0, "message": "No hay batches completados para reabrir"}
+
+    # Reabre solo el batch más antiguo (1 por día)
+    batch_to_reopen = completed_batches[0]
+
+    try:
+        # Marcar todas las palabras del batch como is_learned=False
+        words = db.exec(
+            select(Word).where(Word.batch_id == batch_to_reopen.id)
+        ).all()
+
+        for word in words:
+            word.is_learned = False
+            word.current_cycle_seen = 0  # Resetear el ciclo
+            db.add(word)
+
+        # Cambiar estado del batch a OPEN
+        batch_to_reopen.status = BatchStatus.OPEN
+        batch_to_reopen.mastery_progress = 0.0
+        db.add(batch_to_reopen)
+
+        db.commit()
+
+        logger.info(f"[reopen_batches_spaced_repetition] Batch #{batch_to_reopen.id} reabierto para usuario {user_id}. Palabras: {len(words)}")
+
+        return {
+            "reopened": 1,
+            "batch_id": batch_to_reopen.id,
+            "batch_title": batch_to_reopen.title,
+            "words_count": len(words),
+            "message": f"Batch '{batch_to_reopen.title}' reabierto para revisión"
+        }
+
+    except Exception as e:
+        logger.error(f"[reopen_batches_spaced_repetition] Error reabriendo batch: {str(e)}", exc_info=True)
+        return {"reopened": 0, "error": str(e)}
+
+
+def reopen_specific_batches(db: Session, user_id: int, batch_ids: List[int]) -> dict:
+    """
+    Reabre manualmente batches específicos (para el usuario).
+    """
+    reopened = []
+    failed = []
+
+    for batch_id in batch_ids:
+        try:
+            batch = db.exec(
+                select(Batch).where(
+                    Batch.id == batch_id,
+                    Batch.user_id == user_id
+                )
+            ).first()
+
+            if not batch:
+                failed.append({"batch_id": batch_id, "reason": "No encontrado"})
+                continue
+
+            # Marcar palabras como is_learned=False
+            words = db.exec(
+                select(Word).where(Word.batch_id == batch.id)
+            ).all()
+
+            for word in words:
+                word.is_learned = False
+                word.current_cycle_seen = 0
+                db.add(word)
+
+            # Cambiar estado a OPEN
+            batch.status = BatchStatus.OPEN
+            batch.mastery_progress = 0.0
+            db.add(batch)
+
+            reopened.append({
+                "batch_id": batch.id,
+                "title": batch.title,
+                "words_count": len(words)
+            })
+
+            logger.info(f"[reopen_specific_batches] Batch #{batch_id} reabierto manualmente")
+
+        except Exception as e:
+            failed.append({"batch_id": batch_id, "reason": str(e)})
+            logger.error(f"[reopen_specific_batches] Error en batch {batch_id}: {str(e)}")
+
+    db.commit()
+
+    return {
+        "reopened_count": len(reopened),
+        "reopened": reopened,
+        "failed": failed
+    }
+
+
+def get_batch_words(db: Session, batch_id: int, user_id: int) -> Optional[dict]:
+    """
+    Retorna todas las palabras asociadas a un batch.
+    """
+    batch = db.exec(
+        select(Batch).where(
+            Batch.id == batch_id,
+            Batch.user_id == user_id
+        )
+    ).first()
+
+    if not batch:
+        return None
+
+    words = db.exec(
+        select(Word).where(Word.batch_id == batch_id)
+    ).all()
+
+    return {
+        "batch_id": batch.id,
+        "batch_title": batch.title,
+        "batch_status": batch.status.value,
+        "batch_progress": batch.mastery_progress,
+        "total_words": len(words),
+        "words": [
+            {
+                "id": w.id,
+                "main": w.main,
+                "meaning": w.meaning,
+                "type": w.type,
+                "level": w.level,
+                "is_learned": w.is_learned,
+                "is_active": w.is_active,
+                "times_seen": w.times_seen,
+                "last_seen_at": w.last_seen_at
+            }
+            for w in words
+        ]
+    }

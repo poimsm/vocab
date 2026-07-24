@@ -61,3 +61,4 @@ frontend/*.local
 # ==========================================
 # Si alguna vez montas datos de Postgres a carpetas locales en vez de volúmenes nombrados
 .postgres_data/
+backend/logs/

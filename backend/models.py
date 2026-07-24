@@ -3,6 +3,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 from sqlmodel import Field, SQLModel, Relationship
 from sqlalchemy import JSON, Integer
+from enum import Enum
 
 
 class User(SQLModel, table=True):
@@ -52,6 +53,40 @@ class WordLevel:
         return value in cls._REVERSE_MAP
 
 
+class BatchStatus(str, Enum):
+    OPEN = "open"          # Aceptando palabras sueltas
+    ACTIVE = "active"      # En proceso de estudio activo (Explore)
+    COMPLETED = "completed"  # Dominado (todas sus palabras aprendidas)
+    ARCHIVED = "archived"  # Pausado/Archivado por el usuario
+
+
+class BatchSource(str, Enum):
+    BULK_IMPORT = "bulk_import"  # Carga masiva (ej. texto largo)
+    ORGANIC = "organic"          # Palabras agregadas una a una
+
+
+class Batch(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+
+    title: str = Field(default="Lote sin título")
+    status: BatchStatus = Field(default=BatchStatus.OPEN, index=True)
+    source: BatchSource = Field(default=BatchSource.ORGANIC)
+
+    # Metadata para autogestión y algoritmo
+    capacity: int = Field(default=15)
+    # Mayor número = más prioridad
+    priority: int = Field(default=1, index=True)
+    mastery_progress: float = Field(default=0.0)  # 0.0 a 100.0%
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: Optional[datetime] = Field(default=None)
+
+    # Relación con las palabras
+    words: List["Word"] = Relationship(back_populates="batch")
+
+
 class ExampleWord(SQLModel, table=True):
     __tablename__: str = "example_words"
 
@@ -81,13 +116,20 @@ class Word(SQLModel, table=True):
 
     last_seen_at: Optional[datetime] = Field(default=None)
     times_seen: int = Field(default=0)
+    current_cycle_seen: int = Field(default=0)
+
     is_favorite: bool = Field(default=False)
     is_active: bool = Field(default=True)
     is_learned: bool = Field(default=False)
+    is_boosted: bool = Field(default=False)
+    boosted_at: Optional[datetime] = Field(default=None)
 
     user_id: Optional[int] = Field(default=None, foreign_key="users.id")
     user: User = Relationship(back_populates="words")
     example_words: List[ExampleWord] = Relationship(back_populates="word")
+
+    batch_id: Optional[int] = Field(default=None, foreign_key="batch.id")
+    batch: Optional["Batch"] = Relationship(back_populates="words")
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc))
@@ -120,6 +162,11 @@ class Example(SQLModel, table=True):
 
     example_words: List[ExampleWord] = Relationship(back_populates="example")
 
+    @property
+    def words(self) -> List["Word"]:
+        """Retorna la lista de objetos Word asociados a través de la tabla intermedia."""
+        return [assoc.word for assoc in self.example_words if assoc.word]
+
 
 class QueueStatus(str, enum.Enum):
     PENDING = "pending"   # Encolado listo para enviar
@@ -136,6 +183,8 @@ class ExampleQueue(SQLModel, table=True):
     is_active: bool = Field(default=True, index=True)
 
     example: "Example" = Relationship()
+    user_id: int = Field(foreign_key="users.id", index=True)
+
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc))
 

@@ -7,14 +7,16 @@ import ai
 from typing import List
 from logging_config import logger
 from fastapi import (APIRouter, Depends, HTTPException,
-                     Query, Path, BackgroundTasks, status)
+                     Query, Path, BackgroundTasks, status, Body)
 from fastapi.responses import StreamingResponse
-from sqlmodel import Session
+from sqlmodel import Session, select
 from db import get_db, engine
-from models import WordLevel, ExampleType, User
+from models import WordLevel, ExampleType, User, BatchSource, Word, Batch, BatchStatus
 from helpers import TextFormatter, chunk_list
 from auth import get_current_user
 from tasks.words import process_bulk_words_task
+from datetime import datetime, timezone
+from schemas.words import WordCreate, ReopenBatchesRequest
 
 router = APIRouter()
 
@@ -89,8 +91,8 @@ def get_word(
     }
 
 
-@router.post("")
-def create_word(word: schemas.WordCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@router.post("/old")
+def create_word(word: WordCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     extracted = ai.extract_learning_intent(word.text)
 
     if not extracted:
@@ -124,6 +126,111 @@ def create_word(word: schemas.WordCreate, db: Session = Depends(get_db), current
     return new_word
 
 
+@router.post("/test")
+def test_create_word(data: dict):
+    """Endpoint de prueba para verificar que POST funciona"""
+    logger.info(f"[test_create_word] Datos recibidos: {data}")
+    return {"received": data}
+
+
+@router.post("")
+def create_single_word(
+    request_data: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Crea una palabra individual procesando texto libre.
+    Extrae la palabra, la enriquece con IA, y la asigna a un batch.
+    """
+    try:
+        text = request_data.get("text")
+        if not text or not text.strip():
+            raise HTTPException(status_code=400, detail="El campo 'text' es requerido")
+
+        logger.info(f"[create_single_word] Procesando palabra para usuario {current_user.id}: '{text}'")
+
+        # 1. Extraer la palabra del texto
+        extracted_list = ai.extract_learning_intent([text.strip()])
+        if not extracted_list or len(extracted_list) == 0:
+            raise HTTPException(status_code=400, detail="No se pudo extraer una palabra válida del texto")
+
+        extracted = extracted_list[0]
+        main_word = extracted.get("main")
+        if not main_word:
+            raise HTTPException(status_code=400, detail="No se pudo determinar la palabra principal")
+
+        logger.info(f"[create_single_word] Palabra extraída: '{main_word}'")
+
+        # 2. Enriquecer la palabra con IA
+        enriched = ai.enrich_word(main_word)
+        if not enriched:
+            raise HTTPException(status_code=400, detail="No se pudo enriquecer la palabra")
+
+        logger.info(f"[create_single_word] Palabra enriquecida con: meaning, synonyms, level, category")
+
+        # 3. Obtener o crear el lote más propicio para palabras sueltas
+        propitious_batch = crud.get_or_create_propitious_batch(
+            db,
+            user_id=current_user.id,
+            source=BatchSource.ORGANIC
+        )
+        logger.info(f"[create_single_word] Batch asignado: {propitious_batch.id} ({propitious_batch.title})")
+
+        # 4. Preparar datos para crear la palabra
+        word_data = {
+            "main": main_word,
+            "type": extracted.get("type"),
+            "meaning": enriched.get("meaning"),
+            "synonyms": enriched.get("synonyms", []),
+            "frequency": enriched.get("frequency"),
+            "level": WordLevel.to_int(enriched.get("level")),
+            "context": enriched.get("category"),
+            "source_text": text.strip(),
+            "batch_id": propitious_batch.id,
+        }
+
+        # 5. Crear la palabra
+        new_word = crud.create_word(db, word_data, user_id=current_user.id)
+        if not new_word:
+            raise HTTPException(status_code=400, detail="La palabra ya existe")
+
+        logger.info(f"[create_single_word] Palabra creada: {new_word.id} - {new_word.main}")
+
+        # 6. Crear ejemplos iniciales si existen
+        if enriched.get("examples"):
+            raw_examples = [
+                {
+                    "text": example_text,
+                    "words": [
+                        {"word_id": new_word.id, "text_form": ""}
+                    ],
+                }
+                for example_text in enriched.get("examples", [])
+            ]
+            crud.create_examples(db, raw_examples, example_type=ExampleType.INITIAL)
+            logger.info(f"[create_single_word] Ejemplos iniciales creados: {len(raw_examples)}")
+
+        return {
+            "id": new_word.id,
+            "main": new_word.main,
+            "meaning": new_word.meaning,
+            "type": new_word.type,
+            "level": new_word.level,
+            "synonyms": new_word.synonyms,
+            "frequency": new_word.frequency,
+            "context": new_word.context,
+            "batch_id": new_word.batch_id,
+            "created_at": new_word.created_at,
+            "message": "Palabra creada exitosamente"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[create_single_word] Error creando palabra: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/bulk", status_code=status.HTTP_202_ACCEPTED)
 def create_words_bulk(
     texts: List[str],
@@ -137,6 +244,54 @@ def create_words_bulk(
         "task_id": task.id,
         "message": f"Processing {len(texts)} texts sequentially in background."
     }
+
+
+@router.patch("/{word_id}/mark-learned")
+def mark_word_learned(
+    word_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Marca una palabra como dominada/aprendida y actualiza
+    las métricas de su lote correspondiente.
+    """
+    word = crud.get_word_by_id(db, word_id)
+    if not word or word.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Palabra no encontrada")
+
+    word.is_learned = True
+    word.learned_at = datetime.now(timezone.utc)
+    db.add(word)
+    db.commit()
+
+    # RECALCULAR PROGRESO DEL LOTE AUTOMÁTICAMENTE
+    if word.batch_id:
+        crud.update_batch_metrics(db, word.batch_id)
+
+    return {"message": "Palabra marcada como aprendida", "word_id": word.id}
+
+
+@router.patch("/{word_id}/toggle-boost")
+def toggle_word_boost(
+    word_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Permite al usuario dar prioridad absoluta (Boost) a una palabra.
+    """
+    word = crud.get_word_by_id(db, word_id)
+    if not word or word.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Palabra no encontrada")
+
+    word.is_boosted = not word.is_boosted
+    word.boosted_at = datetime.now(timezone.utc) if word.is_boosted else None
+
+    db.add(word)
+    db.commit()
+
+    return {"id": word.id, "is_boosted": word.is_boosted}
 
 
 @router.patch("/{word_id}/toggle-active")
@@ -179,6 +334,108 @@ def toggle_word_favorite(word_id: int, db: Session = Depends(get_db)):
         "is_favorite": word.is_favorite,
         "message": f"Word marked as {'favorited' if word.is_favorite else 'not favorited'}"
     }
+
+
+@router.get("/batches")
+def get_all_batches(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Obtiene TODOS los batches del usuario, independientemente de su estado.
+    """
+    batches = db.exec(
+        select(Batch)
+        .where(Batch.user_id == current_user.id)
+        .order_by(Batch.created_at.asc())
+    ).all()
+
+    return {
+        "total_batches": len(batches),
+        "batches": [
+            {
+                "id": b.id,
+                "title": b.title,
+                "status": b.status.value,
+                "source": b.source.value,
+                "progress": b.mastery_progress,
+                "words_count": len(b.words),
+                "capacity": b.capacity,
+                "priority": b.priority,
+                "created_at": b.created_at,
+                "completed_at": b.completed_at
+            }
+            for b in batches
+        ]
+    }
+
+
+@router.get("/batches/{batch_id}/words")
+def get_batch_words(
+    batch_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Obtiene todas las palabras asociadas a un batch específico.
+    """
+    batch_data = crud.get_batch_words(db, batch_id, current_user.id)
+
+    if not batch_data:
+        raise HTTPException(status_code=404, detail="Batch no encontrado")
+
+    return batch_data
+
+
+@router.patch("/batches/reopen/manual")
+def reopen_batches_manual(
+    request: ReopenBatchesRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Reabre manualmente batches específicos para revisión (memoria espaciada).
+
+    Body esperado:
+    {
+      "batch_ids": [1, 3, 5]
+    }
+    """
+    if not request.batch_ids:
+        raise HTTPException(status_code=400, detail="Debe proporcionar al menos un batch_id")
+
+    result = crud.reopen_specific_batches(db, current_user.id, request.batch_ids)
+
+    if result["failed"]:
+        logger.warning(f"[reopen_batches_manual] Algunos batches fallaron: {result['failed']}")
+
+    return result
+
+
+@router.patch("/batches/reopen/all")
+def reopen_all_batches(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Reabre TODOS los batches completados del usuario.
+    """
+    completed_batches = db.exec(
+        select(Batch).where(
+            Batch.user_id == current_user.id,
+            Batch.status == BatchStatus.COMPLETED
+        )
+    ).all()
+
+    if not completed_batches:
+        return {"reopened_count": 0, "message": "No hay batches completados para reabrir"}
+
+    batch_ids = [b.id for b in completed_batches]
+    result = crud.reopen_specific_batches(db, current_user.id, batch_ids)
+
+    logger.info(f"[reopen_all_batches] Usuario {current_user.id}: reabiertos {result['reopened_count']} batches")
+
+    return result
 
 
 @router.get("/export/csv")
