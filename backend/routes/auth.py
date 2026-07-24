@@ -1,6 +1,5 @@
 # backend/routes/auth.py
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlmodel import Session, select
 from db import get_db
 from models import User
@@ -11,6 +10,11 @@ router = APIRouter()
 
 class UserRegister(BaseModel):
     email: EmailStr
+    password: str
+
+class LoginRequest(BaseModel):
+    """Modelo para login con JSON"""
+    email: str
     password: str
 
 class Token(BaseModel):
@@ -33,16 +37,25 @@ def register(user_data: UserRegister, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 def login(
-    form_data: OAuth2PasswordRequestForm = Depends(), 
+    credentials: LoginRequest,
     db: Session = Depends(get_db)
 ):
-    user = db.exec(select(User).where(User.email == form_data.username)).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    """
+    Endpoint de login que acepta JSON.
+
+    Body:
+    {
+      "email": "user@example.com",
+      "password": "password123"
+    }
+    """
+    user = db.exec(select(User).where(User.email == credentials.email)).first()
+    if not user or not verify_password(credentials.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario o contraseña incorrectos",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}

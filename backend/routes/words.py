@@ -339,14 +339,14 @@ def toggle_word_favorite(word_id: int, db: Session = Depends(get_db)):
 @router.get("/batches")
 def get_all_batches(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)
 ):
     """
     Obtiene TODOS los batches del usuario, independientemente de su estado.
     """
     batches = db.exec(
         select(Batch)
-        .where(Batch.user_id == current_user.id)
+        .where(Batch.user_id == 2)
         .order_by(Batch.created_at.asc())
     ).all()
 
@@ -374,12 +374,12 @@ def get_all_batches(
 def get_batch_words(
     batch_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)
 ):
     """
     Obtiene todas las palabras asociadas a un batch específico.
     """
-    batch_data = crud.get_batch_words(db, batch_id, current_user.id)
+    batch_data = crud.get_batch_words(db, batch_id, 2)
 
     if not batch_data:
         raise HTTPException(status_code=404, detail="Batch no encontrado")
@@ -391,7 +391,7 @@ def get_batch_words(
 def reopen_batches_manual(
     request: ReopenBatchesRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)
 ):
     """
     Reabre manualmente batches específicos para revisión (memoria espaciada).
@@ -404,7 +404,7 @@ def reopen_batches_manual(
     if not request.batch_ids:
         raise HTTPException(status_code=400, detail="Debe proporcionar al menos un batch_id")
 
-    result = crud.reopen_specific_batches(db, current_user.id, request.batch_ids)
+    result = crud.reopen_specific_batches(db, 2, request.batch_ids)
 
     if result["failed"]:
         logger.warning(f"[reopen_batches_manual] Algunos batches fallaron: {result['failed']}")
@@ -415,14 +415,14 @@ def reopen_batches_manual(
 @router.patch("/batches/reopen/all")
 def reopen_all_batches(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)
 ):
     """
     Reabre TODOS los batches completados del usuario.
     """
     completed_batches = db.exec(
         select(Batch).where(
-            Batch.user_id == current_user.id,
+            Batch.user_id == 2,
             Batch.status == BatchStatus.COMPLETED
         )
     ).all()
@@ -431,9 +431,9 @@ def reopen_all_batches(
         return {"reopened_count": 0, "message": "No hay batches completados para reabrir"}
 
     batch_ids = [b.id for b in completed_batches]
-    result = crud.reopen_specific_batches(db, current_user.id, batch_ids)
+    result = crud.reopen_specific_batches(db, 2, batch_ids)
 
-    logger.info(f"[reopen_all_batches] Usuario {current_user.id}: reabiertos {result['reopened_count']} batches")
+    logger.info(f"[reopen_all_batches] Usuario {2}: reabiertos {result['reopened_count']} batches")
 
     return result
 
