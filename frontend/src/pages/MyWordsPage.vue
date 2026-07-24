@@ -1577,7 +1577,23 @@ onUnmounted(() => {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding: 8px 20px 28px;
   z-index: 2001;
-  max-height: 50vh;
+  max-height: 80vh;
+  overflow-y: auto;
+  /* Prevenir que el teclado se superponga */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Asegurar que el input sea accesible cuando el teclado abre */
+.mobile-add-input {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+@supports (padding: max(0px)) {
+  .mobile-add-panel {
+    padding-bottom: max(28px, env(safe-area-inset-bottom));
+  }
 }
 
 .mobile-add-handle {
