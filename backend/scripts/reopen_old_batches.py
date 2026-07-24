@@ -59,8 +59,8 @@ def reopen_batches_spaced_repetition():
                         word.current_cycle_seen = 0  # Resetear el ciclo
                         db.add(word)
 
-                    # Cambiar estado del batch a OPEN
-                    batch_to_reopen.status = BatchStatus.OPEN
+                    # Cambiar estado del batch a ACTIVE (para revisión)
+                    batch_to_reopen.status = BatchStatus.ACTIVE
                     batch_to_reopen.mastery_progress = 0.0
                     db.add(batch_to_reopen)
 

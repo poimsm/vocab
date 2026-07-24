@@ -904,8 +904,8 @@ def reopen_specific_batches(db: Session, user_id: int, batch_ids: List[int]) -> 
                 word.current_cycle_seen = 0
                 db.add(word)
 
-            # Cambiar estado a OPEN
-            batch.status = BatchStatus.OPEN
+            # Cambiar estado a ACTIVE (para revisión)
+            batch.status = BatchStatus.ACTIVE
             batch.mastery_progress = 0.0
             db.add(batch)
 
