@@ -29,8 +29,10 @@ def get_words(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    logger.info(f"[get_words] User {current_user.id}: Fetching words (sort={sort}, page={page}, limit={limit})")
     paginated_data = crud.get_words(
         db, current_user.id, sort=sort, page=page, limit=limit)
+    logger.debug(f"[get_words] Retrieved {len(paginated_data['items'])} words")
 
     paginated_data["items"] = [
         {
@@ -58,9 +60,11 @@ def get_word(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    logger.debug(f"[get_word] User {current_user.id}: Fetching word {word_id}")
     word = crud.get_word_by_id(db, word_id)
 
     if not word:
+        logger.warning(f"[get_word] Word {word_id} not found")
         raise HTTPException(status_code=404, detail="Palabra no encontrada")
 
     explore_examples_count = sum(
@@ -281,8 +285,10 @@ def toggle_word_boost(
     """
     Permite al usuario dar prioridad absoluta (Boost) a una palabra.
     """
+    logger.debug(f"[toggle_word_boost] User {current_user.id}: Toggling boost for word {word_id}")
     word = crud.get_word_by_id(db, word_id)
     if not word or word.user_id != current_user.id:
+        logger.warning(f"[toggle_word_boost] Word {word_id} not found or unauthorized")
         raise HTTPException(status_code=404, detail="Palabra no encontrada")
 
     word.is_boosted = not word.is_boosted
@@ -290,6 +296,7 @@ def toggle_word_boost(
 
     db.add(word)
     db.commit()
+    logger.info(f"[toggle_word_boost] Word {word_id} boost set to {word.is_boosted}")
 
     return {"id": word.id, "is_boosted": word.is_boosted}
 
@@ -297,23 +304,29 @@ def toggle_word_boost(
 @router.patch("/{word_id}/toggle-active")
 # CAMBIO: Tipado de sesión
 def toggle_word_active(word_id: int, db: Session = Depends(get_db)):
+    logger.debug(f"[toggle_word_active] Toggling active status for word {word_id}")
     word = crud.toggle_word_active(db, word_id)
 
     if not word:
+        logger.warning(f"[toggle_word_active] Word {word_id} not found")
         raise HTTPException(status_code=404, detail="Word not found")
 
     status = "activated" if word.is_active else "deactivated"
+    logger.info(f"[toggle_word_active] Word {word_id} {status}")
     return {"message": f"Word {status}"}
 
 
 @router.patch("/{word_id}/toggle-learned")
 # CAMBIO: Tipado de sesión
 def toggle_word_learned(word_id: int, db: Session = Depends(get_db)):
+    logger.debug(f"[toggle_word_learned] Toggling learned status for word {word_id}")
     word = crud.toggle_word_learned(db, word_id)
 
     if not word:
+        logger.warning(f"[toggle_word_learned] Word {word_id} not found")
         raise HTTPException(status_code=404, detail="Word not found")
 
+    logger.info(f"[toggle_word_learned] Word {word_id} marked as {'learned' if word.is_learned else 'not learned'}")
     return {
         "id": word.id,
         "is_learned": word.is_learned,
@@ -324,11 +337,14 @@ def toggle_word_learned(word_id: int, db: Session = Depends(get_db)):
 @router.patch("/{word_id}/toggle-fav")
 # CAMBIO: Tipado de sesión
 def toggle_word_favorite(word_id: int, db: Session = Depends(get_db)):
+    logger.debug(f"[toggle_word_favorite] Toggling favorite status for word {word_id}")
     word = crud.toggle_word_favorite(db, word_id)
 
     if not word:
+        logger.warning(f"[toggle_word_favorite] Word {word_id} not found")
         raise HTTPException(status_code=404, detail="Word not found")
 
+    logger.info(f"[toggle_word_favorite] Word {word_id} marked as {'favorited' if word.is_favorite else 'not favorited'}")
     return {
         "id": word.id,
         "is_favorite": word.is_favorite,
@@ -344,11 +360,13 @@ def get_all_batches(
     """
     Obtiene TODOS los batches del usuario, independientemente de su estado.
     """
+    logger.debug("[get_all_batches] Fetching all batches for user 2")
     batches = db.exec(
         select(Batch)
         .where(Batch.user_id == 2)
         .order_by(Batch.created_at.asc())
     ).all()
+    logger.info(f"[get_all_batches] Retrieved {len(batches)} batches")
 
     return {
         "total_batches": len(batches),
@@ -379,9 +397,11 @@ def get_batch_words(
     """
     Obtiene todas las palabras asociadas a un batch específico.
     """
+    logger.debug(f"[get_batch_words] Fetching words for batch {batch_id}")
     batch_data = crud.get_batch_words(db, batch_id, 2)
 
     if not batch_data:
+        logger.warning(f"[get_batch_words] Batch {batch_id} not found")
         raise HTTPException(status_code=404, detail="Batch no encontrado")
 
     return batch_data
@@ -401,10 +421,13 @@ def reopen_batches_manual(
       "batch_ids": [1, 3, 5]
     }
     """
+    logger.info(f"[reopen_batches_manual] Manual reopen requested for {len(request.batch_ids)} batches: {request.batch_ids}")
     if not request.batch_ids:
+        logger.error("[reopen_batches_manual] No batch IDs provided")
         raise HTTPException(status_code=400, detail="Debe proporcionar al menos un batch_id")
 
     result = crud.reopen_specific_batches(db, 2, request.batch_ids)
+    logger.info(f"[reopen_batches_manual] Reopened {result['reopened_count']} batches successfully")
 
     if result["failed"]:
         logger.warning(f"[reopen_batches_manual] Some batches failed: {result['failed']}")
@@ -420,6 +443,7 @@ def reopen_all_batches(
     """
     Reabre TODOS los batches completados del usuario.
     """
+    logger.info("[reopen_all_batches] Reopen all batches requested for user 2")
     completed_batches = db.exec(
         select(Batch).where(
             Batch.user_id == 2,
@@ -428,9 +452,11 @@ def reopen_all_batches(
     ).all()
 
     if not completed_batches:
+        logger.info("[reopen_all_batches] No completed batches found")
         return {"reopened_count": 0, "message": "No hay batches completados para reabrir"}
 
     batch_ids = [b.id for b in completed_batches]
+    logger.info(f"[reopen_all_batches] Reopening {len(batch_ids)} completed batches")
     result = crud.reopen_specific_batches(db, 2, batch_ids)
 
     logger.info(f"[reopen_all_batches] User 2: reopened {result['reopened_count']} batches")
@@ -440,7 +466,9 @@ def reopen_all_batches(
 
 @router.get("/export/csv")
 def export_words_csv(db: Session = Depends(get_db)):
+    logger.info("[export_words_csv] Starting CSV export")
     words_list = crud.get_all_words(db)
+    logger.info(f"[export_words_csv] Exporting {len(words_list)} words to CSV")
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -465,6 +493,7 @@ def export_words_csv(db: Session = Depends(get_db)):
         ])
 
     output.seek(0)
+    logger.debug("[export_words_csv] CSV file generated successfully")
 
     return StreamingResponse(
         iter([output.getvalue()]),
