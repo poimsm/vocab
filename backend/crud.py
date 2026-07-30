@@ -723,7 +723,7 @@ def resolve_and_increment_example(db: Session, example_id: int, user_id: int) ->
             # ✅ EVALUACIÓN AUTOMÁTICA DE IS_LEARNED
             if word.current_cycle_seen >= TARGET_CYCLE_SEEN and not word.is_learned:
                 word.is_learned = True
-                logger.info(f"[resolve_and_increment_example] Word {word.id} ({word.main}) marcada como LEARNED (current_cycle_seen={word.current_cycle_seen})")
+                logger.info(f"[resolve_and_increment_example] Word {word.id} ({word.main}) marked as LEARNED (current_cycle_seen={word.current_cycle_seen})")
 
             db.add(word)
 
@@ -835,7 +835,7 @@ def reopen_batches_for_spaced_repetition(db: Session, user_id: int) -> dict:
     ).all()
 
     if not completed_batches:
-        logger.info(f"[reopen_batches_spaced_repetition] Usuario {user_id}: Sin batches completados para reabrir")
+        logger.info(f"[reopen_batches_spaced_repetition] User {user_id}: No completed batches to reopen")
         return {"reopened": 0, "message": "No hay batches completados para reabrir"}
 
     # Reabre solo el batch más antiguo (1 por día)
@@ -859,7 +859,7 @@ def reopen_batches_for_spaced_repetition(db: Session, user_id: int) -> dict:
 
         db.commit()
 
-        logger.info(f"[reopen_batches_spaced_repetition] Batch #{batch_to_reopen.id} reabierto para usuario {user_id}. Palabras: {len(words)}")
+        logger.info(f"[reopen_batches_spaced_repetition] Batch #{batch_to_reopen.id} reopened for user {user_id}. Words: {len(words)}")
 
         return {
             "reopened": 1,
@@ -870,7 +870,7 @@ def reopen_batches_for_spaced_repetition(db: Session, user_id: int) -> dict:
         }
 
     except Exception as e:
-        logger.error(f"[reopen_batches_spaced_repetition] Error reabriendo batch: {str(e)}", exc_info=True)
+        logger.error(f"[reopen_batches_spaced_repetition] Error reopening batch: {str(e)}", exc_info=True)
         return {"reopened": 0, "error": str(e)}
 
 
@@ -915,11 +915,11 @@ def reopen_specific_batches(db: Session, user_id: int, batch_ids: List[int]) -> 
                 "words_count": len(words)
             })
 
-            logger.info(f"[reopen_specific_batches] Batch #{batch_id} reabierto manualmente")
+            logger.info(f"[reopen_specific_batches] Batch #{batch_id} manually reopened")
 
         except Exception as e:
             failed.append({"batch_id": batch_id, "reason": str(e)})
-            logger.error(f"[reopen_specific_batches] Error en batch {batch_id}: {str(e)}")
+            logger.error(f"[reopen_specific_batches] Error in batch {batch_id}: {str(e)}")
 
     db.commit()
 

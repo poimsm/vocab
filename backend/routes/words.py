@@ -129,7 +129,7 @@ def create_word(word: WordCreate, db: Session = Depends(get_db), current_user: U
 @router.post("/test")
 def test_create_word(data: dict):
     """Endpoint de prueba para verificar que POST funciona"""
-    logger.info(f"[test_create_word] Datos recibidos: {data}")
+    logger.info(f"[test_create_word] Data received: {data}")
     return {"received": data}
 
 
@@ -148,7 +148,7 @@ def create_single_word(
         if not text or not text.strip():
             raise HTTPException(status_code=400, detail="El campo 'text' es requerido")
 
-        logger.info(f"[create_single_word] Procesando palabra para usuario {current_user.id}: '{text}'")
+        logger.info(f"[create_single_word] Processing word for user {current_user.id}: '{text}'")
 
         # 1. Extraer la palabra del texto
         extracted_list = ai.extract_learning_intent([text.strip()])
@@ -160,14 +160,14 @@ def create_single_word(
         if not main_word:
             raise HTTPException(status_code=400, detail="No se pudo determinar la palabra principal")
 
-        logger.info(f"[create_single_word] Palabra extraída: '{main_word}'")
+        logger.info(f"[create_single_word] Extracted word: '{main_word}'")
 
         # 2. Enriquecer la palabra con IA
         enriched = ai.enrich_word(main_word)
         if not enriched:
             raise HTTPException(status_code=400, detail="No se pudo enriquecer la palabra")
 
-        logger.info(f"[create_single_word] Palabra enriquecida con: meaning, synonyms, level, category")
+        logger.info(f"[create_single_word] Word enriched with: meaning, synonyms, level, category")
 
         # 3. Obtener o crear el lote más propicio para palabras sueltas
         propitious_batch = crud.get_or_create_propitious_batch(
@@ -175,7 +175,7 @@ def create_single_word(
             user_id=current_user.id,
             source=BatchSource.ORGANIC
         )
-        logger.info(f"[create_single_word] Batch asignado: {propitious_batch.id} ({propitious_batch.title})")
+        logger.info(f"[create_single_word] Assigned batch: {propitious_batch.id} ({propitious_batch.title})")
 
         # 4. Preparar datos para crear la palabra
         word_data = {
@@ -195,7 +195,7 @@ def create_single_word(
         if not new_word:
             raise HTTPException(status_code=400, detail="La palabra ya existe")
 
-        logger.info(f"[create_single_word] Palabra creada: {new_word.id} - {new_word.main}")
+        logger.info(f"[create_single_word] Word created: {new_word.id} - {new_word.main}")
 
         # 6. Crear ejemplos iniciales si existen
         if enriched.get("examples"):
@@ -209,7 +209,7 @@ def create_single_word(
                 for example_text in enriched.get("examples", [])
             ]
             crud.create_examples(db, raw_examples, example_type=ExampleType.INITIAL)
-            logger.info(f"[create_single_word] Ejemplos iniciales creados: {len(raw_examples)}")
+            logger.info(f"[create_single_word] Initial examples created: {len(raw_examples)}")
 
         return {
             "id": new_word.id,
@@ -227,7 +227,7 @@ def create_single_word(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[create_single_word] Error creando palabra: {str(e)}", exc_info=True)
+        logger.error(f"[create_single_word] Error creating word: {str(e)}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -407,7 +407,7 @@ def reopen_batches_manual(
     result = crud.reopen_specific_batches(db, 2, request.batch_ids)
 
     if result["failed"]:
-        logger.warning(f"[reopen_batches_manual] Algunos batches fallaron: {result['failed']}")
+        logger.warning(f"[reopen_batches_manual] Some batches failed: {result['failed']}")
 
     return result
 
@@ -433,7 +433,7 @@ def reopen_all_batches(
     batch_ids = [b.id for b in completed_batches]
     result = crud.reopen_specific_batches(db, 2, batch_ids)
 
-    logger.info(f"[reopen_all_batches] Usuario {2}: reabiertos {result['reopened_count']} batches")
+    logger.info(f"[reopen_all_batches] User 2: reopened {result['reopened_count']} batches")
 
     return result
 

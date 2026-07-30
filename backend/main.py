@@ -39,4 +39,4 @@ app.include_router(celery.router, prefix="/celery", tags=["celery"])
 @app.on_event("startup")
 def startup():
     SQLModel.metadata.create_all(engine)
-    logger.info("¡El backend de Vocab se esta iniciando correctamente!")
+    logger.info("Vocab backend started successfully!")

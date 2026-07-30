@@ -2,6 +2,7 @@ import os
 import json
 from openai import OpenAI
 import models
+from logging_config import logger
 
 client = OpenAI(api_key=os.getenv("AI_KEY"))
 
@@ -266,6 +267,7 @@ def extract_learning_intent(raw_inputs: list[str]) -> list[dict] | None:
     Toma input libre del usuario y extrae las palabras/expresiones en
     inglés que quiso capturar para aprender vocabulario.
     """
+    logger.info(f"Extracting learning intent from {len(raw_inputs)} inputs")
     payload = [{"raw": line} for line in raw_inputs if line.strip()]
 
     response = client.chat.completions.create(
@@ -356,6 +358,7 @@ Return a JSON array of objects matching this exact structure:
 
 
 def enrich_word(main: str):
+    logger.debug(f"Enriching single word: {main}")
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         temperature=0,
@@ -406,6 +409,7 @@ def enrich_words_bulk(words: list[str]) -> list[dict] | None:
     Enriquece un lote de palabras en inglés en una sola llamada a la IA.
     Soporta procesar hasta 15 palabras a la vez.
     """
+    logger.info(f"Enriching bulk of {len(words)} words")
     if not words:
         return []
 

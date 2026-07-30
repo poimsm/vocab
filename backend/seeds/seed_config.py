@@ -2,10 +2,11 @@ import sys
 from sqlmodel import Session, select
 from db import engine
 from models import ExploreConfiguration
+from logging_config import logger
 
 def seed_explore_configurations():
-    print("Cargando configuracion explore...")
-    
+    logger.info("Loading explore configurations...")
+
     # Lista de configuraciones correspondientes a tus condiciones
     configs_to_load = [
         ExploreConfiguration(max_examples=15, ai_mixed_generation_amount=3, ai_simple_generation_amount=6, recycled_words_amount=0),
@@ -19,18 +20,19 @@ def seed_explore_configurations():
         try:
             # 1. Limpiamos las configuraciones anteriores para evitar duplicados o IDs corruptos
             existing_configs = db.exec(select(ExploreConfiguration)).all()
+            logger.info(f"Removing {len(existing_configs)} existing configurations")
             for config in existing_configs:
                 db.delete(config)
             db.flush()
 
             for config in configs_to_load:
                 db.add(config)
-                
+
             db.commit()
-            print("✅ Configuracion cargada con exito.")
+            logger.info("Explore configurations loaded successfully.")
         except Exception as e:
             db.rollback()
-            print(f"❌ Error inesperado: {e}")
+            logger.error(f"Unexpected error loading configurations: {e}")
             sys.exit(1)
 
 if __name__ == "__main__":

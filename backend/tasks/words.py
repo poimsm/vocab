@@ -14,7 +14,7 @@ from logging_config import logger
 @celery_app.task(name="tasks.words.process_bulk_words")
 def process_bulk_words_task(texts: List[str], user_id: int):
     logger.info(
-        f"[Celery Bulk] Iniciando procesamiento por lotes para {len(texts)} líneas (Usuario: {user_id})."
+        f"[Celery Bulk] Starting batch processing for {len(texts)} lines (User: {user_id})."
     )
 
     CHUNK_SIZE = 15
@@ -34,14 +34,14 @@ def process_bulk_words_task(texts: List[str], user_id: int):
                 start_index = chunk_idx * CHUNK_SIZE
 
                 logger.info(
-                    f"--- Procesando Chunk {chunk_idx + 1}/{len(text_chunks)} (Tamaño: {len(text_chunk)}) ---"
+                    f"--- Processing Chunk {chunk_idx + 1}/{len(text_chunks)} (Size: {len(text_chunk)}) ---"
                 )
 
                 # Step 1: Extraer intenciones de aprendizaje
                 extracted_list = ai.extract_learning_intent(text_chunk)
                 if not extracted_list or not isinstance(extracted_list, list):
                     logger.warning(
-                        f"No se pudieron extraer palabras para el chunk {chunk_idx + 1}. Saltando."
+                        f"Could not extract words for chunk {chunk_idx + 1}. Skipping."
                     )
                     continue
 
@@ -50,13 +50,13 @@ def process_bulk_words_task(texts: List[str], user_id: int):
                     item["main"] for item in extracted_list if item.get("main")
                 ]
                 if not words_to_enrich:
-                    logger.info("No se encontraron palabras válidas en este chunk.")
+                    logger.info("No valid words found in this chunk.")
                     continue
 
                 # Step 3: Enriquecer con IA
                 enriched_results = ai.enrich_words_bulk(words_to_enrich)
                 if not enriched_results:
-                    logger.warning("No se pudo enriquecer el chunk actual. Saltando.")
+                    logger.warning("Could not enrich current chunk. Skipping.")
                     continue
 
                 enriched_map = {
@@ -75,14 +75,14 @@ def process_bulk_words_task(texts: List[str], user_id: int):
                         enriched = enriched_map.get(main_word.lower().strip())
                         if not enriched:
                             logger.warning(
-                                f"La IA omitió los detalles para '{main_word}'."
+                                f"AI omitted details for '{main_word}'."
                             )
                             continue
 
                         # Validar si el lote actual ya alcanzó su capacidad (ej. 20 palabras)
                         # Si está lleno, se crea/asigna un nuevo Batch dinámicamente
                         if len(current_batch.words) >= current_batch.capacity:
-                            logger.info(f"El lote actual #{current_batch.id} alcanzó su capacidad ({current_batch.capacity}). Creando uno nuevo.")
+                            logger.info(f"Current batch #{current_batch.id} reached capacity ({current_batch.capacity}). Creating new batch.")
                             current_batch = crud.get_or_create_propitious_batch(
                                 db,
                                 user_id=user_id,
@@ -129,7 +129,7 @@ def process_bulk_words_task(texts: List[str], user_id: int):
                                 crud.create_examples(
                                     db, raw_examples, example_type=ExampleType.INITIAL
                                 )
-                            logger.info(f"✓ Guardada: '{new_word.main}' en Batch #{current_batch.id}")
+                            logger.info(f"✓ Saved: '{new_word.main}' in Batch #{current_batch.id}")
                         else:
                             logger.info(
                                 f"⚠ Saltada (Duplicada): '{main_word}'"
@@ -137,7 +137,7 @@ def process_bulk_words_task(texts: List[str], user_id: int):
 
                     except Exception as item_error:
                         logger.error(
-                            f"Error procesando palabra individual '{main_word}': {item_error}"
+                            f"Error processing individual word '{main_word}': {item_error}"
                         )
                         continue
 
@@ -149,9 +149,9 @@ def process_bulk_words_task(texts: List[str], user_id: int):
             if current_batch and current_batch.id:
                 crud.update_batch_metrics(db, current_batch.id)
 
-            logger.info("[Celery Bulk] Procesamiento completado exitosamente.")
+            logger.info("[Celery Bulk] Batch processing completed successfully.")
 
         except Exception as e:
             logger.error(
-                f"Error crítico en la tarea Celery bulk: {e}", exc_info=True
+                f"Critical error in Celery bulk task: {e}", exc_info=True
             )

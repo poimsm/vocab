@@ -1,6 +1,7 @@
 from sqlmodel import SQLModel
 from datetime import datetime
 from typing import List, Optional
+from logging_config import logger
 
 
 class WordCreate(SQLModel):

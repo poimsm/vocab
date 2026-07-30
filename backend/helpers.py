@@ -1,4 +1,5 @@
 from typing import Union, List
+from logging_config import logger
 
 
 class TextFormatter:
@@ -21,5 +22,6 @@ class TextFormatter:
 
 
 def chunk_list(lst, n):
+    logger.debug(f"Chunking list of {len(lst)} items with chunk size {n}")
     for i in range(0, len(lst), n):
         yield lst[i:i + n]

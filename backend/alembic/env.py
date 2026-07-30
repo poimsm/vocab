@@ -8,6 +8,7 @@ import models
 import os
 
 from alembic import context
+from logging_config import logger
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

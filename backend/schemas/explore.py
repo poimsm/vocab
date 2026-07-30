@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel
 from typing import List, Optional
+from logging_config import logger
 
 
 class ExploreWordSchema(BaseModel):

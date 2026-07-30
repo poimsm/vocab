@@ -12,7 +12,7 @@ def refill_queue_task(user_id: int):  # <-- Recibe el user_id
     Tarea Celery para rellenar la cola de ejemplos de un usuario en segundo plano.
     """
     logger.info(
-        f"[Celery Examples] Iniciando rellenado de cola de ejemplos para usuario {user_id}..."
+        f"[Celery Examples] Starting example queue refill for user {user_id}..."
     )
 
     with Session(engine) as db:
@@ -20,11 +20,11 @@ def refill_queue_task(user_id: int):  # <-- Recibe el user_id
             # Pasamos user_id a la lógica de CRUD
             crud.refill_example_queue(db, user_id=user_id)
             logger.info(
-                f"[Celery Examples] Cola de ejemplos rellenada con éxito para usuario {user_id}."
+                f"[Celery Examples] Example queue successfully refilled for user {user_id}."
             )
         except Exception as e:
             logger.error(
-                f"[Celery Examples] Error crítico rellenando la cola de ejemplos para usuario {user_id}: {e}",
+                f"[Celery Examples] Critical error refilling example queue for user {user_id}: {e}",
                 exc_info=True,
             )
 
@@ -35,7 +35,7 @@ def spaced_repetition_daily_task():
     Tarea Celery programada para ejecutarse diariamente.
     Reabre gradualmente batches completados (1 por usuario por día) para memoria espaciada.
     """
-    logger.info("[Celery Spaced Repetition] Iniciando proceso diario de reapertura de batches...")
+    logger.info("[Celery Spaced Repetition] Starting daily batch reopening process...")
 
     with Session(engine) as db:
         try:
@@ -49,11 +49,11 @@ def spaced_repetition_daily_task():
                     reactivated_count += 1
 
             logger.info(
-                f"[Celery Spaced Repetition] Proceso completado. Batches reabiertos en {reactivated_count} usuarios."
+                f"[Celery Spaced Repetition] Process completed. Batches reopened in {reactivated_count} users."
             )
 
         except Exception as e:
             logger.error(
-                f"[Celery Spaced Repetition] Error crítico en proceso diario: {e}",
+                f"[Celery Spaced Repetition] Critical error in daily process: {e}",
                 exc_info=True,
             )

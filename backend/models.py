@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from sqlmodel import Field, SQLModel, Relationship
 from sqlalchemy import JSON, Integer
 from enum import Enum
+from logging_config import logger
 
 
 class User(SQLModel, table=True):

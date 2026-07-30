@@ -3,13 +3,14 @@ import os
 from sqlmodel import Session, select
 from db import engine
 from models import User
-from auth import hash_password 
+from auth import hash_password
+from logging_config import logger 
 
 PASS_ADMIN = os.getenv("PASS_ADMIN_USER")
 
 def seed_users():
-    print("Cargando usuarios iniciales...")
-    
+    logger.info("Loading initial users...")
+
     raw_users = [
         {
             "username": "admin",
@@ -31,11 +32,11 @@ def seed_users():
                 # 1. Verificamos si el usuario ya existe por su email o username
                 statement = select(User).where(User.email == user_data["email"])
                 existing_user = db.exec(statement).first()
-                
+
                 if existing_user:
-                    print(f"⚠️ El usuario {user_data['username']} ({user_data['email']}) ya existe. Saltando...")
+                    logger.warning(f"User {user_data['username']} ({user_data['email']}) already exists. Skipping...")
                     continue
-                
+
                 # 2. Creamos la instancia hasheando la contraseña antes de guardarla
                 new_user = User(
                     username=user_data["username"],
@@ -43,16 +44,16 @@ def seed_users():
                     hashed_password=hash_password(user_data["password"]),
                     is_admin=user_data["is_admin"]
                 )
-                
+
                 db.add(new_user)
-                print(f"➕ Preparando usuario: {user_data['username']} ({'Admin' if user_data['is_admin'] else 'Normal'})")
-            
+                logger.info(f"Preparing user: {user_data['username']} ({'Admin' if user_data['is_admin'] else 'Normal'})")
+
             db.commit()
-            print("✅ Usuarios cargados con exito.")
-            
+            logger.info("Users loaded successfully.")
+
         except Exception as e:
             db.rollback()
-            print(f"❌ Error inesperado al cargar usuarios: {e}")
+            logger.error(f"Unexpected error loading users: {e}")
             sys.exit(1)
 
 if __name__ == "__main__":

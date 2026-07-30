@@ -21,13 +21,13 @@ def reopen_batches_spaced_repetition():
     - Reabre 1 batch completado por usuario por día
     - Marca las palabras como is_learned=False
     """
-    logger.info("[Spaced Repetition] Iniciando reapertura de batches antiguos...")
+    logger.info("[Spaced Repetition] Starting reopening of old batches...")
 
     with Session(engine) as db:
         try:
             # Obtener todos los usuarios activos
             users = db.exec(select(User).where(User.is_active == True)).all()
-            logger.info(f"[Spaced Repetition] Procesando {len(users)} usuarios...")
+            logger.info(f"[Spaced Repetition] Processing {len(users)} users...")
 
             total_reopened = 0
 
@@ -66,21 +66,21 @@ def reopen_batches_spaced_repetition():
 
                     db.commit()
 
-                    logger.info(f"✓ Usuario {user.email}: Batch #{batch_to_reopen.id} '{batch_to_reopen.title}' reabierto ({len(words)} palabras)")
+                    logger.info(f"✓ User {user.email}: Batch #{batch_to_reopen.id} '{batch_to_reopen.title}' reopened ({len(words)} words)")
                     total_reopened += 1
 
                 except Exception as e:
-                    logger.error(f"✗ Error reabriendo batch {batch_to_reopen.id} para usuario {user.id}: {str(e)}")
+                    logger.error(f"✗ Error reopening batch {batch_to_reopen.id} for user {user.id}: {str(e)}")
                     db.rollback()
                     continue
 
-            logger.info(f"[Spaced Repetition] Completado. {total_reopened} batches reabiertos.")
+            logger.info(f"[Spaced Repetition] Completed. {total_reopened} batches reopened.")
             print(f"\n✓ Proceso completado exitosamente")
             print(f"  Batches reabiertos: {total_reopened}")
             return 0
 
         except Exception as e:
-            logger.error(f"[Spaced Repetition] Error crítico: {str(e)}", exc_info=True)
+            logger.error(f"[Spaced Repetition] Critical error: {str(e)}", exc_info=True)
             print(f"\n✗ Error en el proceso: {str(e)}")
             return 1
 

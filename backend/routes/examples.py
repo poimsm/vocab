@@ -161,7 +161,7 @@ def get_explore_feed(
             db.add(item)
         else:
             # Si todas las palabras ya fueron aprendidas, marcar como RESOLVED
-            logger.info(f"Example {example.id}: todas sus palabras son learned, marcando como RESOLVED")
+            logger.info(f"Example {example.id}: all its words are learned, marking as RESOLVED")
             item.status = QueueStatus.RESOLVED
             db.add(item)        
 
