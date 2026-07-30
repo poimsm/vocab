@@ -214,3 +214,16 @@ class Activity(SQLModel, table=True):
 
     user_id: Optional[int] = Field(default=None, foreign_key="users.id")
     user: User = Relationship(back_populates="activities")
+
+
+class GlobalConfiguration(SQLModel, table=True):
+    __tablename__: str = "global_configurations"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    key: str = Field(unique=True, index=True, nullable=False, max_length=100)
+    value: str = Field(nullable=False)
+    description: Optional[str] = Field(default=None, max_length=500)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))

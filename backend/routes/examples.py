@@ -113,8 +113,9 @@ def get_explore_feed(
     # 2. Si la cola está vacía o tiene muy pocos elementos, ejecutamos el generador de emergencia
     if len(queued_items) < limit:
         # Obtenemos las palabras prioritarias respetando la lógica de Lotes + Transición
+        refill_limit = crud.get_refill_queue_emergency_limit(db)
         priority_words = crud.get_priority_words_via_batches(
-            db, user_id=current_user.id, limit=8)
+            db, user_id=current_user.id, limit=refill_limit)
 
         logger.info(f"[get_explore_feed] Found {len(priority_words)} priority words")
 

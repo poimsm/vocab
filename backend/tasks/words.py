@@ -17,8 +17,10 @@ def process_bulk_words_task(texts: List[str], user_id: int):
         f"[Celery Bulk] Starting batch processing for {len(texts)} lines (User: {user_id})."
     )
 
-    CHUNK_SIZE = 15
-    text_chunks = list(chunk_list(texts, CHUNK_SIZE))
+    with Session(engine) as db:
+        chunk_size = crud.get_chunk_size(db)
+
+    text_chunks = list(chunk_list(texts, chunk_size))
 
     with Session(engine) as db:
         try:
@@ -31,7 +33,7 @@ def process_bulk_words_task(texts: List[str], user_id: int):
             )
 
             for chunk_idx, text_chunk in enumerate(text_chunks):
-                start_index = chunk_idx * CHUNK_SIZE
+                start_index = chunk_idx * chunk_size
 
                 logger.info(
                     f"--- Processing Chunk {chunk_idx + 1}/{len(text_chunks)} (Size: {len(text_chunk)}) ---"
