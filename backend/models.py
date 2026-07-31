@@ -169,6 +169,19 @@ class Example(SQLModel, table=True):
         return [assoc.word for assoc in self.example_words if assoc.word]
 
 
+class BestOption(SQLModel, table=True):
+    __tablename__: str = "best_options"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    question: str = Field(nullable=False)
+    options: str = Field(nullable=False) # guardar options separadas por ";"
+    correct_option: int = Field(default=0)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+    normalized: Optional[str] = Field(
+        default=None, max_length=255, unique=True, index=True)
+    is_active: bool = Field(default=True)
+
 class QueueStatus(str, enum.Enum):
     PENDING = "pending"   # Encolado listo para enviar
     SENT = "sent"         # Enviado al usuario en el explore (revisando en app)
@@ -184,6 +197,21 @@ class ExampleQueue(SQLModel, table=True):
     is_active: bool = Field(default=True, index=True)
 
     example: "Example" = Relationship()
+    user_id: int = Field(foreign_key="users.id", index=True)
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+
+
+class BestOptionQueue(SQLModel, table=True):
+    __tablename__: str = "best_option_queue"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    best_option_id: int = Field(foreign_key="best_options.id", index=True)
+    status: QueueStatus = Field(default=QueueStatus.PENDING, index=True)
+    is_active: bool = Field(default=True, index=True)
+
+    best_option: "BestOption" = Relationship()
     user_id: int = Field(foreign_key="users.id", index=True)
 
     created_at: datetime = Field(

@@ -13,6 +13,7 @@ from routes import (
     examples,
     auth,
     celery,
+    best_options,
 )
 
 app = FastAPI(redirect_slashes=False)
@@ -34,7 +35,7 @@ app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(words.router, prefix="/words", tags=["words"])
 app.include_router(examples.router, prefix="/examples", tags=["examples"])
 app.include_router(celery.router, prefix="/celery", tags=["celery"])
-
+app.include_router(best_options.router, prefix="/best-options", tags=["best_options"])
 
 @app.on_event("startup")
 def startup():
