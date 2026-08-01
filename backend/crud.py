@@ -16,6 +16,8 @@ from models import (
     Batch,
     BatchSource,
     BatchStatus,
+    BestOption,
+    BestOptionQueue,
     Example,
     ExampleQueue,
     ExampleType,
@@ -24,6 +26,8 @@ from models import (
     GlobalConfiguration,
     QueueStatus,
     Word,
+    QueueRefillStatus,
+    QueueType,
 )
 
 # ==========================================
@@ -87,6 +91,89 @@ def get_default_priority_words_limit(db: Session) -> int:
 def get_refill_queue_emergency_limit(db: Session) -> int:
     """Get REFILL_QUEUE_EMERGENCY_LIMIT configuration."""
     return get_config_int(db, "REFILL_QUEUE_EMERGENCY_LIMIT", 8)
+
+
+# ==========================================
+# QUEUE REFILL STATUS MANAGEMENT
+# ==========================================
+
+def is_queue_refilling(db: Session, user_id: int, queue_type: QueueType) -> bool:
+    """
+    Verifica si una cola está siendo reflenada en este momento.
+    Retorna True si está refilling, False si no.
+    """
+    status = db.exec(
+        select(QueueRefillStatus).where(
+            QueueRefillStatus.user_id == user_id,
+            QueueRefillStatus.queue_type == queue_type
+        )
+    ).first()
+
+    if not status:
+        return False
+
+    return status.is_refilling
+
+
+def start_queue_refill(db: Session, user_id: int, queue_type: QueueType) -> QueueRefillStatus:
+    """
+    Marca una cola como refilling (inicio de tarea de refill).
+    Crea un registro si no existe, o actualiza el existente.
+    """
+    status = db.exec(
+        select(QueueRefillStatus).where(
+            QueueRefillStatus.user_id == user_id,
+            QueueRefillStatus.queue_type == queue_type
+        )
+    ).first()
+
+    now = datetime.now(timezone.utc)
+
+    if status:
+        status.is_refilling = True
+        status.started_at = now
+        status.updated_at = now
+    else:
+        status = QueueRefillStatus(
+            user_id=user_id,
+            queue_type=queue_type,
+            is_refilling=True,
+            started_at=now,
+            updated_at=now
+        )
+        db.add(status)
+
+    db.add(status)
+    db.commit()
+    db.refresh(status)
+
+    logger.info(f"[start_queue_refill] User {user_id}, queue_type {queue_type.value}: refill started")
+    return status
+
+
+def end_queue_refill(db: Session, user_id: int, queue_type: QueueType) -> Optional[QueueRefillStatus]:
+    """
+    Marca una cola como terminada (fin de tarea de refill).
+    """
+    status = db.exec(
+        select(QueueRefillStatus).where(
+            QueueRefillStatus.user_id == user_id,
+            QueueRefillStatus.queue_type == queue_type
+        )
+    ).first()
+
+    if not status:
+        logger.warning(f"[end_queue_refill] No refill status found for user {user_id}, queue_type {queue_type.value}")
+        return None
+
+    status.is_refilling = False
+    status.updated_at = datetime.now(timezone.utc)
+    db.add(status)
+    db.commit()
+    db.refresh(status)
+
+    logger.info(f"[end_queue_refill] User {user_id}, queue_type {queue_type.value}: refill completed")
+    return status
 
 
 # ==========================================
@@ -1034,3 +1121,63 @@ def get_batch_words(db: Session, batch_id: int, user_id: int) -> Optional[dict]:
             for w in words
         ]
     }
+
+
+# ==========================================
+# BEST OPTIONS QUEUE MANAGEMENT
+# ==========================================
+
+def enqueue_next_best_option_for_word(db: Session, user_id: int, word_id: int, current_sequence_order: int) -> Optional[BestOptionQueue]:
+    """
+    Auto-encola el siguiente ejercicio de best_option para una palabra cuando se resuelve uno.
+
+    Busca el siguiente ejercicio (sequence_order + 1) de la misma palabra que:
+    - Aún no esté encolado
+    - Esté activo
+
+    Si encuentra uno, lo agrega a la cola con estado PENDING.
+    """
+
+    next_sequence_order = current_sequence_order + 1
+
+    # Buscar el siguiente ejercicio de esta palabra (máximo 4)
+    if next_sequence_order > 4:
+        logger.debug(f"[enqueue_next_best_option_for_word] No more exercises for word {word_id} (already at sequence 4)")
+        return None
+
+    next_best_option = db.exec(
+        select(BestOption).where(
+            BestOption.word_id == word_id,
+            BestOption.sequence_order == next_sequence_order,
+            BestOption.is_active == True
+        )
+    ).first()
+
+    if not next_best_option:
+        logger.debug(f"[enqueue_next_best_option_for_word] No exercise found for word {word_id} with sequence {next_sequence_order}")
+        return None
+
+    # Verificar que no esté ya en la cola
+    existing_queue = db.exec(
+        select(BestOptionQueue).where(
+            BestOptionQueue.user_id == user_id,
+            BestOptionQueue.best_option_id == next_best_option.id
+        )
+    ).first()
+
+    if existing_queue:
+        logger.debug(f"[enqueue_next_best_option_for_word] Exercise {next_best_option.id} already in queue for user {user_id}")
+        return None
+
+    # Agregar a la cola
+    queue_item = BestOptionQueue(
+        user_id=user_id,
+        best_option_id=next_best_option.id,
+        status=QueueStatus.PENDING
+    )
+    db.add(queue_item)
+    db.commit()
+    db.refresh(queue_item)
+
+    logger.info(f"[enqueue_next_best_option_for_word] User {user_id}: Enqueued exercise {next_best_option.id} (sequence {next_sequence_order}) for word {word_id}")
+    return queue_item

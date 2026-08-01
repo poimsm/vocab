@@ -5,6 +5,7 @@ import ExamplesPage from '@/pages/ExamplesPage.vue'
 import MyWordsPage from '@/pages/MyWordsPage.vue'
 import LoginPage from '@/pages/LoginPage.vue'
 import HomePage from '@/pages/HomePage.vue'
+import BestOptionsPage from '@/pages/BestoptionsPage.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -31,6 +32,12 @@ const router = createRouter({
       path: '/examples',
       name: 'examples',
       component: ExamplesPage,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/best-options',
+      name: 'best-options',
+      component: BestOptionsPage,
       meta: { requiresAuth: true }
     }
   ]

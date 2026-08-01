@@ -173,6 +173,8 @@ class BestOption(SQLModel, table=True):
     __tablename__: str = "best_options"
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    word_id: int = Field(foreign_key="words.id", index=True)
+    sequence_order: int = Field(default=1)  # 1, 2, 3, o 4 (cuál de los 4 ejercicios es)
     question: str = Field(nullable=False)
     options: str = Field(nullable=False) # guardar options separadas por ";"
     correct_option: int = Field(default=0)
@@ -181,6 +183,8 @@ class BestOption(SQLModel, table=True):
     normalized: Optional[str] = Field(
         default=None, max_length=255, unique=True, index=True)
     is_active: bool = Field(default=True)
+
+    word: "Word" = Relationship()
 
 class QueueStatus(str, enum.Enum):
     PENDING = "pending"   # Encolado listo para enviar
@@ -242,6 +246,27 @@ class Activity(SQLModel, table=True):
 
     user_id: Optional[int] = Field(default=None, foreign_key="users.id")
     user: User = Relationship(back_populates="activities")
+
+
+class QueueType(str, enum.Enum):
+    EXAMPLE = "example"
+    BEST_OPTION = "best_option"
+
+
+class QueueRefillStatus(SQLModel, table=True):
+    __tablename__: str = "queue_refill_status"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    queue_type: QueueType = Field(index=True)
+    is_refilling: bool = Field(default=False, index=True)
+    started_at: Optional[datetime] = Field(default=None)
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        # Constraint único: solo un refill activo por user_id y queue_type
+    )
 
 
 class GlobalConfiguration(SQLModel, table=True):

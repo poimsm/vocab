@@ -3,7 +3,7 @@ from celery_app import celery_app
 from db import engine
 import crud
 from logging_config import logger
-from models import User
+from models import User, QueueType
 
 
 @celery_app.task(name="tasks.examples.refill_queue")
@@ -15,18 +15,26 @@ def refill_queue_task(user_id: int):  # <-- Recibe el user_id
         f"[Celery Examples] Starting example queue refill for user {user_id}..."
     )
 
-    with Session(engine) as db:
-        try:
+    try:
+        with Session(engine) as db:
+            # Marcar el refill como iniciado
+            crud.start_queue_refill(db, user_id, QueueType.EXAMPLE)
+
             # Pasamos user_id a la lógica de CRUD
             crud.refill_example_queue(db, user_id=user_id)
             logger.info(
                 f"[Celery Examples] Example queue successfully refilled for user {user_id}."
             )
-        except Exception as e:
-            logger.error(
-                f"[Celery Examples] Critical error refilling example queue for user {user_id}: {e}",
-                exc_info=True,
-            )
+    except Exception as e:
+        logger.error(
+            f"[Celery Examples] Critical error refilling example queue for user {user_id}: {e}",
+            exc_info=True,
+        )
+    finally:
+        # Marcar el refill como completado (ya sea con éxito o error)
+        # Usar una sesión nueva para asegurar que se ejecute
+        with Session(engine) as db:
+            crud.end_queue_refill(db, user_id, QueueType.EXAMPLE)
 
 
 @celery_app.task(name="tasks.examples.spaced_repetition_daily")
