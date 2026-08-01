@@ -9,11 +9,14 @@ from sqlmodel import Session, func, or_, select
 from logging_config import logger
 
 import crud
+from batch_manager import BatchManager
 
 import ai
 import models
 from models import (
     Batch,
+    BatchFeatured,
+    BatchFeaturedType,
     BatchSource,
     BatchStatus,
     BestOption,
@@ -534,24 +537,9 @@ def get_or_create_propitious_batch(
 
 
 def update_batch_metrics(db: Session, batch_id: int):
-    batch = db.get(Batch, batch_id)
-    if not batch or not batch.words:
-        return
-
-    total_words = len(batch.words)
-    learned_words = sum(1 for w in batch.words if w.is_learned)
-    
-    batch.mastery_progress = round((learned_words / total_words) * 100, 2)
-
-    if batch.mastery_progress >= 100.0 and batch.status != BatchStatus.COMPLETED:
-        batch.status = BatchStatus.COMPLETED
-        batch.completed_at = datetime.now(timezone.utc)
-    elif batch.mastery_progress < 100.0 and batch.status == BatchStatus.COMPLETED:
-        batch.status = BatchStatus.ACTIVE
-        batch.completed_at = None
-
-    db.add(batch)
-    db.commit()
+    """Actualiza métricas de todos los BatchFeatured de un batch."""
+    manager = BatchManager(db)
+    manager.update_featured_stats_for_batch(batch_id)
 
 
 def get_priority_words_via_batches(db: Session, user_id: int, limit: int = 10) -> List[Word]:
@@ -920,17 +908,17 @@ def _check_and_update_batch_status(db: Session, batch_id: int):
 
     learned_words = db.exec(
         select(func.count(Word.id)).where(
-            Word.batch_id == batch_id, 
-            Word.is_active == True, 
+            Word.batch_id == batch_id,
+            Word.is_active == True,
             Word.is_learned == True
         )
     ).one() or 0
 
     # Calcular progreso (0.0 a 100.0)
-    batch.mastery_progress = round((learned_words / total_words) * 100, 2)
+    mastery_progress = round((learned_words / total_words) * 100, 2)
 
-    # Si al menos el 80% o el 100% están aprendidas, completamos el lote
-    if batch.mastery_progress >= 80.0:
+    # Si al menos el 80% están aprendidas, completamos el lote
+    if mastery_progress >= 80.0:
         batch.status = BatchStatus.COMPLETED
         batch.completed_at = datetime.now(timezone.utc)
 
@@ -1006,7 +994,7 @@ def reopen_batches_for_spaced_repetition(db: Session, user_id: int) -> dict:
 
         # Cambiar estado del batch a OPEN
         batch_to_reopen.status = BatchStatus.OPEN
-        batch_to_reopen.mastery_progress = 0.0
+        batch_to_reopen.completed_at = None
         db.add(batch_to_reopen)
 
         db.commit()
@@ -1058,7 +1046,7 @@ def reopen_specific_batches(db: Session, user_id: int, batch_ids: List[int]) -> 
 
             # Cambiar estado a ACTIVE (para revisión)
             batch.status = BatchStatus.ACTIVE
-            batch.mastery_progress = 0.0
+            batch.completed_at = None
             db.add(batch)
 
             reopened.append({
@@ -1100,12 +1088,17 @@ def get_batch_words(db: Session, batch_id: int, user_id: int) -> Optional[dict]:
         select(Word).where(Word.batch_id == batch_id)
     ).all()
 
+    # Calcular progreso desde las palabras
+    total_words = len(words)
+    learned_words = sum(1 for w in words if w.is_learned)
+    batch_progress = round((learned_words / total_words * 100), 2) if total_words > 0 else 0.0
+
     return {
         "batch_id": batch.id,
         "batch_title": batch.title,
         "batch_status": batch.status.value,
-        "batch_progress": batch.mastery_progress,
-        "total_words": len(words),
+        "batch_progress": batch_progress,
+        "total_words": total_words,
         "words": [
             {
                 "id": w.id,
@@ -1181,3 +1174,64 @@ def enqueue_next_best_option_for_word(db: Session, user_id: int, word_id: int, c
 
     logger.info(f"[enqueue_next_best_option_for_word] User {user_id}: Enqueued exercise {next_best_option.id} (sequence {next_sequence_order}) for word {word_id}")
     return queue_item
+
+
+# ==========================================
+# BATCH MANAGER CONVENIENCE FUNCTIONS
+# ==========================================
+
+def create_batch_manager(db: Session) -> BatchManager:
+    """Crea una instancia del BatchManager."""
+    return BatchManager(db)
+
+
+def save_words_to_batches(
+    db: Session,
+    user_id: int,
+    words_data: List[dict],
+    source: models.BatchSource = models.BatchSource.ORGANIC,
+    batch_title: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Guarda palabras en batches usando BatchManager.
+    Interfaz de conveniencia para uso en rutas y tareas.
+    """
+    manager = BatchManager(db)
+    return manager.save_words_to_batches(user_id, words_data, source, batch_title)
+
+
+def get_words_by_batch_featured_type(
+    db: Session,
+    user_id: int,
+    featured_type: BatchFeaturedType,
+    limit: int = 50
+) -> List[Word]:
+    """Obtiene palabras por tipo de BatchFeatured."""
+    manager = BatchManager(db)
+    return manager.get_words_by_batch_featured_type(user_id, featured_type, limit)
+
+
+def get_dormant_batches(
+    db: Session,
+    user_id: int,
+    days_threshold: int = 7
+) -> List[Dict[str, Any]]:
+    """Obtiene batches dormidos."""
+    manager = BatchManager(db)
+    return manager.get_dormant_batches(user_id, days_threshold)
+
+
+def get_all_batch_featured(
+    db: Session,
+    user_id: int,
+    featured_type: Optional[BatchFeaturedType] = None
+) -> List[Dict[str, Any]]:
+    """Obtiene todos los BatchFeatured de un usuario."""
+    manager = BatchManager(db)
+    return manager.get_all_batch_featured(user_id, featured_type)
+
+
+def update_featured_stats_for_batch(db: Session, batch_id: int) -> None:
+    """Actualiza estadísticas de BatchFeatured para un batch."""
+    manager = BatchManager(db)
+    manager.update_featured_stats_for_batch(batch_id)

@@ -23,6 +23,5 @@ class ExploreExampleSchema(BaseModel):
 
 class ExploreResponse(BaseModel):
     examples: List[ExploreExampleSchema]
-    active_batch_id: Optional[int] = None
-    active_batch_title: Optional[str] = None
     total_queue_remaining: int
+    status: str = "ok"  # "ok" o "generating"

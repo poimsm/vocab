@@ -491,7 +491,7 @@ def generate_best_options_from_words(words: list[models.Word]):
 
     response = client.chat.completions.create(
         model="gpt-4o-mini",
-        temperature=0.3,
+        temperature=0.7,
         messages=[
             {
                 "role": "system",
@@ -499,16 +499,33 @@ def generate_best_options_from_words(words: list[models.Word]):
 Create vocabulary comprehension exercises for the following English words.
 
 EXAMPLES:
-lurched: Which object is most likely to lurch? a) A truck b) A pillow c) A spoon
-lurched: If a bus lurched, it... a) Moved suddenly and roughly b) Disappeared c) Started singing
-porthole: What might you see through a porthole? a) The ocean b) Underground tunnels c) The inside of a computer
-porthole: A porthole is... a) A small round window b) A type of chair c) A musical instrument
-porthole: Where are portholes commonly found? a) On ships b) In forests c) On bicycles
+lurched: Which object is most likely to lurch?
+Options: [A truck, A pillow, A spoon]
+Correct: 0 (A truck)
+
+lurched: If a bus lurched, it...
+Options: [Disappeared, Moved suddenly and roughly, Started singing]
+Correct: 1 (Moved suddenly and roughly)
+
+porthole: What might you see through a porthole?
+Options: [Underground tunnels, The inside of a computer, The ocean]
+Correct: 2 (The ocean)
+
+porthole: A porthole is...
+Options: [A type of chair, A musical instrument, A small round window]
+Correct: 2 (A small round window)
+
+porthole: Where are portholes commonly found?
+Options: [In forests, On bicycles, On ships]
+Correct: 2 (On ships)
+
+IMPORTANT: The correct answer must be randomly distributed across all positions (0, 1, or 2).
 
 REQUIREMENTS:
 - Everything must be in English.
 - Create 4 questions per word.
 - Do not copy the examples. Use them only as inspiration.
+- Vary the position of the correct answer across different questions.
 
 Return ONLY valid JSON in the following format:
 [
@@ -518,11 +535,11 @@ Return ONLY valid JSON in the following format:
       {
         "question": "A porthole is...",
         "options": [
-          "A small round window",
-          "A type of chair",
-          "A musical instrument"
+          "Option A",
+          "Option B",
+          "Option C"
         ],
-        "correct_option": 0
+        "correct_option": 1
       }
     ]
   }

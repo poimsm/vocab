@@ -5,7 +5,7 @@ import ExamplesPage from '@/pages/ExamplesPage.vue'
 import MyWordsPage from '@/pages/MyWordsPage.vue'
 import LoginPage from '@/pages/LoginPage.vue'
 import HomePage from '@/pages/HomePage.vue'
-import BestOptionsPage from '@/pages/BestoptionsPage.vue'
+import BestOptionsPage from '@/pages/BestOptionsPage.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -44,21 +44,19 @@ const router = createRouter({
 })
 
 // Guardia de navegación global
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, from) => {
   const authStore = useAuthStore()
 
-  // 1. Si la ruta requiere estar autenticado y no lo está
+  // 1. If route requires auth and user is not authenticated
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next({ name: 'login' })
+    return { name: 'login' }
   }
-  // 2. Si el usuario ya está logueado e intenta ir al Login
-  else if (to.meta.requiresGuest && authStore.isAuthenticated) {
-    next({ name: 'home' })
+  // 2. If user is authenticated but tries to access guest-only routes
+  if (to.meta.requiresGuest && authStore.isAuthenticated) {
+    return { name: 'home' }
   }
-  // 3. De lo contrario, permitir libre tránsito
-  else {
-    next()
-  }
+  // 3. Otherwise, allow navigation
+  return true
 })
 
 export default router

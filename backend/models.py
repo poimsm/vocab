@@ -66,6 +66,12 @@ class BatchSource(str, Enum):
     ORGANIC = "organic"          # Palabras agregadas una a una
 
 
+class BatchFeaturedType(str, Enum):
+    ACTIVE_LEARNING = "active_learning"  # En estudio activo
+    REVIEW = "review"                    # Revisión de palabras completadas
+    SPACED_REPETITION = "spaced_repetition"  # Memoria espaciada
+
+
 class Batch(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
@@ -74,11 +80,10 @@ class Batch(SQLModel, table=True):
     status: BatchStatus = Field(default=BatchStatus.OPEN, index=True)
     source: BatchSource = Field(default=BatchSource.ORGANIC)
 
-    # Metadata para autogestión y algoritmo
+    # Fragmentación: capacidad máxima de palabras
     capacity: int = Field(default=15)
-    # Mayor número = más prioridad
+    # Prioridad para activación: mayor número = más prioridad
     priority: int = Field(default=1, index=True)
-    mastery_progress: float = Field(default=0.0)  # 0.0 a 100.0%
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc))
@@ -86,6 +91,31 @@ class Batch(SQLModel, table=True):
 
     # Relación con las palabras
     words: List["Word"] = Relationship(back_populates="batch")
+    featured: List["BatchFeatured"] = Relationship(back_populates="batch")
+
+
+class BatchFeatured(SQLModel, table=True):
+    __tablename__: str = "batch_featured"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    batch_id: int = Field(foreign_key="batch.id", index=True)
+    type: BatchFeaturedType = Field(index=True)
+
+    # Estadísticas y progreso
+    mastery_progress: float = Field(default=0.0)  # 0.0 a 100.0%
+    total_words: int = Field(default=0)
+    learned_words: int = Field(default=0)
+
+    # Seguimiento temporal
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+    last_activity_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: Optional[datetime] = Field(default=None)
+
+    is_active: bool = Field(default=True, index=True)
+
+    batch: "Batch" = Relationship(back_populates="featured")
 
 
 class ExampleWord(SQLModel, table=True):

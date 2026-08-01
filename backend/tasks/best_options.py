@@ -1,3 +1,4 @@
+import random
 from sqlmodel import Session, select
 from celery_app import celery_app
 from db import engine
@@ -5,6 +6,32 @@ import crud
 import ai
 from logging_config import logger
 from models import BestOption, BestOptionQueue, QueueStatus, QueueType
+
+
+def shuffle_options_with_correct_index(options: list, correct_option_idx: int) -> tuple:
+    """
+    Desordena una lista de opciones y retorna la lista desordenada
+    junto con el nuevo índice de la opción correcta.
+    Usa random.sample() para garantizar una permutación completamente aleatoria.
+
+    Args:
+        options: Lista de opciones
+        correct_option_idx: Índice original de la opción correcta
+
+    Returns:
+        tuple: (opciones_desordenadas, nuevo_índice_correcto)
+    """
+    if not options or correct_option_idx >= len(options):
+        return options, correct_option_idx
+
+    # Generar una permutación completamente aleatoria de índices
+    shuffled_indices = random.sample(range(len(options)), len(options))
+
+    # Construir las opciones desordenadas y encontrar el nuevo índice de la correcta
+    shuffled_options = [options[i] for i in shuffled_indices]
+    new_correct_idx = shuffled_indices.index(correct_option_idx)
+
+    return shuffled_options, new_correct_idx
 
 
 @celery_app.task(name="tasks.best_options.refill_queue")
@@ -63,8 +90,13 @@ def refill_best_options_queue_task(user_id: int):
                     if not question_text or not options:
                         continue
 
+                    # Desordena las opciones para evitar sesgo hacia la posición 0
+                    shuffled_options, new_correct_idx = shuffle_options_with_correct_index(
+                        options, correct_option_idx
+                    )
+
                     # Crear la cadena de opciones separadas por ";"
-                    options_string = ";".join(options)
+                    options_string = ";".join(shuffled_options)
 
                     # Crear el BestOption en DB con word_id y sequence_order
                     best_option = BestOption(
@@ -72,7 +104,7 @@ def refill_best_options_queue_task(user_id: int):
                         sequence_order=sequence_idx,
                         question=question_text,
                         options=options_string,
-                        correct_option=correct_option_idx
+                        correct_option=new_correct_idx
                     )
                     db.add(best_option)
                     db.flush()  # Generar el ID del BestOption

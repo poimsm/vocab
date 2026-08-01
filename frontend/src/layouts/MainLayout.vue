@@ -23,8 +23,8 @@ function handleLogout() {
 const modules = [
   { id: 'words', label: 'My Words', icon: 'solar:book-bookmark-linear', to: { name: 'my-words' } },
   { id: 'examples', label: 'Examples', icon: 'solar:chat-round-line-linear', to: { name: 'examples' } },
-  // Deja estos listos o apunta temporalmente a 'home' si aún no creas sus páginas
-  { id: 'search', label: 'Search', icon: 'iconamoon:search-light', to: { name: 'home' } },
+  { id: 'best-options', label: 'Best Options', icon: 'iconamoon:search-light', to: { name: 'best-options' } },
+  // { id: 'search', label: 'Search', icon: 'iconamoon:search-light', to: { name: 'home' } },
   { id: 'clusters', label: 'Clusters', icon: 'solar:widget-3-linear', to: { name: 'home' } },
   { id: 'roleplay', label: 'Roleplay', icon: 'solar:users-group-rounded-linear', to: { name: 'home' } },
   { id: 'monsters', label: 'Monsters', icon: 'solar:ghost-linear', to: { name: 'home' } }
@@ -344,7 +344,7 @@ const modules = [
 .content {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  /* overflow: auto; */
 }
 
 /* ─── Mobile Navigation ─── */

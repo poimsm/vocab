@@ -61,7 +61,7 @@ def reopen_batches_spaced_repetition():
 
                     # Cambiar estado del batch a ACTIVE (para revisión)
                     batch_to_reopen.status = BatchStatus.ACTIVE
-                    batch_to_reopen.mastery_progress = 0.0
+                    batch_to_reopen.completed_at = None
                     db.add(batch_to_reopen)
 
                     db.commit()

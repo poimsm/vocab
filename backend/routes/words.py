@@ -368,23 +368,29 @@ def get_all_batches(
     ).all()
     logger.info(f"[get_all_batches] Retrieved {len(batches)} batches")
 
+    # Calcular progreso para cada batch desde las palabras
+    batches_data = []
+    for b in batches:
+        total_words = len(b.words)
+        learned_words = sum(1 for w in b.words if w.is_learned)
+        progress = round((learned_words / total_words * 100), 2) if total_words > 0 else 0.0
+
+        batches_data.append({
+            "id": b.id,
+            "title": b.title,
+            "status": b.status.value,
+            "source": b.source.value,
+            "progress": progress,
+            "words_count": total_words,
+            "capacity": b.capacity,
+            "priority": b.priority,
+            "created_at": b.created_at,
+            "completed_at": b.completed_at
+        })
+
     return {
         "total_batches": len(batches),
-        "batches": [
-            {
-                "id": b.id,
-                "title": b.title,
-                "status": b.status.value,
-                "source": b.source.value,
-                "progress": b.mastery_progress,
-                "words_count": len(b.words),
-                "capacity": b.capacity,
-                "priority": b.priority,
-                "created_at": b.created_at,
-                "completed_at": b.completed_at
-            }
-            for b in batches
-        ]
+        "batches": batches_data
     }
 
 

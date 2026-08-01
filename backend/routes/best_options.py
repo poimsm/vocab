@@ -110,12 +110,13 @@ def get_best_options(
         )
     ).one() or 0
 
-    logger.info(f"[get_best_options] Returning {len(formatted_options)} best options. Remaining in queue: {remaining_count}")
+    is_generating = len(pending_items) < limit
+    logger.info(f"[get_best_options] Returning {len(formatted_options)} best options. Remaining in queue: {remaining_count}. Status: {'generating' if is_generating else 'ok'}")
 
     return {
-        "best_options": formatted_options,
+        "best_options": formatted_options if not is_generating else [],
         "total_queue_remaining": remaining_count,
-        "status": "generating" if len(pending_items) < limit else "ok"
+        "status": "generating" if is_generating else "ok"
     }
 
 

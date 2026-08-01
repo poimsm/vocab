@@ -1,7 +1,6 @@
-import collections
 from typing import List
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.orm import joinedload
 from sqlmodel import Session, select, func
 
@@ -92,7 +91,6 @@ def toggle_example_favorite(example_id: int, db: Session = Depends(get_db)):
 @router.get("/explore", response_model=ExploreResponse)
 def get_explore_feed(
     limit: int = 5,
-    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -121,6 +119,9 @@ def get_explore_feed(
     logger.debug(
         f"[get_explore_feed] Found {len(queued_items)} queued items from queue")
 
+    # Determinar si está generando
+    is_generating = False
+
     # 2. Si la cola está vacía o tiene muy pocos elementos, ejecutamos el generador de emergencia
     if len(queued_items) < limit:
         # Obtenemos las palabras prioritarias respetando la lógica de Lotes + Transición
@@ -137,7 +138,8 @@ def get_explore_feed(
                 examples=[],
                 active_batch_id=None,
                 active_batch_title=None,
-                total_queue_remaining=0
+                total_queue_remaining=0,
+                status="ok"
             )
 
         # Generar o rellenar la cola en segundo plano vía Celery para que la API no se bloquee
@@ -147,8 +149,10 @@ def get_explore_feed(
         if is_refilling:
             logger.info(
                 f"[get_explore_feed] Queue refill already in progress for user {current_user.id}. Skipping.")
+            is_generating = True
         else:
             refill_queue_task.delay(user_id=current_user.id)
+            is_generating = True
 
     # 3. Formatear los ejemplos recuperados de la cola
     formatted_examples: List[ExploreExampleSchema] = []
@@ -199,26 +203,18 @@ def get_explore_feed(
 
     db.commit()
 
-    # 4. Obtener la metadata del Lote Activo principal para contexto en el Frontend
-    active_batch = db.exec(
-        select(Batch)
-        .where(Batch.user_id == current_user.id, Batch.status == "active")
-        .order_by(Batch.priority.desc(), Batch.created_at.asc())
-    ).first()
-
-    # Contar cuántos elementos quedan en la cola
+    # 4. Contar cuántos elementos quedan en la cola
     remaining_count = db.exec(
         select(func.count(ExampleQueue.id)).where(
             ExampleQueue.user_id == current_user.id)
     ).one() or 0
 
     logger.info(
-        f"[get_explore_feed] Returning {len(formatted_examples)} examples. Remaining in queue: {remaining_count}")
+        f"[get_explore_feed] Returning {len(formatted_examples)} examples. Remaining in queue: {remaining_count}. Status: {'generating' if is_generating else 'ok'}")
     return ExploreResponse(
         examples=formatted_examples,
-        active_batch_id=active_batch.id if active_batch else None,
-        active_batch_title=active_batch.title if active_batch else None,
-        total_queue_remaining=remaining_count
+        total_queue_remaining=remaining_count,
+        status="generating" if is_generating else "ok"
     )
 
 
