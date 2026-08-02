@@ -29,6 +29,7 @@ from models import (
     GlobalConfiguration,
     QueueStatus,
     Word,
+    WordStatistics,
     QueueRefillStatus,
     QueueType,
 )
@@ -233,6 +234,7 @@ def get_words(db: Session, user_id: int, sort: str = "newest", page: int = 1, li
             (models.Example.type == ExampleType.EXPLORE) &
             (models.Example.is_active == True)
         )
+        .outerjoin(WordStatistics, WordStatistics.word_id == models.Word.id)
         .group_by(models.Word.id)
     )
 
@@ -247,9 +249,9 @@ def get_words(db: Session, user_id: int, sort: str = "newest", page: int = 1, li
     elif sort == "alphabetical":
         statement = statement.order_by(models.Word.main.asc())
     elif sort == "most_seen":
-        statement = statement.order_by(models.Word.times_seen.desc().nullslast())
+        statement = statement.order_by(WordStatistics.times_seen.desc().nullslast())
     elif sort == "least_seen":
-        statement = statement.order_by(models.Word.times_seen.asc().nullsfirst())
+        statement = statement.order_by(WordStatistics.times_seen.asc().nullsfirst())
 
     return paginate_query(db, statement, page, limit)
 
@@ -288,6 +290,14 @@ def create_word(db: Session, word_data: dict, user_id: int):
     )
 
     db.add(new_word)
+    db.flush()
+
+    # Crear estadísticas para la palabra
+    stats = WordStatistics(
+        word_id=new_word.id,
+        type=""
+    )
+    db.add(stats)
     db.commit()
     db.refresh(new_word)
     return new_word
@@ -295,9 +305,19 @@ def create_word(db: Session, word_data: dict, user_id: int):
 
 def increment_words_seen(db: Session, words: List[Word]):
     for w in words:
-        w.times_seen += 1
-        w.last_seen_at = datetime.now(timezone.utc)
-        db.add(w)
+        # Obtener o crear estadística para esta palabra
+        stats = db.exec(
+            select(WordStatistics).where(WordStatistics.word_id == w.id)
+        ).first()
+
+        if not stats:
+            stats = WordStatistics(word_id=w.id, type="")
+            db.add(stats)
+            db.flush()
+
+        stats.times_seen += 1
+        stats.last_seen_at = datetime.now(timezone.utc)
+        db.add(stats)
     db.commit()
 
 
@@ -340,21 +360,23 @@ def toggle_word_favorite(db: Session, word_id: int):
 def get_words_least_seen(db: Session, user_id: int, limit: int = 15):
     statement = (
         select(models.Word)
+        .outerjoin(WordStatistics, WordStatistics.word_id == models.Word.id)
         .filter(models.Word.user_id == user_id, models.Word.is_active == True)
-        .order_by(models.Word.times_seen.asc().nullsfirst())
+        .order_by(WordStatistics.times_seen.asc().nullsfirst())
         .limit(limit)
     )
-    return db.exec(statement).all()
+    return db.exec(statement).unique().all()
 
 
 def get_words_least_seen_ordered(db: Session, user_id: int, limit: int = 10) -> List[Word]:
     statement = (
         select(Word)
+        .outerjoin(WordStatistics, WordStatistics.word_id == Word.id)
         .where(Word.user_id == user_id, Word.is_active == True)
-        .order_by(Word.times_seen.asc())
+        .order_by(WordStatistics.times_seen.asc())
         .limit(limit * 3)
     )
-    results = db.exec(statement).all()
+    results = db.exec(statement).unique().all()
     if not results:
         return []
     return random.sample(results, min(len(results), limit))
@@ -579,14 +601,15 @@ def get_priority_words_via_batches(db: Session, user_id: int, limit: int = 10) -
         # Solo tomamos palabras Pendientes de aprender
         unlearned_primary = db.exec(
             select(Word)
+            .outerjoin(WordStatistics, WordStatistics.word_id == Word.id)
             .where(
                 Word.batch_id == primary_batch.id,
                 Word.is_active == True,
                 Word.is_learned == False, # <--- Excluir aprendidas
                 Word.is_boosted == False
             )
-            .order_by(Word.current_cycle_seen.asc(), Word.last_seen_at.asc().nullsfirst())
-        ).all()
+            .order_by(WordStatistics.current_cycle_seen.asc(), WordStatistics.last_seen_at.asc().nullsfirst())
+        ).unique().all()
 
         threshold_for_transition = get_threshold_for_transition(db)
         logger.debug(f"[get_priority_words_via_batches] Using THRESHOLD_FOR_TRANSITION={threshold_for_transition}")
@@ -600,15 +623,16 @@ def get_priority_words_via_batches(db: Session, user_id: int, limit: int = 10) -
                 next_batch = active_batches[1]
                 secondary_batch_words = db.exec(
                     select(Word)
+                    .outerjoin(WordStatistics, WordStatistics.word_id == Word.id)
                     .where(
                         Word.batch_id == next_batch.id,
                         Word.is_active == True,
                         Word.is_learned == False,
                         Word.is_boosted == False
                     )
-                    .order_by(Word.current_cycle_seen.asc(), Word.last_seen_at.asc().nullsfirst())
+                    .order_by(WordStatistics.current_cycle_seen.asc(), WordStatistics.last_seen_at.asc().nullsfirst())
                     .limit(needed_from_next)
-                ).all()
+                ).unique().all()
         else:
             # Batch primario aún tiene muchas palabras, enfocarse en él
             primary_batch_words = unlearned_primary[:6]
@@ -622,6 +646,7 @@ def get_priority_words_via_batches(db: Session, user_id: int, limit: int = 10) -
         old_words = db.exec(
             select(Word)
             .join(Batch)
+            .outerjoin(WordStatistics, WordStatistics.word_id == Word.id)
             .where(
                 Word.user_id == user_id,
                 Word.is_active == True,
@@ -629,9 +654,9 @@ def get_priority_words_via_batches(db: Session, user_id: int, limit: int = 10) -
                 Word.is_boosted == False,
                 Batch.status == BatchStatus.COMPLETED
             )
-            .order_by(Word.last_seen_at.asc().nullsfirst())
+            .order_by(WordStatistics.last_seen_at.asc().nullsfirst())
             .limit(needed_old)
-        ).all()
+        ).unique().all()
 
     # 4. CONSOLIDAR
     candidate_dict = {
@@ -856,14 +881,25 @@ def resolve_and_increment_example(db: Session, example_id: int, user_id: int) ->
         if word and word.id not in seen_word_ids:
             seen_word_ids.add(word.id)
 
-            word.times_seen += 1
-            word.current_cycle_seen += 1
-            word.last_seen_at = now_utc
+            # Obtener o crear estadística para esta palabra
+            stats = db.exec(
+                select(WordStatistics).where(WordStatistics.word_id == word.id)
+            ).first()
+
+            if not stats:
+                stats = WordStatistics(word_id=word.id, type="")
+                db.add(stats)
+                db.flush()
+
+            stats.times_seen += 1
+            stats.current_cycle_seen += 1
+            stats.last_seen_at = now_utc
+            db.add(stats)
 
             # ✅ EVALUACIÓN AUTOMÁTICA DE IS_LEARNED
-            if word.current_cycle_seen >= target_cycle_seen and not word.is_learned:
+            if stats.current_cycle_seen >= target_cycle_seen and not word.is_learned:
                 word.is_learned = True
-                logger.info(f"[resolve_and_increment_example] Word {word.id} ({word.main}) marked as LEARNED (current_cycle_seen={word.current_cycle_seen})")
+                logger.info(f"[resolve_and_increment_example] Word {word.id} ({word.main}) marked as LEARNED (current_cycle_seen={stats.current_cycle_seen})")
 
             db.add(word)
 
@@ -989,8 +1025,16 @@ def reopen_batches_for_spaced_repetition(db: Session, user_id: int) -> dict:
 
         for word in words:
             word.is_learned = False
-            word.current_cycle_seen = 0  # Resetear el ciclo
             db.add(word)
+
+            # Resetear estadísticas
+            stats = db.exec(
+                select(WordStatistics).where(WordStatistics.word_id == word.id)
+            ).first()
+
+            if stats:
+                stats.current_cycle_seen = 0
+                db.add(stats)
 
         # Cambiar estado del batch a OPEN
         batch_to_reopen.status = BatchStatus.OPEN
@@ -1041,8 +1085,16 @@ def reopen_specific_batches(db: Session, user_id: int, batch_ids: List[int]) -> 
 
             for word in words:
                 word.is_learned = False
-                word.current_cycle_seen = 0
                 db.add(word)
+
+                # Resetear estadísticas
+                stats = db.exec(
+                    select(WordStatistics).where(WordStatistics.word_id == word.id)
+                ).first()
+
+                if stats:
+                    stats.current_cycle_seen = 0
+                    db.add(stats)
 
             # Cambiar estado a ACTIVE (para revisión)
             batch.status = BatchStatus.ACTIVE
@@ -1093,6 +1145,14 @@ def get_batch_words(db: Session, batch_id: int, user_id: int) -> Optional[dict]:
     learned_words = sum(1 for w in words if w.is_learned)
     batch_progress = round((learned_words / total_words * 100), 2) if total_words > 0 else 0.0
 
+    # Obtener estadísticas de palabras
+    word_stats_map = {}
+    for w in words:
+        stats = db.exec(
+            select(WordStatistics).where(WordStatistics.word_id == w.id)
+        ).first()
+        word_stats_map[w.id] = stats
+
     return {
         "batch_id": batch.id,
         "batch_title": batch.title,
@@ -1108,8 +1168,8 @@ def get_batch_words(db: Session, batch_id: int, user_id: int) -> Optional[dict]:
                 "level": w.level,
                 "is_learned": w.is_learned,
                 "is_active": w.is_active,
-                "times_seen": w.times_seen,
-                "last_seen_at": w.last_seen_at
+                "times_seen": word_stats_map[w.id].times_seen if word_stats_map[w.id] else 0,
+                "last_seen_at": word_stats_map[w.id].last_seen_at if word_stats_map[w.id] else None
             }
             for w in words
         ]

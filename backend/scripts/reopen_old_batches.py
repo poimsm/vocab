@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlmodel import Session, select
 from db import engine
-from models import User, Batch, BatchStatus, Word
+from models import User, Batch, BatchStatus, Word, WordStatistics
 from logging_config import logger
 
 def reopen_batches_spaced_repetition():
@@ -56,8 +56,16 @@ def reopen_batches_spaced_repetition():
 
                     for word in words:
                         word.is_learned = False
-                        word.current_cycle_seen = 0  # Resetear el ciclo
                         db.add(word)
+
+                        # Resetear estadísticas
+                        stats = db.exec(
+                            select(WordStatistics).where(WordStatistics.word_id == word.id)
+                        ).first()
+
+                        if stats:
+                            stats.current_cycle_seen = 0
+                            db.add(stats)
 
                     # Cambiar estado del batch a ACTIVE (para revisión)
                     batch_to_reopen.status = BatchStatus.ACTIVE

@@ -129,6 +129,23 @@ class ExampleWord(SQLModel, table=True):
     word: "Word" = Relationship(back_populates="example_words")
 
 
+class WordStatistics(SQLModel, table=True):
+    __tablename__: str = "word_statistics"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    word_id: int = Field(foreign_key="words.id", index=True)
+    type: str = Field(max_length=50)
+
+    last_seen_at: Optional[datetime] = Field(default=None)
+    times_seen: int = Field(default=0)
+    current_cycle_seen: int = Field(default=0)
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+
+    word: "Word" = Relationship(back_populates="statistics")
+
+
 class Word(SQLModel, table=True):
     __tablename__: str = "words"
 
@@ -145,10 +162,6 @@ class Word(SQLModel, table=True):
     normalized: Optional[str] = Field(
         default=None, max_length=100, unique=True, index=True)
 
-    last_seen_at: Optional[datetime] = Field(default=None)
-    times_seen: int = Field(default=0)
-    current_cycle_seen: int = Field(default=0)
-
     is_favorite: bool = Field(default=False)
     is_active: bool = Field(default=True)
     is_learned: bool = Field(default=False)
@@ -158,6 +171,7 @@ class Word(SQLModel, table=True):
     user_id: Optional[int] = Field(default=None, foreign_key="users.id")
     user: User = Relationship(back_populates="words")
     example_words: List[ExampleWord] = Relationship(back_populates="word")
+    statistics: List["WordStatistics"] = Relationship(back_populates="word")
 
     batch_id: Optional[int] = Field(default=None, foreign_key="batch.id")
     batch: Optional["Batch"] = Relationship(back_populates="words")

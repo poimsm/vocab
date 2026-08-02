@@ -22,6 +22,7 @@ from models import (
     BatchSource,
     BatchStatus,
     Word,
+    WordStatistics,
 )
 
 
@@ -88,12 +89,12 @@ class BatchManager:
 
         self.db.commit()
 
-        # Actualizar BatchFeatured si es BULK_IMPORT
-        if source == BatchSource.BULK_IMPORT:
-            for batch in affected_batches:
+        # Crear BatchFeatured de todos los tipos para cada batch creado
+        for batch in affected_batches:
+            for featured_type in BatchFeaturedType:
                 self._create_or_update_batch_featured(
                     batch_id=batch.id,
-                    featured_type=BatchFeaturedType.ACTIVE_LEARNING
+                    featured_type=featured_type
                 )
 
         return {
@@ -176,6 +177,15 @@ class BatchManager:
         )
         self.db.add(word)
         self.db.flush()
+
+        # Crear estadísticas para la palabra
+        stats = WordStatistics(
+            word_id=word.id,
+            type=""
+        )
+        self.db.add(stats)
+        self.db.flush()
+
         return word
 
     # ==========================================
