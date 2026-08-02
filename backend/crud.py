@@ -292,12 +292,13 @@ def create_word(db: Session, word_data: dict, user_id: int):
     db.add(new_word)
     db.flush()
 
-    # Crear estadísticas para la palabra
-    stats = WordStatistics(
-        word_id=new_word.id,
-        type=""
-    )
-    db.add(stats)
+    # Crear estadísticas para la palabra por cada tipo
+    for featured_type in models.BatchFeaturedType:
+        stats = WordStatistics(
+            word_id=new_word.id,
+            type=featured_type
+        )
+        db.add(stats)
     db.commit()
     db.refresh(new_word)
     return new_word
@@ -305,19 +306,16 @@ def create_word(db: Session, word_data: dict, user_id: int):
 
 def increment_words_seen(db: Session, words: List[Word]):
     for w in words:
-        # Obtener o crear estadística para esta palabra
-        stats = db.exec(
+        # Incrementar contador para todos los tipos de estadísticas
+        all_stats = db.exec(
             select(WordStatistics).where(WordStatistics.word_id == w.id)
-        ).first()
+        ).all()
 
-        if not stats:
-            stats = WordStatistics(word_id=w.id, type="")
+        now = datetime.now(timezone.utc)
+        for stats in all_stats:
+            stats.times_seen += 1
+            stats.last_seen_at = now
             db.add(stats)
-            db.flush()
-
-        stats.times_seen += 1
-        stats.last_seen_at = datetime.now(timezone.utc)
-        db.add(stats)
     db.commit()
 
 
@@ -503,8 +501,8 @@ def increment_examples_seen(db: Session, examples: List[Example]):
 # ==========================================
 
 def get_or_create_propitious_batch(
-    db: Session, 
-    user_id: int, 
+    db: Session,
+    user_id: int,
     source: BatchSource = BatchSource.ORGANIC,
     title: Optional[str] = None
 ) -> Batch:
@@ -513,7 +511,6 @@ def get_or_create_propitious_batch(
             select(Batch)
             .where(
                 Batch.user_id == user_id,
-                Batch.status == BatchStatus.OPEN,
                 Batch.source == BatchSource.ORGANIC
             )
             .order_by(Batch.created_at.desc())
@@ -522,19 +519,14 @@ def get_or_create_propitious_batch(
         if open_batch and len(open_batch.words) < open_batch.capacity:
             return open_batch
 
-        if open_batch:
-            open_batch.status = BatchStatus.ACTIVE
-            db.add(open_batch)
-
         count_batches = db.exec(
             select(func.count(Batch.id)).where(Batch.user_id == user_id)
         ).one() or 0
-        
+
         new_batch = Batch(
             user_id=user_id,
             title=f"Lote {count_batches + 1}",
-            source=BatchSource.ORGANIC,
-            status=BatchStatus.OPEN
+            source=BatchSource.ORGANIC
         )
         db.add(new_batch)
         db.commit()
@@ -549,8 +541,7 @@ def get_or_create_propitious_batch(
         new_batch = Batch(
             user_id=user_id,
             title=title or f"Importación {count_batches + 1}",
-            source=BatchSource.BULK_IMPORT,
-            status=BatchStatus.ACTIVE
+            source=BatchSource.BULK_IMPORT
         )
         db.add(new_batch)
         db.commit()
@@ -712,10 +703,13 @@ def refill_example_queue(db: Session, user_id: int):
     excluded_ids = list(db.exec(queue_statement).all())
     logger.info(f"[refill_example_queue] User {user_id}: excluded_ids count = {len(excluded_ids)}, ids = {excluded_ids[:10]}")
 
-    # 🚨 CLAVE 2: Obtener solo palabras prioritarias NO APRENDIDAS (is_learned = False)
+    # 🚨 CLAVE 2: Obtener solo palabras prioritarias NO APRENDIDAS usando BatchManager
     total_words_needed = (recycle_amount * 2) + ai_simple_amount + ai_mixed_amount
-    priority_words = crud.get_priority_words_via_batches(
-        db, user_id=user_id, limit=max(total_words_needed, 8)
+    manager = BatchManager(db)
+    priority_words = manager.get_words_with_transition(
+        user_id=user_id,
+        featured_type=models.BatchFeaturedType.EXAMPLE,
+        limit=max(total_words_needed, 8)
     )
 
     if not priority_words:
@@ -727,7 +721,7 @@ def refill_example_queue(db: Session, user_id: int):
         for word in priority_words:
             if len(recycled_examples) >= recycle_amount:
                 break
-            
+
             statement = (
                 select(Example)
                 .join(Example.example_words)
@@ -735,16 +729,17 @@ def refill_example_queue(db: Session, user_id: int):
                 .where(
                     Example.is_active == True,
                     Example.type == ExampleType.EXPLORE,
+                    Example.is_pristine == True,
                     ExampleWord.word_id == word.id,
                     Word.is_learned == False, # No incluir si ya se aprendió
                     Word.is_active == True
                 )
             )
-            
+
             # Garantiza no repetir ejemplos ya presentes en la cola del usuario
             if excluded_ids:
                 statement = statement.where(Example.id.not_in(excluded_ids))
-                
+
             statement = statement.order_by(
                 Example.times_seen.asc(), Example.created_at.desc()
             ).limit(1)
@@ -757,25 +752,101 @@ def refill_example_queue(db: Session, user_id: int):
     # 2. GENERAR NUEVOS EJEMPLOS CON IA
     new_examples = []
     total_ai_required = ai_simple_amount + ai_mixed_amount
-    
+
     if total_ai_required > 0:
         words_for_ai = priority_words[:total_ai_required * 2]
-        current_index = 0
 
-        # Simple
-        if ai_simple_amount > 0 and len(words_for_ai) >= current_index:
-            words_for_simple = words_for_ai[current_index : current_index + ai_simple_amount]
-            if words_for_simple:
-                raw_simple = ai.generate_examples_from_words(words_for_simple)
-                new_examples.extend(create_examples(db, raw_simple[:ai_simple_amount]))
-                current_index += len(words_for_simple)
+        # Simple - Primero obtener disponibles, luego generar si faltan
+        if ai_simple_amount > 0:
+            simple_words = words_for_ai[:ai_simple_amount]
+            collected_simple = []
 
-        # Mixta
-        if ai_mixed_amount > 0 and len(words_for_ai) >= current_index:
-            words_for_mixed = words_for_ai[current_index : current_index + ai_mixed_amount]
-            if words_for_mixed:
-                raw_mixed = ai.generate_mixed_examples_from_words(words_for_mixed)
-                new_examples.extend(create_examples(db, raw_mixed[:ai_mixed_amount]))
+            # Intentar obtener ejemplos EXPLORE existentes sin usar
+            for word in simple_words:
+                if len(collected_simple) >= ai_simple_amount:
+                    break
+
+                statement = (
+                    select(Example)
+                    .join(Example.example_words)
+                    .join(ExampleWord.word)
+                    .where(
+                        Example.is_active == True,
+                        Example.type == ExampleType.EXPLORE,
+                        Example.is_pristine == True,
+                        ExampleWord.word_id == word.id,
+                        Word.is_learned == False,
+                        Word.is_active == True
+                    )
+                )
+
+                if excluded_ids:
+                    statement = statement.where(Example.id.not_in(excluded_ids))
+
+                statement = statement.order_by(
+                    Example.times_seen.asc(), Example.created_at.desc()
+                ).limit(1)
+
+                available_example = db.exec(statement).first()
+                if available_example:
+                    collected_simple.append(available_example)
+                    excluded_ids.append(available_example.id)
+
+            # Si aún faltan, generar con IA
+            remaining_needed = ai_simple_amount - len(collected_simple)
+            if remaining_needed > 0 and len(simple_words) > 0:
+                raw_simple = ai.generate_examples_from_words(simple_words)
+                if raw_simple:
+                    generated_simple = create_examples(db, raw_simple[:remaining_needed])
+                    collected_simple.extend(generated_simple)
+
+            new_examples.extend(collected_simple)
+
+        # Mixta - Primero obtener disponibles, luego generar si faltan
+        if ai_mixed_amount > 0:
+            mixed_words = words_for_ai[ai_simple_amount:ai_simple_amount + ai_mixed_amount]
+            collected_mixed = []
+
+            # Intentar obtener ejemplos EXPLORE existentes sin usar
+            for word in mixed_words:
+                if len(collected_mixed) >= ai_mixed_amount:
+                    break
+
+                statement = (
+                    select(Example)
+                    .join(Example.example_words)
+                    .join(ExampleWord.word)
+                    .where(
+                        Example.is_active == True,
+                        Example.type == ExampleType.EXPLORE,
+                        Example.is_pristine == True,
+                        ExampleWord.word_id == word.id,
+                        Word.is_learned == False,
+                        Word.is_active == True
+                    )
+                )
+
+                if excluded_ids:
+                    statement = statement.where(Example.id.not_in(excluded_ids))
+
+                statement = statement.order_by(
+                    Example.times_seen.asc(), Example.created_at.desc()
+                ).limit(1)
+
+                available_example = db.exec(statement).first()
+                if available_example:
+                    collected_mixed.append(available_example)
+                    excluded_ids.append(available_example.id)
+
+            # Si aún faltan, generar con IA
+            remaining_needed = ai_mixed_amount - len(collected_mixed)
+            if remaining_needed > 0 and len(mixed_words) > 0:
+                raw_mixed = ai.generate_mixed_examples_from_words(mixed_words)
+                if raw_mixed:
+                    generated_mixed = create_examples(db, raw_mixed[:remaining_needed])
+                    collected_mixed.extend(generated_mixed)
+
+            new_examples.extend(collected_mixed)
 
     # 3. ENCOLAR EN ESTADO PENDING SIN BORRAR REGISTROS PREVIOS
     all_candidates = recycled_examples + new_examples
@@ -789,6 +860,10 @@ def refill_example_queue(db: Session, user_id: int):
         ).first()
 
         if not already_in_queue:
+            # Marcar el ejemplo como usado (no pristine)
+            example.is_pristine = False
+            db.add(example)
+
             queue_item = ExampleQueue(
                 user_id=user_id,
                 example_id=example.id,
@@ -881,25 +956,29 @@ def resolve_and_increment_example(db: Session, example_id: int, user_id: int) ->
         if word and word.id not in seen_word_ids:
             seen_word_ids.add(word.id)
 
-            # Obtener o crear estadística para esta palabra
-            stats = db.exec(
-                select(WordStatistics).where(WordStatistics.word_id == word.id)
-            ).first()
+            # Obtener o crear estadísticas para esta palabra por cada tipo
+            for featured_type in models.BatchFeaturedType:
+                stats = db.exec(
+                    select(WordStatistics).where(
+                        WordStatistics.word_id == word.id,
+                        WordStatistics.type == featured_type
+                    )
+                ).first()
 
-            if not stats:
-                stats = WordStatistics(word_id=word.id, type="")
+                if not stats:
+                    stats = WordStatistics(word_id=word.id, type=featured_type)
+                    db.add(stats)
+                    db.flush()
+
+                stats.times_seen += 1
+                stats.current_cycle_seen += 1
+                stats.last_seen_at = now_utc
                 db.add(stats)
-                db.flush()
 
-            stats.times_seen += 1
-            stats.current_cycle_seen += 1
-            stats.last_seen_at = now_utc
-            db.add(stats)
-
-            # ✅ EVALUACIÓN AUTOMÁTICA DE IS_LEARNED
-            if stats.current_cycle_seen >= target_cycle_seen and not word.is_learned:
-                word.is_learned = True
-                logger.info(f"[resolve_and_increment_example] Word {word.id} ({word.main}) marked as LEARNED (current_cycle_seen={stats.current_cycle_seen})")
+                # ✅ EVALUACIÓN AUTOMÁTICA DE IS_LEARNED
+                if stats.current_cycle_seen >= target_cycle_seen and not stats.is_learned:
+                    stats.is_learned = True
+                    logger.info(f"[resolve_and_increment_example] Word {word.id} ({word.main}) marked as LEARNED for type {featured_type.value} (current_cycle_seen={stats.current_cycle_seen})")
 
             db.add(word)
 
@@ -930,57 +1009,22 @@ def resolve_and_increment_example(db: Session, example_id: int, user_id: int) ->
 
 
 def _check_and_update_batch_status(db: Session, batch_id: int):
-    batch = db.get(Batch, batch_id)
-    if not batch or batch.status == BatchStatus.COMPLETED:
-        return
-
-    # Contar total de palabras y palabras aprendidas en este lote
-    total_words = db.exec(
-        select(func.count(Word.id)).where(Word.batch_id == batch_id, Word.is_active == True)
-    ).one() or 0
-
-    if total_words == 0:
-        return
-
-    learned_words = db.exec(
-        select(func.count(Word.id)).where(
-            Word.batch_id == batch_id,
-            Word.is_active == True,
-            Word.is_learned == True
-        )
-    ).one() or 0
-
-    # Calcular progreso (0.0 a 100.0)
-    mastery_progress = round((learned_words / total_words) * 100, 2)
-
-    # Si al menos el 80% están aprendidas, completamos el lote
-    if mastery_progress >= 80.0:
-        batch.status = BatchStatus.COMPLETED
-        batch.completed_at = datetime.now(timezone.utc)
-
-        # Activar el siguiente lote disponible si no hay ninguno activo
-        _activate_next_open_batch(db, user_id=batch.user_id)
-
-    db.add(batch)
+    """
+    DEPRECATED: El estado ahora se maneja en BatchFeatured, no en Batch.
+    Esta función se mantiene para compatibilidad pero no realiza cambios.
+    """
+    # Esta lógica ahora se maneja en BatchManager.get_words_with_transition()
+    # donde se actualiza BatchFeatured.status según el tipo
+    pass
 
 
 def _activate_next_open_batch(db: Session, user_id: int):
-    # Verificamos si ya hay un lote activo
-    has_active = db.exec(
-        select(Batch).where(Batch.user_id == user_id, Batch.status == BatchStatus.ACTIVE)
-    ).first()
-
-    if not has_active:
-        # Promovemos el lote OPEN de mayor prioridad
-        next_batch = db.exec(
-            select(Batch)
-            .where(Batch.user_id == user_id, Batch.status == BatchStatus.OPEN)
-            .order_by(Batch.priority.desc(), Batch.created_at.asc())
-        ).first()
-
-        if next_batch:
-            next_batch.status = BatchStatus.ACTIVE
-            db.add(next_batch)
+    """
+    DEPRECATED: El estado ahora se maneja en BatchFeatured, no en Batch.
+    Esta función se mantiene para compatibilidad pero no realiza cambios.
+    """
+    # Esta lógica ahora se maneja en BatchManager.get_words_with_transition()
+    pass
 
 
 # ==========================================
@@ -1024,22 +1068,30 @@ def reopen_batches_for_spaced_repetition(db: Session, user_id: int) -> dict:
         ).all()
 
         for word in words:
-            word.is_learned = False
             db.add(word)
 
-            # Resetear estadísticas
-            stats = db.exec(
+            # Resetear estadísticas para todos los tipos
+            all_stats = db.exec(
                 select(WordStatistics).where(WordStatistics.word_id == word.id)
-            ).first()
+            ).all()
 
-            if stats:
+            for stats in all_stats:
                 stats.current_cycle_seen = 0
+                stats.is_learned = False
                 db.add(stats)
 
-        # Cambiar estado del batch a OPEN
-        batch_to_reopen.status = BatchStatus.OPEN
-        batch_to_reopen.completed_at = None
-        db.add(batch_to_reopen)
+        # Cambiar estado de BatchFeatured a OPEN (para memoria espaciada)
+        featured_items = db.exec(
+            select(BatchFeatured).where(
+                BatchFeatured.batch_id == batch_to_reopen.id,
+                BatchFeatured.type == models.BatchFeaturedType.SPACED_REPETITION
+            )
+        ).all()
+
+        for featured in featured_items:
+            featured.status = BatchStatus.OPEN
+            featured.completed_at = None
+            db.add(featured)
 
         db.commit()
 
@@ -1084,22 +1136,27 @@ def reopen_specific_batches(db: Session, user_id: int, batch_ids: List[int]) -> 
             ).all()
 
             for word in words:
-                word.is_learned = False
                 db.add(word)
 
-                # Resetear estadísticas
-                stats = db.exec(
+                # Resetear estadísticas para todos los tipos
+                all_stats = db.exec(
                     select(WordStatistics).where(WordStatistics.word_id == word.id)
-                ).first()
+                ).all()
 
-                if stats:
+                for stats in all_stats:
                     stats.current_cycle_seen = 0
+                    stats.is_learned = False
                     db.add(stats)
 
-            # Cambiar estado a ACTIVE (para revisión)
-            batch.status = BatchStatus.ACTIVE
-            batch.completed_at = None
-            db.add(batch)
+            # Cambiar estado de BatchFeatured a ACTIVE (para revisión)
+            featured_items = db.exec(
+                select(BatchFeatured).where(BatchFeatured.batch_id == batch.id)
+            ).all()
+
+            for featured in featured_items:
+                featured.status = BatchStatus.ACTIVE
+                featured.completed_at = None
+                db.add(featured)
 
             reopened.append({
                 "batch_id": batch.id,

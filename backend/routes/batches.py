@@ -3,7 +3,7 @@ Rutas para gestión avanzada de batches usando BatchManager.
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Path
 from sqlmodel import Session
 from logging_config import logger
 
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/batches", tags=["batches"])
 
 
 @router.get("/featured")
-def get_batch_featured(
+def get_all_batch_featured(
     featured_type: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -27,27 +27,28 @@ def get_batch_featured(
     Obtiene todos los BatchFeatured del usuario.
 
     Query params:
-    - featured_type: Opcional, filtrar por tipo (active_learning, review, spaced_repetition)
+    - featured_type: Opcional, filtrar por tipo (active_learning, review, spaced_repetition, example, best_options)
     """
-    try:
-        featured_type_enum = None
-        if featured_type:
-            try:
-                featured_type_enum = BatchFeaturedType(featured_type)
-            except ValueError:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Tipo inválido. Opciones: active_learning, review, spaced_repetition"
-                )
+    logger.info(f"[get_all_batch_featured] User {current_user.id}: Fetching all batch featured (type={featured_type})")
 
-        result = crud.get_all_batch_featured(db, current_user.id, featured_type_enum)
-        logger.info(f"[get_batch_featured] User {current_user.id}: Retrieved {len(result)} featured batches")
-        return {"featured_batches": result}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"[get_batch_featured] Error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Error obteniendo featured batches")
+    featured_type_enum = None
+    if featured_type:
+        try:
+            featured_type_enum = BatchFeaturedType(featured_type)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Tipo inválido. Opciones: active_learning, review, spaced_repetition, example, best_options"
+            )
+
+    manager = BatchManager(db)
+    featured_list = manager.get_all_batch_featured_by_user(current_user.id, featured_type_enum)
+    logger.info(f"[get_all_batch_featured] Retrieved {len(featured_list)} batch featured")
+
+    return {
+        "total_featured": len(featured_list),
+        "featured": featured_list
+    }
 
 
 @router.get("/dormant")
@@ -175,3 +176,79 @@ def save_words_to_batches(
     except Exception as e:
         logger.error(f"[save_words_to_batches] Error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ==========================================
+# GESTIÓN DE BATCH FEATURED ESPECÍFICOS
+# ==========================================
+
+@router.get("/featured/{batch_featured_id}/words")
+def get_batch_featured_words(
+    batch_featured_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Obtiene todas las palabras asociadas a un BatchFeatured específico.
+    """
+    logger.debug(f"[get_batch_featured_words] User {current_user.id}: Fetching words for batch featured {batch_featured_id}")
+    manager = BatchManager(db)
+    batch_data = manager.get_words_for_batch_featured(batch_featured_id)
+
+    if not batch_data:
+        logger.warning(f"[get_batch_featured_words] BatchFeatured {batch_featured_id} not found")
+        raise HTTPException(status_code=404, detail="BatchFeatured no encontrado")
+
+    logger.info(f"[get_batch_featured_words] Retrieved {batch_data['total_words']} words")
+    return batch_data
+
+
+@router.patch("/featured/{batch_featured_id}/reopen")
+def reopen_batch_featured(
+    batch_featured_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Reabre un BatchFeatured específico para revisión.
+    """
+    logger.info(f"[reopen_batch_featured] User {current_user.id}: Reopening batch featured {batch_featured_id}")
+    manager = BatchManager(db)
+    result = manager.reopen_batch_featured(batch_featured_id)
+
+    if not result:
+        logger.warning(f"[reopen_batch_featured] BatchFeatured {batch_featured_id} not found")
+        raise HTTPException(status_code=404, detail="BatchFeatured no encontrado")
+
+    logger.info(f"[reopen_batch_featured] BatchFeatured {batch_featured_id} reopened successfully")
+    return result
+
+
+@router.patch("/featured/reopen/multiple")
+def reopen_multiple_batch_featured(
+    batch_featured_ids: List[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Reabre múltiples BatchFeatured específicos para revisión.
+
+    Body esperado:
+    {
+      "batch_featured_ids": [1, 3, 5]
+    }
+    """
+    logger.info(f"[reopen_multiple_batch_featured] User {current_user.id}: Reopening batch featured")
+
+    if not batch_featured_ids:
+        logger.error("[reopen_multiple_batch_featured] No batch featured IDs provided")
+        raise HTTPException(status_code=400, detail="Debe proporcionar al menos un batch_featured_id")
+
+    manager = BatchManager(db)
+    result = manager.reopen_multiple_batch_featured(batch_featured_ids)
+
+    logger.info(f"[reopen_multiple_batch_featured] Reopened {result['reopened_count']} batch featured")
+    if result["failed"]:
+        logger.warning(f"[reopen_multiple_batch_featured] Some batch featured failed: {result['failed']}")
+
+    return result

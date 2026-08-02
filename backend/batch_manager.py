@@ -112,12 +112,11 @@ class BatchManager:
     ) -> Batch:
         """Obtiene o crea un batch apropiado."""
         if source == BatchSource.ORGANIC:
-            # Para ORGANIC, reutilizar batch OPEN si existe
+            # Para ORGANIC, reutilizar batch si existe y tiene capacidad
             existing_batch = self.db.exec(
                 select(Batch)
                 .where(
                     Batch.user_id == user_id,
-                    Batch.status == BatchStatus.OPEN,
                     Batch.source == BatchSource.ORGANIC
                 )
                 .order_by(Batch.created_at.desc())
@@ -178,12 +177,13 @@ class BatchManager:
         self.db.add(word)
         self.db.flush()
 
-        # Crear estadísticas para la palabra
-        stats = WordStatistics(
-            word_id=word.id,
-            type=""
-        )
-        self.db.add(stats)
+        # Crear estadísticas para la palabra por cada tipo
+        for featured_type in BatchFeaturedType:
+            stats = WordStatistics(
+                word_id=word.id,
+                type=featured_type
+            )
+            self.db.add(stats)
         self.db.flush()
 
         return word
@@ -412,3 +412,281 @@ class BatchManager:
 
         for featured in featured_list:
             self._update_batch_featured_stats(featured)
+
+    # ==========================================
+    # GESTIÓN DE TRANSICIONES DE BATCHES POR TIPO
+    # ==========================================
+
+    def get_words_with_transition(
+        self,
+        user_id: int,
+        featured_type: BatchFeaturedType,
+        limit: int = 10,
+        threshold_for_transition: int = 4
+    ) -> List[Word]:
+        """
+        Obtiene palabras respetando transiciones entre batches por tipo específico.
+
+        Estrategia:
+        - Obtiene palabras del batch actual que no estén aprendidas (según el tipo)
+        - Si el batch actual tiene pocas palabras restantes, comienza a incluir del siguiente
+        - Cuando un batch se completa (todas sus palabras aprendidas para este tipo),
+          se marca como COMPLETED
+        - Cada tipo (ACTIVE_LEARNING, REVIEW, SPACED_REPETITION) tiene su propio progreso
+
+        Args:
+            user_id: ID del usuario
+            featured_type: Tipo de BatchFeatured (ACTIVE_LEARNING, REVIEW, SPACED_REPETITION)
+            limit: Cantidad de palabras a devolver
+            threshold_for_transition: Mínimo de palabras no aprendidas para no hacer transición
+
+        Returns:
+            Lista de palabras ordenadas por ciclo y última vez vista
+        """
+        # 1. Obtener batches con BatchFeatured ACTIVE u OPEN ordenados por antigüedad
+        active_batches = self.db.exec(
+            select(Batch)
+            .join(BatchFeatured, BatchFeatured.batch_id == Batch.id)
+            .where(
+                Batch.user_id == user_id,
+                BatchFeatured.type == featured_type,
+                BatchFeatured.status.in_([BatchStatus.ACTIVE, BatchStatus.OPEN])
+            )
+            .order_by(Batch.created_at.asc())
+        ).unique().all()
+
+        if not active_batches:
+            return []
+
+        primary_batch = active_batches[0]
+        result_words: List[Word] = []
+
+        # 2. Obtener palabras no aprendidas del batch primario (según el tipo)
+        unlearned_primary = self.db.exec(
+            select(Word)
+            .join(WordStatistics, (WordStatistics.word_id == Word.id) & (WordStatistics.type == featured_type))
+            .where(
+                Word.batch_id == primary_batch.id,
+                Word.is_active == True,
+                WordStatistics.is_learned == False
+            )
+            .order_by(WordStatistics.current_cycle_seen.asc(), WordStatistics.last_seen_at.asc().nullsfirst())
+        ).unique().all()
+
+        # 3. Evaluar transición al siguiente batch
+        if len(unlearned_primary) <= threshold_for_transition and len(active_batches) > 1:
+            # El batch primario está casi completo, comenzar transición
+            result_words = unlearned_primary
+            needed_from_next = limit - len(result_words)
+
+            if needed_from_next > 0:
+                next_batch = active_batches[1]
+                secondary_words = self.db.exec(
+                    select(Word)
+                    .join(WordStatistics, (WordStatistics.word_id == Word.id) & (WordStatistics.type == featured_type))
+                    .where(
+                        Word.batch_id == next_batch.id,
+                        Word.is_active == True,
+                        WordStatistics.is_learned == False
+                    )
+                    .order_by(WordStatistics.current_cycle_seen.asc(), WordStatistics.last_seen_at.asc().nullsfirst())
+                    .limit(needed_from_next)
+                ).unique().all()
+
+                result_words.extend(secondary_words)
+        else:
+            # Batch primario aún tiene suficientes palabras
+            result_words = unlearned_primary[:limit]
+
+        # 4. Verificar y actualizar estado de BatchFeatured si están completados (para este tipo)
+        for batch in active_batches[:2]:  # Revisar máximo primero y segundo batch
+            # Obtener el BatchFeatured para este tipo específico
+            batch_featured = self.db.exec(
+                select(BatchFeatured).where(
+                    BatchFeatured.batch_id == batch.id,
+                    BatchFeatured.type == featured_type
+                )
+            ).first()
+
+            if batch_featured and batch_featured.status != BatchStatus.COMPLETED:
+                total_words_in_batch = self.db.exec(
+                    select(func.count(Word.id)).where(Word.batch_id == batch.id, Word.is_active == True)
+                ).one() or 0
+
+                if total_words_in_batch > 0:
+                    learned_words_for_type = self.db.exec(
+                        select(func.count(Word.id))
+                        .join(WordStatistics, (WordStatistics.word_id == Word.id) & (WordStatistics.type == featured_type))
+                        .where(
+                            Word.batch_id == batch.id,
+                            Word.is_active == True,
+                            WordStatistics.is_learned == True
+                        )
+                    ).one() or 0
+
+                    if learned_words_for_type >= total_words_in_batch:
+                        # Todas las palabras del batch están aprendidas para este tipo
+                        batch_featured.status = BatchStatus.COMPLETED
+                        batch_featured.completed_at = datetime.now(timezone.utc)
+                        self.db.add(batch_featured)
+
+        self.db.commit()
+        return result_words
+
+    # ==========================================
+    # GESTIÓN DE BATCH FEATURED (para rutas)
+    # ==========================================
+
+    def get_all_batch_featured_by_user(
+        self,
+        user_id: int,
+        featured_type: Optional[BatchFeaturedType] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Obtiene todos los BatchFeatured del usuario, opcionalmente filtrados por tipo.
+        """
+        query = (
+            select(Batch, BatchFeatured)
+            .join(BatchFeatured, BatchFeatured.batch_id == Batch.id)
+            .where(Batch.user_id == user_id)
+        )
+
+        if featured_type:
+            query = query.where(BatchFeatured.type == featured_type)
+
+        results = self.db.exec(query).all()
+
+        featured_list = []
+        for batch, featured in results:
+            total_words = len(batch.words)
+            learned_words = featured.learned_words
+            progress = round((learned_words / total_words * 100), 2) if total_words > 0 else 0.0
+
+            featured_list.append({
+                "batch_featured_id": featured.id,
+                "batch_id": batch.id,
+                "batch_title": batch.title,
+                "featured_type": featured.type.value,
+                "status": featured.status.value,
+                "progress": progress,
+                "total_words": total_words,
+                "learned_words": learned_words,
+                "created_at": featured.created_at,
+                "completed_at": featured.completed_at
+            })
+
+        return featured_list
+
+    def get_words_for_batch_featured(
+        self,
+        batch_featured_id: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Obtiene todas las palabras asociadas a un BatchFeatured específico.
+        """
+        featured = self.db.get(BatchFeatured, batch_featured_id)
+        if not featured:
+            return None
+
+        batch = featured.batch
+        words = self.db.exec(
+            select(Word).where(Word.batch_id == batch.id)
+        ).all()
+
+        return {
+            "batch_featured_id": featured.id,
+            "batch_id": batch.id,
+            "batch_title": batch.title,
+            "featured_type": featured.type.value,
+            "status": featured.status.value,
+            "total_words": len(words),
+            "words": [
+                {
+                    "id": w.id,
+                    "main": w.main,
+                    "meaning": w.meaning,
+                    "type": w.type,
+                    "level": w.level,
+                    "is_learned": w.is_learned,
+                    "is_active": w.is_active
+                }
+                for w in words
+            ]
+        }
+
+    def reopen_batch_featured(
+        self,
+        batch_featured_id: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Reabre un BatchFeatured específico, marcando sus palabras como no aprendidas.
+        """
+        featured = self.db.get(BatchFeatured, batch_featured_id)
+        if not featured:
+            return None
+
+        batch = featured.batch
+        words = self.db.exec(
+            select(Word).where(Word.batch_id == batch.id)
+        ).all()
+
+        # Resetear estadísticas para este tipo específico
+        for word in words:
+            stats = self.db.exec(
+                select(WordStatistics).where(
+                    WordStatistics.word_id == word.id,
+                    WordStatistics.type == featured.type
+                )
+            ).first()
+
+            if stats:
+                stats.current_cycle_seen = 0
+                stats.is_learned = False
+                self.db.add(stats)
+
+        # Cambiar estado a OPEN
+        featured.status = BatchStatus.OPEN
+        featured.completed_at = None
+        self.db.add(featured)
+        self.db.commit()
+
+        return {
+            "batch_featured_id": featured.id,
+            "batch_id": batch.id,
+            "batch_title": batch.title,
+            "featured_type": featured.type.value,
+            "words_count": len(words),
+            "message": f"BatchFeatured '{batch.title}' reabierto para revisión"
+        }
+
+    def reopen_multiple_batch_featured(
+        self,
+        batch_featured_ids: List[int]
+    ) -> Dict[str, Any]:
+        """
+        Reabre múltiples BatchFeatured específicos.
+        """
+        reopened = []
+        failed = []
+
+        for batch_featured_id in batch_featured_ids:
+            try:
+                result = self.reopen_batch_featured(batch_featured_id)
+                if result:
+                    reopened.append(result)
+                else:
+                    failed.append({
+                        "batch_featured_id": batch_featured_id,
+                        "reason": "No encontrado"
+                    })
+            except Exception as e:
+                failed.append({
+                    "batch_featured_id": batch_featured_id,
+                    "reason": str(e)
+                })
+
+        return {
+            "reopened_count": len(reopened),
+            "reopened": reopened,
+            "failed": failed
+        }

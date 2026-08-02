@@ -119,18 +119,39 @@ def process_bulk_words_task(texts: List[str], user_id: int):
                             db.refresh(current_batch)
 
                             if enriched.get("examples"):
-                                raw_examples = [
-                                    {
-                                        "text": text_string,
-                                        "words": [
-                                            {"word_id": new_word.id, "text_form": ""}
-                                        ],
-                                    }
-                                    for text_string in enriched.get("examples", [])
-                                ]
-                                crud.create_examples(
-                                    db, raw_examples, example_type=ExampleType.INITIAL
-                                )
+                                examples_list = enriched.get("examples", [])
+                                initial_examples = examples_list[:3]
+                                explore_examples = examples_list[3:]
+
+                                # Create INITIAL examples (first 3)
+                                if initial_examples:
+                                    raw_initial = [
+                                        {
+                                            "text": text_string,
+                                            "words": [
+                                                {"word_id": new_word.id, "text_form": ""}
+                                            ],
+                                        }
+                                        for text_string in initial_examples
+                                    ]
+                                    crud.create_examples(
+                                        db, raw_initial, example_type=ExampleType.INITIAL
+                                    )
+
+                                # Create EXPLORE examples (rest)
+                                if explore_examples:
+                                    raw_explore = [
+                                        {
+                                            "text": text_string,
+                                            "words": [
+                                                {"word_id": new_word.id, "text_form": ""}
+                                            ],
+                                        }
+                                        for text_string in explore_examples
+                                    ]
+                                    crud.create_examples(
+                                        db, raw_explore, example_type=ExampleType.EXPLORE
+                                    )
                             logger.info(f"✓ Saved: '{new_word.main}' in Batch #{current_batch.id}")
                         else:
                             logger.info(

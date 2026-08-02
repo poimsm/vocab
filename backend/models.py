@@ -70,6 +70,8 @@ class BatchFeaturedType(str, Enum):
     ACTIVE_LEARNING = "active_learning"  # En estudio activo
     REVIEW = "review"                    # Revisión de palabras completadas
     SPACED_REPETITION = "spaced_repetition"  # Memoria espaciada
+    EXAMPLE = "example"                  # Generación de ejemplos
+    BEST_OPTIONS = "best_options"        # Ejercicios de opciones
 
 
 class Batch(SQLModel, table=True):
@@ -77,13 +79,8 @@ class Batch(SQLModel, table=True):
     user_id: int = Field(index=True)
 
     title: str = Field(default="Lote sin título")
-    status: BatchStatus = Field(default=BatchStatus.OPEN, index=True)
     source: BatchSource = Field(default=BatchSource.ORGANIC)
-
-    # Fragmentación: capacidad máxima de palabras
     capacity: int = Field(default=15)
-    # Prioridad para activación: mayor número = más prioridad
-    priority: int = Field(default=1, index=True)
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc))
@@ -100,6 +97,7 @@ class BatchFeatured(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     batch_id: int = Field(foreign_key="batch.id", index=True)
     type: BatchFeaturedType = Field(index=True)
+    status: BatchStatus = Field(default=BatchStatus.OPEN, index=True)
 
     # Estadísticas y progreso
     mastery_progress: float = Field(default=0.0)  # 0.0 a 100.0%
@@ -134,8 +132,9 @@ class WordStatistics(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     word_id: int = Field(foreign_key="words.id", index=True)
-    type: str = Field(max_length=50)
+    type: BatchFeaturedType = Field(index=True)
 
+    is_learned: bool = Field(default=False, index=True)
     last_seen_at: Optional[datetime] = Field(default=None)
     times_seen: int = Field(default=0)
     current_cycle_seen: int = Field(default=0)
@@ -164,7 +163,6 @@ class Word(SQLModel, table=True):
 
     is_favorite: bool = Field(default=False)
     is_active: bool = Field(default=True)
-    is_learned: bool = Field(default=False)
     is_boosted: bool = Field(default=False)
     boosted_at: Optional[datetime] = Field(default=None)
 
@@ -196,6 +194,7 @@ class Example(SQLModel, table=True):
         default=None, max_length=255, unique=True, index=True)
     is_active: bool = Field(default=True)
     is_favorite: bool = Field(default=False)
+    is_pristine: bool = Field(default=True, index=True)
     times_seen: int = Field(default=0)
 
     type: ExampleType = Field(

@@ -11,12 +11,12 @@ from fastapi import (APIRouter, Depends, HTTPException,
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 from db import get_db, engine
-from models import WordLevel, ExampleType, User, BatchSource, Word, Batch, BatchStatus
+from models import WordLevel, ExampleType, User, BatchSource, Word
 from helpers import TextFormatter, chunk_list
 from auth import get_current_user
 from tasks.words import process_bulk_words_task
 from datetime import datetime, timezone
-from schemas.words import WordCreate, ReopenBatchesRequest
+from schemas.words import WordCreate
 
 router = APIRouter()
 
@@ -117,15 +117,31 @@ def create_word(word: WordCreate, db: Session = Depends(get_db), current_user: U
     new_word = crud.create_word(db, word_data, current_user.id)
 
     if new_word and enriched.get("examples"):
-        raw_examples = [
-            {
-                "text": text_string,
-                "words": [{"word_id": new_word.id, "word": new_word.main}]
-            }
-            for text_string in enriched.get("examples", [])
-        ]
-        crud.create_examples(
-            db, raw_examples, example_type=ExampleType.INITIAL)
+        examples_list = enriched.get("examples", [])
+        initial_examples = examples_list[:3]
+        explore_examples = examples_list[3:]
+
+        # Create INITIAL examples (first 3)
+        if initial_examples:
+            raw_initial = [
+                {
+                    "text": text_string,
+                    "words": [{"word_id": new_word.id, "word": new_word.main}]
+                }
+                for text_string in initial_examples
+            ]
+            crud.create_examples(db, raw_initial, example_type=ExampleType.INITIAL)
+
+        # Create EXPLORE examples (rest)
+        if explore_examples:
+            raw_explore = [
+                {
+                    "text": text_string,
+                    "words": [{"word_id": new_word.id, "word": new_word.main}]
+                }
+                for text_string in explore_examples
+            ]
+            crud.create_examples(db, raw_explore, example_type=ExampleType.EXPLORE)
 
     return new_word
 
@@ -203,17 +219,37 @@ def create_single_word(
 
         # 6. Crear ejemplos iniciales si existen
         if enriched.get("examples"):
-            raw_examples = [
-                {
-                    "text": example_text,
-                    "words": [
-                        {"word_id": new_word.id, "text_form": ""}
-                    ],
-                }
-                for example_text in enriched.get("examples", [])
-            ]
-            crud.create_examples(db, raw_examples, example_type=ExampleType.INITIAL)
-            logger.info(f"[create_single_word] Initial examples created: {len(raw_examples)}")
+            examples_list = enriched.get("examples", [])
+            initial_examples = examples_list[:3]
+            explore_examples = examples_list[3:]
+
+            # Create INITIAL examples (first 3)
+            if initial_examples:
+                raw_initial = [
+                    {
+                        "text": example_text,
+                        "words": [
+                            {"word_id": new_word.id, "text_form": ""}
+                        ],
+                    }
+                    for example_text in initial_examples
+                ]
+                crud.create_examples(db, raw_initial, example_type=ExampleType.INITIAL)
+                logger.info(f"[create_single_word] Initial examples created: {len(raw_initial)}")
+
+            # Create EXPLORE examples (rest)
+            if explore_examples:
+                raw_explore = [
+                    {
+                        "text": example_text,
+                        "words": [
+                            {"word_id": new_word.id, "text_form": ""}
+                        ],
+                    }
+                    for example_text in explore_examples
+                ]
+                crud.create_examples(db, raw_explore, example_type=ExampleType.EXPLORE)
+                logger.info(f"[create_single_word] Explore examples created: {len(raw_explore)}")
 
         return {
             "id": new_word.id,
@@ -352,122 +388,6 @@ def toggle_word_favorite(word_id: int, db: Session = Depends(get_db)):
     }
 
 
-@router.get("/batches")
-def get_all_batches(
-    db: Session = Depends(get_db),
-    # current_user: User = Depends(get_current_user)
-):
-    """
-    Obtiene TODOS los batches del usuario, independientemente de su estado.
-    """
-    logger.debug("[get_all_batches] Fetching all batches for user 2")
-    batches = db.exec(
-        select(Batch)
-        .where(Batch.user_id == 2)
-        .order_by(Batch.created_at.asc())
-    ).all()
-    logger.info(f"[get_all_batches] Retrieved {len(batches)} batches")
-
-    # Calcular progreso para cada batch desde las palabras
-    batches_data = []
-    for b in batches:
-        total_words = len(b.words)
-        learned_words = sum(1 for w in b.words if w.is_learned)
-        progress = round((learned_words / total_words * 100), 2) if total_words > 0 else 0.0
-
-        batches_data.append({
-            "id": b.id,
-            "title": b.title,
-            "status": b.status.value,
-            "source": b.source.value,
-            "progress": progress,
-            "words_count": total_words,
-            "capacity": b.capacity,
-            "priority": b.priority,
-            "created_at": b.created_at,
-            "completed_at": b.completed_at
-        })
-
-    return {
-        "total_batches": len(batches),
-        "batches": batches_data
-    }
-
-
-@router.get("/batches/{batch_id}/words")
-def get_batch_words(
-    batch_id: int,
-    db: Session = Depends(get_db),
-    # current_user: User = Depends(get_current_user)
-):
-    """
-    Obtiene todas las palabras asociadas a un batch específico.
-    """
-    logger.debug(f"[get_batch_words] Fetching words for batch {batch_id}")
-    batch_data = crud.get_batch_words(db, batch_id, 2)
-
-    if not batch_data:
-        logger.warning(f"[get_batch_words] Batch {batch_id} not found")
-        raise HTTPException(status_code=404, detail="Batch no encontrado")
-
-    return batch_data
-
-
-@router.patch("/batches/reopen/manual")
-def reopen_batches_manual(
-    request: ReopenBatchesRequest,
-    db: Session = Depends(get_db),
-    # current_user: User = Depends(get_current_user)
-):
-    """
-    Reabre manualmente batches específicos para revisión (memoria espaciada).
-
-    Body esperado:
-    {
-      "batch_ids": [1, 3, 5]
-    }
-    """
-    logger.info(f"[reopen_batches_manual] Manual reopen requested for {len(request.batch_ids)} batches: {request.batch_ids}")
-    if not request.batch_ids:
-        logger.error("[reopen_batches_manual] No batch IDs provided")
-        raise HTTPException(status_code=400, detail="Debe proporcionar al menos un batch_id")
-
-    result = crud.reopen_specific_batches(db, 2, request.batch_ids)
-    logger.info(f"[reopen_batches_manual] Reopened {result['reopened_count']} batches successfully")
-
-    if result["failed"]:
-        logger.warning(f"[reopen_batches_manual] Some batches failed: {result['failed']}")
-
-    return result
-
-
-@router.patch("/batches/reopen/all")
-def reopen_all_batches(
-    db: Session = Depends(get_db),
-    # current_user: User = Depends(get_current_user)
-):
-    """
-    Reabre TODOS los batches completados del usuario.
-    """
-    logger.info("[reopen_all_batches] Reopen all batches requested for user 2")
-    completed_batches = db.exec(
-        select(Batch).where(
-            Batch.user_id == 2,
-            Batch.status == BatchStatus.COMPLETED
-        )
-    ).all()
-
-    if not completed_batches:
-        logger.info("[reopen_all_batches] No completed batches found")
-        return {"reopened_count": 0, "message": "No hay batches completados para reabrir"}
-
-    batch_ids = [b.id for b in completed_batches]
-    logger.info(f"[reopen_all_batches] Reopening {len(batch_ids)} completed batches")
-    result = crud.reopen_specific_batches(db, 2, batch_ids)
-
-    logger.info(f"[reopen_all_batches] User 2: reopened {result['reopened_count']} batches")
-
-    return result
 
 
 @router.get("/export/csv")

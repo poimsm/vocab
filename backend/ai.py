@@ -132,7 +132,7 @@ Rules:
 - frequency: common, uncommon, rare.
 - level: beginner, intermediate, advanced.
 - category must be a single-word label in English.
-- examples must be 3 examples.
+- examples must be 10 examples.
 
 Return ONLY JSON.
 """
@@ -178,15 +178,11 @@ The user will provide a JSON array of words. Analyze each word and return a JSON
     {
       "word": "original_word_here",
       "meaning": "Exactly 7 words explaining the meaning.",
-      "synonyms": ["synonym1", "synonym2", "synonym3"],
+      "synonyms": string[],
       "frequency": "common|uncommon|rare",
       "level": "beginner|intermediate|advanced",
       "category": "Single-word category in English",
-      "examples": [
-        "Example sentence 1 using the word.",
-        "Example sentence 2 using the word.",
-        "Example sentence 3 using the word."
-      ]
+      "examples": string[]
     }
   ]
 }
@@ -197,7 +193,7 @@ Rules:
 - frequency: common, uncommon, rare.
 - level: beginner, intermediate, advanced.
 - category must be a single-word label in English (e.g., "emotions", "technology", "nature").
-- examples must contain exactly 3 natural sentences using the target word.
+- examples must contain exactly 10 natural sentences using the target word.
 - Maintain the exact "word" key for each item to match the input.
 """
             },

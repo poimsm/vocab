@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlmodel import Session, select
 from db import engine
-from models import User, Batch, BatchStatus, Word, WordStatistics
+from models import User, Batch, BatchStatus, BatchFeatured, BatchFeaturedType, Word, WordStatistics
 from logging_config import logger
 
 def reopen_batches_spaced_repetition():
@@ -32,15 +32,17 @@ def reopen_batches_spaced_repetition():
             total_reopened = 0
 
             for user in users:
-                # Obtener batches COMPLETED del usuario, ordenados por antigüedad
+                # Obtener batches con BatchFeatured COMPLETED para SPACED_REPETITION, ordenados por antigüedad
                 completed_batches = db.exec(
                     select(Batch)
+                    .join(BatchFeatured, BatchFeatured.batch_id == Batch.id)
                     .where(
                         Batch.user_id == user.id,
-                        Batch.status == BatchStatus.COMPLETED
+                        BatchFeatured.type == BatchFeaturedType.SPACED_REPETITION,
+                        BatchFeatured.status == BatchStatus.COMPLETED
                     )
-                    .order_by(Batch.completed_at.asc())
-                ).all()
+                    .order_by(BatchFeatured.completed_at.asc())
+                ).unique().all()
 
                 if not completed_batches:
                     continue
@@ -55,22 +57,30 @@ def reopen_batches_spaced_repetition():
                     ).all()
 
                     for word in words:
-                        word.is_learned = False
                         db.add(word)
 
-                        # Resetear estadísticas
-                        stats = db.exec(
+                        # Resetear estadísticas para todos los tipos
+                        all_stats = db.exec(
                             select(WordStatistics).where(WordStatistics.word_id == word.id)
-                        ).first()
+                        ).all()
 
-                        if stats:
+                        for stats in all_stats:
                             stats.current_cycle_seen = 0
+                            stats.is_learned = False
                             db.add(stats)
 
-                    # Cambiar estado del batch a ACTIVE (para revisión)
-                    batch_to_reopen.status = BatchStatus.ACTIVE
-                    batch_to_reopen.completed_at = None
-                    db.add(batch_to_reopen)
+                    # Cambiar estado del BatchFeatured a ACTIVE (para revisión)
+                    featured = db.exec(
+                        select(BatchFeatured).where(
+                            BatchFeatured.batch_id == batch_to_reopen.id,
+                            BatchFeatured.type == BatchFeaturedType.SPACED_REPETITION
+                        )
+                    ).first()
+
+                    if featured:
+                        featured.status = BatchStatus.ACTIVE
+                        featured.completed_at = None
+                        db.add(featured)
 
                     db.commit()
 
