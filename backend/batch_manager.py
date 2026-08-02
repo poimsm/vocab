@@ -318,7 +318,7 @@ class BatchManager:
 
         # Crear nuevo
         words = batch.words or []
-        learned = sum(1 for w in words if w.is_learned)
+        learned = sum(1 for w in words if w.statistics and any(stat.is_learned for stat in w.statistics))
 
         featured = BatchFeatured(
             batch_id=batch_id,
@@ -339,7 +339,7 @@ class BatchManager:
             return
 
         words = batch.words or []
-        learned = sum(1 for w in words if w.is_learned)
+        learned = sum(1 for w in words if w.statistics and any(stat.is_learned for stat in w.statistics))
 
         featured.total_words = len(words)
         featured.learned_words = learned
@@ -607,7 +607,7 @@ class BatchManager:
                     "meaning": w.meaning,
                     "type": w.type,
                     "level": w.level,
-                    "is_learned": w.is_learned,
+                    "is_learned": any(stat.is_learned for stat in w.statistics) if w.statistics else False,
                     "is_active": w.is_active
                 }
                 for w in words

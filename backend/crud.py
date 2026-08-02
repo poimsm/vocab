@@ -336,10 +336,21 @@ def toggle_word_learned(db: Session, word_id: int):
     if not word:
         return None
 
-    word.is_learned = not word.is_learned
-    db.add(word)
+    # Toggle learned status in all WordStatistics for this word
+    word_stats_list = db.exec(
+        select(WordStatistics).where(WordStatistics.word_id == word_id)
+    ).all()
+
+    if word_stats_list:
+        for stats in word_stats_list:
+            stats.is_learned = not stats.is_learned
+            db.add(stats)
+    else:
+        # If no statistics exist, create one with is_learned=True
+        new_stats = WordStatistics(word_id=word_id, type=BatchFeaturedType.ACTIVE_LEARNING, is_learned=True)
+        db.add(new_stats)
+
     db.commit()
-    db.refresh(word)
     return word
 
 
@@ -363,7 +374,7 @@ def get_words_least_seen(db: Session, user_id: int, limit: int = 15):
         .order_by(WordStatistics.times_seen.asc().nullsfirst())
         .limit(limit)
     )
-    return db.exec(statement).unique().all()
+    return db.exec(statement).all()
 
 
 def get_words_least_seen_ordered(db: Session, user_id: int, limit: int = 10) -> List[Word]:
@@ -450,7 +461,7 @@ def get_random_examples_by_words(db: Session, word_ids: List[int], limit: int = 
         .order_by(func.random())
         .limit(limit)
     )
-    return db.exec(statement).unique().all()
+    return db.exec(statement).all()
 
 
 def toggle_example_active(db: Session, example_id: int):
@@ -531,6 +542,7 @@ def get_or_create_propitious_batch(
         db.add(new_batch)
         db.commit()
         db.refresh(new_batch)
+        create_batch_featured_for_types(db, new_batch.id)
         return new_batch
 
     else:
@@ -546,7 +558,28 @@ def get_or_create_propitious_batch(
         db.add(new_batch)
         db.commit()
         db.refresh(new_batch)
+        create_batch_featured_for_types(db, new_batch.id)
         return new_batch
+
+
+def create_batch_featured_for_types(db: Session, batch_id: int):
+    """Crea registros de BatchFeatured para todos los tipos disponibles."""
+    for featured_type in models.BatchFeaturedType:
+        existing = db.exec(
+            select(models.BatchFeatured).where(
+                models.BatchFeatured.batch_id == batch_id,
+                models.BatchFeatured.type == featured_type
+            )
+        ).first()
+
+        if not existing:
+            featured = models.BatchFeatured(
+                batch_id=batch_id,
+                type=featured_type,
+                status=models.BatchStatus.OPEN
+            )
+            db.add(featured)
+    db.commit()
 
 
 def update_batch_metrics(db: Session, batch_id: int):
@@ -556,105 +589,41 @@ def update_batch_metrics(db: Session, batch_id: int):
 
 
 def get_priority_words_via_batches(db: Session, user_id: int, limit: int = 10) -> List[Word]:
+    """
+    Obtiene palabras prioritarias para un usuario.
+    Prioridad: Boosted > Palabras de lotes
+    """
     # 1. BOOST (Solo activas y NO aprendidas)
     boosted_words = db.exec(
         select(Word)
+        .outerjoin(WordStatistics, WordStatistics.word_id == Word.id)
         .where(
-            Word.user_id == user_id, 
-            Word.is_active == True, 
+            Word.user_id == user_id,
+            Word.is_active == True,
             Word.is_boosted == True,
-            Word.is_learned == False  # <--- Excluir aprendidas
+            or_(WordStatistics.is_learned == False, WordStatistics.id == None)
         )
         .limit(3)
     ).all()
 
-    # 2. LOTES (ACTIVE u OPEN) - Ordenar por antigüedad (más antiguos primero)
-    active_batches = db.exec(
-        select(Batch)
+    # 2. Palabras de lotes activos (ordenadas por ciclo y fecha)
+    batch_words = db.exec(
+        select(Word)
+        .outerjoin(WordStatistics, WordStatistics.word_id == Word.id)
         .where(
-            Batch.user_id == user_id,
-            Batch.status.in_([BatchStatus.ACTIVE, BatchStatus.OPEN])
+            Word.user_id == user_id,
+            Word.is_active == True,
+            Word.batch_id != None,
+            or_(WordStatistics.is_learned == False, WordStatistics.id == None),
+            Word.is_boosted == False
         )
-        .order_by(
-            Batch.created_at.asc(),  # Más antiguos primero (PRIORIDAD)
-            Batch.status.asc(),       # ACTIVE antes que OPEN
-            Batch.priority.desc()     # Luego por prioridad
-        )
-        .limit(3)  # Traer hasta 3 batches para tener más flexibilidad en transición
+        .order_by(WordStatistics.current_cycle_seen.asc(), WordStatistics.last_seen_at.asc().nullsfirst())
+        .limit(limit - len(boosted_words))
     ).all()
 
-    primary_batch_words: List[Word] = []
-    secondary_batch_words: List[Word] = []
-
-    if active_batches:
-        primary_batch = active_batches[0]
-
-        # Solo tomamos palabras Pendientes de aprender
-        unlearned_primary = db.exec(
-            select(Word)
-            .outerjoin(WordStatistics, WordStatistics.word_id == Word.id)
-            .where(
-                Word.batch_id == primary_batch.id,
-                Word.is_active == True,
-                Word.is_learned == False, # <--- Excluir aprendidas
-                Word.is_boosted == False
-            )
-            .order_by(WordStatistics.current_cycle_seen.asc(), WordStatistics.last_seen_at.asc().nullsfirst())
-        ).unique().all()
-
-        threshold_for_transition = get_threshold_for_transition(db)
-        logger.debug(f"[get_priority_words_via_batches] Using THRESHOLD_FOR_TRANSITION={threshold_for_transition}")
-
-        if len(unlearned_primary) <= threshold_for_transition and len(active_batches) > 1:
-            # El batch primario está casi completo, comenzar a introducir el siguiente
-            primary_batch_words = unlearned_primary
-            needed_from_next = limit - len(boosted_words) - len(primary_batch_words)
-
-            if needed_from_next > 0:
-                next_batch = active_batches[1]
-                secondary_batch_words = db.exec(
-                    select(Word)
-                    .outerjoin(WordStatistics, WordStatistics.word_id == Word.id)
-                    .where(
-                        Word.batch_id == next_batch.id,
-                        Word.is_active == True,
-                        Word.is_learned == False,
-                        Word.is_boosted == False
-                    )
-                    .order_by(WordStatistics.current_cycle_seen.asc(), WordStatistics.last_seen_at.asc().nullsfirst())
-                    .limit(needed_from_next)
-                ).unique().all()
-        else:
-            # Batch primario aún tiene muchas palabras, enfocarse en él
-            primary_batch_words = unlearned_primary[:6]
-
-    # 3. OLEAJE ANTIGUO (Repaso de palabras de lotes completados que AÚN no estén aprendidas)
-    batch_words_count = len(primary_batch_words) + len(secondary_batch_words)
-    needed_old = max(limit - len(boosted_words) - batch_words_count, 0)
-
-    old_words = []
-    if needed_old > 0:
-        old_words = db.exec(
-            select(Word)
-            .join(Batch)
-            .outerjoin(WordStatistics, WordStatistics.word_id == Word.id)
-            .where(
-                Word.user_id == user_id,
-                Word.is_active == True,
-                Word.is_learned == False, # <--- Excluir aprendidas si no deseas repasarlas
-                Word.is_boosted == False,
-                Batch.status == BatchStatus.COMPLETED
-            )
-            .order_by(WordStatistics.last_seen_at.asc().nullsfirst())
-            .limit(needed_old)
-        ).unique().all()
-
-    # 4. CONSOLIDAR
-    candidate_dict = {
-        w.id: w for w in (boosted_words + primary_batch_words + secondary_batch_words + old_words)
-    }
-
-    return list(candidate_dict.values())
+    # 3. CONSOLIDAR - Evitar duplicados
+    candidate_dict = {w.id: w for w in (boosted_words + batch_words)}
+    return list(candidate_dict.values())[:limit]
 
 # ==========================================
 # COLA DE EXPLORACIÓN (EXAMPLE QUEUE MULTI-USER)
@@ -726,12 +695,13 @@ def refill_example_queue(db: Session, user_id: int):
                 select(Example)
                 .join(Example.example_words)
                 .join(ExampleWord.word)
+                .outerjoin(WordStatistics, WordStatistics.word_id == ExampleWord.word_id)
                 .where(
                     Example.is_active == True,
                     Example.type == ExampleType.EXPLORE,
                     Example.is_pristine == True,
                     ExampleWord.word_id == word.id,
-                    Word.is_learned == False, # No incluir si ya se aprendió
+                    or_(WordStatistics.is_learned == False, WordStatistics.id == None), # No incluir si ya se aprendió
                     Word.is_active == True
                 )
             )
@@ -770,12 +740,13 @@ def refill_example_queue(db: Session, user_id: int):
                     select(Example)
                     .join(Example.example_words)
                     .join(ExampleWord.word)
+                    .outerjoin(WordStatistics, WordStatistics.word_id == ExampleWord.word_id)
                     .where(
                         Example.is_active == True,
                         Example.type == ExampleType.EXPLORE,
                         Example.is_pristine == True,
                         ExampleWord.word_id == word.id,
-                        Word.is_learned == False,
+                        or_(WordStatistics.is_learned == False, WordStatistics.id == None),
                         Word.is_active == True
                     )
                 )
@@ -816,12 +787,13 @@ def refill_example_queue(db: Session, user_id: int):
                     select(Example)
                     .join(Example.example_words)
                     .join(ExampleWord.word)
+                    .outerjoin(WordStatistics, WordStatistics.word_id == ExampleWord.word_id)
                     .where(
                         Example.is_active == True,
                         Example.type == ExampleType.EXPLORE,
                         Example.is_pristine == True,
                         ExampleWord.word_id == word.id,
-                        Word.is_learned == False,
+                        or_(WordStatistics.is_learned == False, WordStatistics.id == None),
                         Word.is_active == True
                     )
                 )
@@ -1197,11 +1169,6 @@ def get_batch_words(db: Session, batch_id: int, user_id: int) -> Optional[dict]:
         select(Word).where(Word.batch_id == batch_id)
     ).all()
 
-    # Calcular progreso desde las palabras
-    total_words = len(words)
-    learned_words = sum(1 for w in words if w.is_learned)
-    batch_progress = round((learned_words / total_words * 100), 2) if total_words > 0 else 0.0
-
     # Obtener estadísticas de palabras
     word_stats_map = {}
     for w in words:
@@ -1209,6 +1176,11 @@ def get_batch_words(db: Session, batch_id: int, user_id: int) -> Optional[dict]:
             select(WordStatistics).where(WordStatistics.word_id == w.id)
         ).first()
         word_stats_map[w.id] = stats
+
+    # Calcular progreso desde las palabras
+    total_words = len(words)
+    learned_words = sum(1 for w in words if word_stats_map.get(w.id) and word_stats_map[w.id].is_learned)
+    batch_progress = round((learned_words / total_words * 100), 2) if total_words > 0 else 0.0
 
     return {
         "batch_id": batch.id,
@@ -1223,7 +1195,7 @@ def get_batch_words(db: Session, batch_id: int, user_id: int) -> Optional[dict]:
                 "meaning": w.meaning,
                 "type": w.type,
                 "level": w.level,
-                "is_learned": w.is_learned,
+                "is_learned": word_stats_map[w.id].is_learned if word_stats_map[w.id] else False,
                 "is_active": w.is_active,
                 "times_seen": word_stats_map[w.id].times_seen if word_stats_map[w.id] else 0,
                 "last_seen_at": word_stats_map[w.id].last_seen_at if word_stats_map[w.id] else None

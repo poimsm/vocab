@@ -178,7 +178,8 @@ def get_explore_feed(
                 )
             )
             # Verificar si al menos una palabra no ha sido aprendida
-            if not word.is_learned:
+            word_is_learned = any(stat.is_learned for stat in word.statistics) if word.statistics else False
+            if not word_is_learned:
                 has_unlearned_word = True
 
         # Solo incluir el ejemplo si tiene al menos una palabra no aprendida

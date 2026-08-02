@@ -67,9 +67,6 @@ class BatchSource(str, Enum):
 
 
 class BatchFeaturedType(str, Enum):
-    ACTIVE_LEARNING = "active_learning"  # En estudio activo
-    REVIEW = "review"                    # Revisión de palabras completadas
-    SPACED_REPETITION = "spaced_repetition"  # Memoria espaciada
     EXAMPLE = "example"                  # Generación de ejemplos
     BEST_OPTIONS = "best_options"        # Ejercicios de opciones
 

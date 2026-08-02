@@ -11,7 +11,7 @@ from fastapi import (APIRouter, Depends, HTTPException,
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 from db import get_db, engine
-from models import WordLevel, ExampleType, User, BatchSource, Word
+from models import WordLevel, ExampleType, User, BatchSource, Word, WordStatistics
 from helpers import TextFormatter, chunk_list
 from auth import get_current_user
 from tasks.words import process_bulk_words_task
@@ -45,7 +45,7 @@ def get_words(
             "level": WordLevel.to_str(w.level),
             "context": TextFormatter.capitalize(w.context),
             "is_favorite": w.is_favorite,
-            "is_learned": w.is_learned,
+            "is_learned": any(stat.is_learned for stat in w.statistics) if w.statistics else False,
             "total_examples": total_examples
         }
         for w, total_examples in paginated_data["items"]
@@ -77,6 +77,8 @@ def get_word(
         if ew.example.is_active and ew.example.type == ExampleType.INITIAL
     ]
 
+    is_learned = any(stat.is_learned for stat in word.statistics) if word.statistics else False
+
     return {
         "id": word.id,
         "main": TextFormatter.capitalize(word.main),
@@ -88,7 +90,7 @@ def get_word(
         "context": TextFormatter.capitalize(word.context),
         "source_text": word.source_text,
         "is_favorite": word.is_favorite,
-        "is_learned": word.is_learned,
+        "is_learned": is_learned,
         "created_at": word.created_at,
         "total_examples": explore_examples_count,
         "examples": initial_examples
@@ -300,9 +302,12 @@ def mark_word_learned(
     if not word or word.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Palabra no encontrada")
 
-    word.is_learned = True
-    word.learned_at = datetime.now(timezone.utc)
-    db.add(word)
+    # Marcar como aprendida en todos los registros de WordStatistics
+    from models import WordStatistics
+    word_stats = db.exec(select(WordStatistics).where(WordStatistics.word_id == word_id)).all()
+    for stat in word_stats:
+        stat.is_learned = True
+        db.add(stat)
     db.commit()
 
     # RECALCULAR PROGRESO DEL LOTE AUTOMÁTICAMENTE
@@ -362,11 +367,12 @@ def toggle_word_learned(word_id: int, db: Session = Depends(get_db)):
         logger.warning(f"[toggle_word_learned] Word {word_id} not found")
         raise HTTPException(status_code=404, detail="Word not found")
 
-    logger.info(f"[toggle_word_learned] Word {word_id} marked as {'learned' if word.is_learned else 'not learned'}")
+    is_learned = any(stat.is_learned for stat in word.statistics) if word.statistics else False
+    logger.info(f"[toggle_word_learned] Word {word_id} marked as {'learned' if is_learned else 'not learned'}")
     return {
         "id": word.id,
-        "is_learned": word.is_learned,
-        "message": f"Word marked as {'learned' if word.is_learned else 'not learned'}"
+        "is_learned": is_learned,
+        "message": f"Word marked as {'learned' if is_learned else 'not learned'}"
     }
 
 
@@ -409,13 +415,14 @@ def export_words_csv(db: Session = Depends(get_db)):
     ])
 
     for word in words_list:
+        is_learned = any(stat.is_learned for stat in word.statistics) if word.statistics else False
         writer.writerow([
             word.id,
             word.main,
             word.type,
             word.meaning,
             word.is_active,
-            word.is_learned
+            is_learned
         ])
 
     output.seek(0)
