@@ -3,6 +3,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import api from '@/utils/api'
+import LoadingCard from '@/components/LoadingCard.vue'
 
 // ─── Types ───
 interface WordExample {
@@ -36,6 +37,7 @@ const items = ref<BestOptionItem[]>([])
 const currentIndex = ref(0)
 const error = ref<string | null>(null)
 const generating = ref(false)
+const noWords = ref(false)
 const isPolling = ref(false)
 const pollTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 
@@ -44,7 +46,7 @@ const showResult = ref(false)
 const showWordDetail = ref(false)
 
 const BATCH_SIZE = 4
-const POLL_INTERVAL = 2000
+const POLL_INTERVAL = 3000
 
 // ─── Computed ───
 const currentItem = computed(() => {
@@ -89,6 +91,12 @@ function startPolling() {
         const { data } = await api.get('/best-options/explore', { params: { limit: BATCH_SIZE } })
         if (data.status === 'generating') {
           poll()
+          return
+        }
+        if (data.status === 'no_words') {
+          isPolling.value = false
+          generating.value = false
+          noWords.value = true
           return
         }
         isPolling.value = false
@@ -160,11 +168,18 @@ function loadItems(raw: any[]) {
 
 async function fetchItems() {
   if (generating.value && !isPolling.value) return
+  generating.value = true
+  noWords.value = false
   error.value = null
   try {
     const { data } = await api.get('/best-options/explore', { params: { limit: BATCH_SIZE } })
     if (data.status === 'generating') {
       startPolling()
+      return
+    }
+    if (data.status === 'no_words') {
+      generating.value = false
+      noWords.value = true
       return
     }
     generating.value = false
@@ -226,10 +241,13 @@ onUnmounted(stopPolling)
 
 <template>
   <div class="best-options-view">
-    <!-- Generating -->
-    <div v-if="generating" class="center-state">
-      <div class="spinner"></div>
-      <p>Generating questions…</p>
+    <!-- Loading / Generating State -->
+    <LoadingCard v-if="generating" message="Generating..." />
+
+    <!-- No Words State -->
+    <div v-else-if="noWords" class="center-state">
+      <p>No more words to review</p>
+      <button class="retry" @click="fetchItems">Try Again</button>
     </div>
 
     <!-- Error -->
@@ -331,7 +349,6 @@ onUnmounted(stopPolling)
   align-items: center;
   justify-content: center;
   min-height: 100%;
-  padding: 20px 16px;
 }
 
 .center-state {

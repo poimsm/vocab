@@ -51,9 +51,23 @@ def get_best_options(
     is_refilling = crud.is_queue_refilling(db, current_user.id, QueueType.BEST_OPTION)
 
     if len(pending_items) < limit and not is_refilling:
-        logger.info(f"[get_best_options] Queue has {len(pending_items)} items, less than {limit}. Triggering refill task.")
-        refill_best_options_queue_task.delay(user_id=current_user.id)
-        is_refilling = True  # Acaba de dispararse
+        # Verificar si hay palabras disponibles antes de disparar refill
+        from batch_manager import BatchManager
+        from models import FeaturedType
+        manager = BatchManager(db)
+        available_words = manager.get_words_with_transition(
+            user_id=current_user.id,
+            featured_type=FeaturedType.BEST_OPTIONS,
+            limit=1
+        )
+
+        if available_words:
+            logger.info(f"[get_best_options] Queue has {len(pending_items)} items, less than {limit}. Triggering refill task.")
+            refill_best_options_queue_task.delay(user_id=current_user.id)
+            is_refilling = True  # Acaba de dispararse
+        else:
+            logger.info(f"[get_best_options] No words available for BEST_OPTIONS refill for user {current_user.id}")
+            is_refilling = False
 
     # 3. Cambiar estado de PENDING a SENT para los ejercicios que se van a devolver
     for item in pending_items:
@@ -133,21 +147,15 @@ def resolve_best_option(
 ):
     """
     Actualiza el estado de un best_option de SENT a RESOLVED.
+    Incrementa estadísticas de la palabra (times_seen).
     Auto-encola el siguiente ejercicio de la misma palabra si existe.
     """
     logger.debug(f"[resolve_best_option] User {current_user.id}: Resolving best option queue item {queue_item_id}")
 
-    # Buscar el item en la cola
-    queue_item = db.exec(
-        select(BestOptionQueue)
-        .where(
-            BestOptionQueue.id == queue_item_id,
-            BestOptionQueue.user_id == current_user.id,
-            BestOptionQueue.status == QueueStatus.SENT,
-            BestOptionQueue.is_active == True
-        )
-        .options(joinedload(BestOptionQueue.best_option))
-    ).first()
+    # Resolve and increment word statistics
+    queue_item = crud.resolve_and_increment_best_option(
+        db, queue_item_id, current_user.id
+    )
 
     if not queue_item:
         logger.warning(f"[resolve_best_option] Queue item {queue_item_id} not found or not in SENT status")
@@ -160,11 +168,6 @@ def resolve_best_option(
     best_option = queue_item.best_option
     word_id = best_option.word_id
     current_sequence = best_option.sequence_order
-
-    # Cambiar estado a RESOLVED
-    queue_item.status = QueueStatus.RESOLVED
-    db.add(queue_item)
-    db.commit()
 
     # Auto-encolar el siguiente ejercicio de la misma palabra (si existe)
     next_queue_item = crud.enqueue_next_best_option_for_word(

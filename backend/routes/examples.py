@@ -145,7 +145,7 @@ def get_explore_feed(
                 active_batch_id=None,
                 active_batch_title=None,
                 total_queue_remaining=0,
-                status="ok"
+                status="no_words"
             )
 
         # Generar o rellenar la cola en segundo plano vía Celery para que la API no se bloquee
@@ -217,12 +217,20 @@ def get_explore_feed(
             ExampleQueue.user_id == current_user.id)
     ).one() or 0
 
+    # Determinar status
+    if len(formatted_examples) > 0:
+        status = "ok"
+    elif is_generating:
+        status = "generating"
+    else:
+        status = "no_words"
+
     logger.info(
-        f"[get_explore_feed] Returning {len(formatted_examples)} examples. Remaining in queue: {remaining_count}. Status: {'generating' if is_generating else 'ok'}")
+        f"[get_explore_feed] Returning {len(formatted_examples)} examples. Remaining in queue: {remaining_count}. Status: {status}")
     return ExploreResponse(
         examples=formatted_examples,
         total_queue_remaining=remaining_count,
-        status="generating" if is_generating else "ok"
+        status=status
     )
 
 

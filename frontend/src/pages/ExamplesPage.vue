@@ -1,8 +1,9 @@
 <!-- ExamplesView.vue (conectado a API) -->
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import api from '@/utils/api'
+import LoadingCard from '@/components/LoadingCard.vue'
 
 // ─── Types ───
 interface WordInExample {
@@ -34,11 +35,15 @@ const currentIndex = ref(0)
 const loading = ref(false)
 const error = ref<string | null>(null)
 const generating = ref(false)
+const noWords = ref(false)
+const isPolling = ref(false)
+const pollTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 
 const selectedWord = ref<WordDetail | null>(null)
 const isMobileDetailOpen = ref(false)
 
 const BATCH_SIZE = 4
+const POLL_INTERVAL = 3000
 
 // ─── Computed ───
 const currentExample = computed(() => {
@@ -163,9 +168,76 @@ function speakExample() {
 }
 
 
-async function fetchExamples() {
-  if (generating.value) return
+// ─── Polling ───
+function startPolling() {
+  if (isPolling.value) return
+  isPolling.value = true
   generating.value = true
+
+  const poll = () => {
+    pollTimer.value = setTimeout(async () => {
+      try {
+        const response = await api.get('/examples/explore', {
+          params: { limit: BATCH_SIZE }
+        })
+
+        if (response.data.status === 'generating') {
+          poll()
+          return
+        }
+
+        if (response.data.status === 'no_words') {
+          isPolling.value = false
+          generating.value = false
+          noWords.value = true
+          return
+        }
+
+        isPolling.value = false
+        generating.value = false
+        loadExamples(response.data)
+      } catch (e: any) {
+        isPolling.value = false
+        generating.value = false
+        error.value = e.response?.data?.message || e.message || 'Failed to load examples'
+      }
+    }, POLL_INTERVAL)
+  }
+  poll()
+}
+
+function stopPolling() {
+  if (pollTimer.value) {
+    clearTimeout(pollTimer.value)
+    pollTimer.value = null
+  }
+  isPolling.value = false
+}
+
+function loadExamples(data: any) {
+  const rawExamples = data.examples || []
+  const newExamples: ExampleItem[] = rawExamples.map((item: any) => ({
+    id: item.id,
+    text: item.text,
+    origin: data.active_batch_title || 'General',
+    words: (item.target_words || []).map((w: any) => ({
+      word_id: w.id,
+      main: w.main,
+      text_form: w.main
+    }))
+  }))
+
+  if (newExamples.length > 0 && newExamples[0]) {
+    examples.value = newExamples
+    currentIndex.value = 0
+    fireAndForgetResolve(newExamples[0].id)
+  }
+}
+
+async function fetchExamples() {
+  if (generating.value && !isPolling.value) return
+  generating.value = true
+  noWords.value = false
   error.value = null
 
   try {
@@ -177,30 +249,22 @@ async function fetchExamples() {
 
     const data = response.data
 
-    // 1. Accedemos a data.examples (con fallback a array vacío si no existe)
-    const rawExamples = data.examples || []
-
-    // 2. Mapeamos respetando la estructura real que envía la API
-    const newExamples: ExampleItem[] = rawExamples.map((item: any) => ({
-      id: item.id,
-      text: item.text,
-      origin: data.active_batch_title || 'General',
-      words: (item.target_words || []).map((w: any) => ({
-        word_id: w.id,
-        main: w.main,
-        text_form: w.main // O la propiedad que represente la forma inflectada
-      }))
-    }))
-
-    if (newExamples.length > 0 && newExamples[0]) {
-      examples.value = newExamples
-      currentIndex.value = 0
-      fireAndForgetResolve(newExamples[0].id)
+    if (data.status === 'generating') {
+      startPolling()
+      return
     }
-  } catch (e: any) {
-    error.value = e.response?.data?.message || e.message || 'Failed to generate examples'
-  } finally {
+
+    if (data.status === 'no_words') {
+      generating.value = false
+      noWords.value = true
+      return
+    }
+
     generating.value = false
+    loadExamples(data)
+  } catch (e: any) {
+    generating.value = false
+    error.value = e.response?.data?.message || e.message || 'Failed to generate examples'
   }
 }
 
@@ -306,14 +370,21 @@ onMounted(() => {
   // Preload voices for speech synthesis
   window.speechSynthesis?.getVoices()
 })
+
+onUnmounted(() => {
+  stopPolling()
+})
 </script>
 
 <template>
   <div class="examples-view">
-    <!-- Loading State -->
-    <div v-if="generating && examples.length === 0" class="loading-state">
-      <div class="spinner"></div>
-      <p>Generating examples...</p>
+    <!-- Loading / Generating State -->
+    <LoadingCard v-if="generating && examples.length === 0" message="Generating..." />
+
+    <!-- No Words State -->
+    <div v-else-if="noWords" class="empty-state">
+      <p>No more words to review</p>
+      <button class="retry-btn" @click="fetchExamples">Try Again</button>
     </div>
 
     <!-- Error State -->

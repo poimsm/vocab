@@ -946,6 +946,77 @@ def resolve_and_increment_example(db: Session, example_id: int, user_id: int) ->
     return example
 
 
+def resolve_and_increment_best_option(db: Session, queue_item_id: int, user_id: int) -> Optional[BestOptionQueue]:
+    """
+    Resolve a best_option exercise and increment word statistics.
+    - Updates WordStatistics.times_seen for type BEST_OPTIONS
+    - Evaluates if word is learned based on cycle count
+    - Marks queue_item as RESOLVED
+    """
+    queue_item = db.exec(
+        select(BestOptionQueue)
+        .where(
+            BestOptionQueue.id == queue_item_id,
+            BestOptionQueue.user_id == user_id,
+            BestOptionQueue.status == QueueStatus.SENT,
+            BestOptionQueue.is_active == True
+        )
+        .options(joinedload(BestOptionQueue.best_option).joinedload(BestOption.word))
+    ).first()
+
+    if not queue_item:
+        return None
+
+    best_option = queue_item.best_option
+    word = best_option.word
+
+    if not word:
+        return None
+
+    now_utc = datetime.now(timezone.utc)
+
+    # Get TARGET_CYCLE_SEEN from database configuration
+    target_cycle_seen = get_target_cycle_seen(db)
+
+    # Update WordStatistics for BEST_OPTIONS type
+    featured_type = models.FeaturedType.BEST_OPTIONS
+    stats = db.exec(
+        select(WordStatistics).where(
+            WordStatistics.word_id == word.id,
+            WordStatistics.type == featured_type
+        )
+    ).first()
+
+    if not stats:
+        stats = WordStatistics(word_id=word.id, type=featured_type)
+        db.add(stats)
+        db.flush()
+
+    stats.times_seen += 1
+    stats.current_cycle_seen += 1
+    stats.last_seen_at = now_utc
+    db.add(stats)
+
+    # Evaluate if word is learned
+    if stats.current_cycle_seen >= target_cycle_seen and not stats.is_learned:
+        stats.is_learned = True
+        logger.info(f"[resolve_and_increment_best_option] Word {word.id} ({word.main}) marked as LEARNED for type {featured_type.value} (current_cycle_seen={stats.current_cycle_seen})")
+
+    db.add(word)
+
+    # Mark queue_item as RESOLVED
+    queue_item.status = QueueStatus.RESOLVED
+    db.add(queue_item)
+
+    # Update batch status if needed
+    if word.batch_id:
+        _check_and_update_batch_status(db, word.batch_id)
+
+    db.commit()
+    db.refresh(queue_item)
+    return queue_item
+
+
 def _check_and_update_batch_status(db: Session, batch_id: int):
     """
     DEPRECATED: El estado ahora se maneja en BatchFeatured, no en Batch.
