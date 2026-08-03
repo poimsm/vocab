@@ -10,6 +10,7 @@ from logging_config import logger
 
 import crud
 from batch_manager import BatchManager
+from config_manager import ConfigManager
 
 import ai
 import models
@@ -34,69 +35,6 @@ from models import (
     QueueRefillStatus,
     QueueType,
 )
-
-# ==========================================
-# GLOBAL CONFIGURATION HELPERS
-# ==========================================
-
-def get_config_value(db: Session, key: str, default_value: Any = None) -> Any:
-    """
-    Get a global configuration value from the database.
-    Returns the value as string, or default_value if not found.
-    """
-    try:
-        config = db.exec(
-            select(GlobalConfiguration).where(GlobalConfiguration.key == key)
-        ).first()
-        if config:
-            logger.debug(f"[get_config_value] Retrieved config {key}: {config.value}")
-            return config.value
-        logger.debug(f"[get_config_value] Config {key} not found, using default: {default_value}")
-        return default_value
-    except Exception as e:
-        logger.warning(f"[get_config_value] Error retrieving config {key}: {str(e)}, using default: {default_value}")
-        return default_value
-
-
-def get_config_int(db: Session, key: str, default_value: int) -> int:
-    """Get a global configuration value as integer."""
-    value = get_config_value(db, key, str(default_value))
-    try:
-        return int(value)
-    except (ValueError, TypeError):
-        logger.warning(f"[get_config_int] Could not convert config {key} to int: {value}, using default: {default_value}")
-        return default_value
-
-
-def get_target_cycle_seen(db: Session) -> int:
-    """Get TARGET_CYCLE_SEEN configuration (how many times word must be seen to mark as learned)."""
-    return get_config_int(db, "TARGET_CYCLE_SEEN", 1)
-
-
-def get_threshold_for_transition(db: Session) -> int:
-    """Get THRESHOLD_FOR_TRANSITION configuration (min unlearned words to trigger batch transition)."""
-    return get_config_int(db, "THRESHOLD_FOR_TRANSITION", 4)
-
-
-def get_chunk_size(db: Session) -> int:
-    """Get CHUNK_SIZE configuration (size for bulk word import chunks)."""
-    return get_config_int(db, "CHUNK_SIZE", 15)
-
-
-def get_batch_default_capacity(db: Session) -> int:
-    """Get BATCH_DEFAULT_CAPACITY configuration (max words per batch)."""
-    return get_config_int(db, "BATCH_DEFAULT_CAPACITY", 15)
-
-
-def get_default_priority_words_limit(db: Session) -> int:
-    """Get DEFAULT_PRIORITY_WORDS_LIMIT configuration."""
-    return get_config_int(db, "DEFAULT_PRIORITY_WORDS_LIMIT", 10)
-
-
-def get_refill_queue_emergency_limit(db: Session) -> int:
-    """Get REFILL_QUEUE_EMERGENCY_LIMIT configuration."""
-    return get_config_int(db, "REFILL_QUEUE_EMERGENCY_LIMIT", 8)
-
 
 # ==========================================
 # QUEUE REFILL STATUS MANAGEMENT
@@ -883,7 +821,8 @@ def resolve_and_increment_example(db: Session, example_id: int, user_id: int) ->
     db.add(example)
 
     # Get TARGET_CYCLE_SEEN from database configuration
-    target_cycle_seen = get_target_cycle_seen(db)
+    config = ConfigManager(db)
+    target_cycle_seen = config.get_target_cycle_seen()
 
     # 2. Incrementar contadores en palabras y evaluar si están aprendidas
     seen_word_ids = set()
@@ -976,7 +915,8 @@ def resolve_and_increment_best_option(db: Session, queue_item_id: int, user_id: 
     now_utc = datetime.now(timezone.utc)
 
     # Get TARGET_CYCLE_SEEN from database configuration
-    target_cycle_seen = get_target_cycle_seen(db)
+    config = ConfigManager(db)
+    target_cycle_seen = config.get_target_cycle_seen()
 
     # Update WordStatistics for BEST_OPTIONS type
     featured_type = models.FeaturedType.BEST_OPTIONS

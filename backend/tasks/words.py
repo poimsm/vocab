@@ -9,6 +9,7 @@ from helpers import chunk_list
 import crud
 import ai
 from logging_config import logger
+from config_manager import ConfigManager
 
 
 @celery_app.task(name="tasks.words.process_bulk_words")
@@ -18,7 +19,8 @@ def process_bulk_words_task(texts: List[str], user_id: int):
     )
 
     with Session(engine) as db:
-        chunk_size = crud.get_chunk_size(db)
+        config = ConfigManager(db)
+        chunk_size = config.get_chunk_size()
 
     text_chunks = list(chunk_list(texts, chunk_size))
 

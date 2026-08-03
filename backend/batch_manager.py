@@ -521,9 +521,11 @@ class BatchManager:
 
                     if learned_words_for_type >= total_words_in_batch:
                         # Todas las palabras del batch están aprendidas para este tipo
-                        batch_featured.status = BatchFeaturedStatus.MASTERED
-                        batch_featured.completed_at = datetime.now(timezone.utc)
-                        self.db.add(batch_featured)
+                        # Solo marcar como MASTERED si el Batch está COMPLETED
+                        if batch.status == BatchStatus.COMPLETED:
+                            batch_featured.status = BatchFeaturedStatus.MASTERED
+                            batch_featured.completed_at = datetime.now(timezone.utc)
+                            self.db.add(batch_featured)
 
         self.db.commit()
         return result_words

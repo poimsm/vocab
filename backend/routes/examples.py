@@ -13,6 +13,7 @@ from auth import get_current_user
 from models import (User, ExampleQueue, Example, Word,
                     Batch, QueueStatus, ExampleWord, QueueType, FeaturedType)
 from batch_manager import BatchManager
+from config_manager import ConfigManager
 
 router = APIRouter()
 
@@ -127,7 +128,8 @@ def get_explore_feed(
     # 2. Si la cola está vacía o tiene muy pocos elementos, ejecutamos el generador de emergencia
     if len(queued_items) < limit:
         # Obtenemos las palabras prioritarias respetando la lógica de Lotes + Transición
-        refill_limit = crud.get_refill_queue_emergency_limit(db)
+        config = ConfigManager(db)
+        refill_limit = config.get_refill_queue_emergency_limit()
         manager = BatchManager(db)
         priority_words = manager.get_words_with_transition(
             user_id=current_user.id,
