@@ -15,10 +15,15 @@ class ExploreWordSchema(BaseModel):
     batch_id: Optional[int] = None
 
 
+class TextSegmentSchema(BaseModel):
+    text: str
+    is_highlighted: bool = False
+    target_word: Optional[ExploreWordSchema] = None
+
+
 class ExploreExampleSchema(BaseModel):
     id: int
-    text: str
-    target_words: List[ExploreWordSchema]
+    text: List[TextSegmentSchema]
 
 
 class ExploreResponse(BaseModel):

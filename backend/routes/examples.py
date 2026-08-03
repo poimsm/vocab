@@ -170,34 +170,26 @@ def get_explore_feed(
         logger.info(
             f"Example {example.id}: example_words count = {len(example.example_words) if example.example_words else 0}")
 
-        # Mapeamos las palabras involucradas en este ejemplo
-        words_in_example = []
+        # Verificar si el ejemplo tiene al menos una palabra no aprendida
         has_unlearned_word = False
-        for word in example.words:  # Asumiendo relación N:M entre Example y Word
-            words_in_example.append(
-                ExploreWordSchema(
-                    id=word.id,
-                    main=word.main,
-                    type=word.type,
-                    meaning=word.meaning,
-                    level=word.level,
-                    is_boosted=word.is_boosted,
-                    batch_id=word.batch_id
-                )
-            )
-            # Verificar si al menos una palabra no ha sido aprendida
-            # Una palabra está aprendida solo si TODOS sus stats del tipo EXAMPLE están marcados como learned
-            word_is_learned = all(stat.is_learned for stat in word.statistics if stat.type == FeaturedType.EXAMPLE) if word.statistics else False
-            if not word_is_learned:
-                has_unlearned_word = True
+        for ew in example.example_words:
+            word = ew.word
+            if word:
+                # Una palabra está aprendida solo si TODOS sus stats del tipo EXAMPLE están marcados como learned
+                word_is_learned = all(stat.is_learned for stat in word.statistics if stat.type == FeaturedType.EXAMPLE) if word.statistics else False
+                if not word_is_learned:
+                    has_unlearned_word = True
+                    break
 
         # Solo incluir el ejemplo si tiene al menos una palabra no aprendida
         if has_unlearned_word:
+            # Segmentar el texto basado en text_form de cada ExampleWord
+            text_segments = crud._segment_example_text(example.text, example.example_words)
+
             formatted_examples.append(
                 ExploreExampleSchema(
                     id=example.id,
-                    text=example.text,
-                    target_words=words_in_example
+                    text=text_segments
                 )
             )
 

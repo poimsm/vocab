@@ -334,6 +334,179 @@ def get_words_least_seen_ordered(db: Session, user_id: int, limit: int = 10) -> 
 # EJEMPLOS (EXAMPLES)
 # ==========================================
 
+def _segment_example_text(example_text: str, example_words: List[Any]) -> List[dict]:
+    """
+    Segmenta el texto del ejemplo en partes resaltadas y no resaltadas basado en text_form.
+
+    Args:
+        example_text: El texto completo del ejemplo
+        example_words: Lista de ExampleWord con text_form e información de la palabra
+
+    Returns:
+        Lista de diccionarios con estructura {text, is_highlighted, target_word}
+    """
+    if not example_words:
+        return [{"text": example_text, "is_highlighted": False}]
+
+    # Crear lista de (start_pos, end_pos, word_data) para cada occurrence de text_form
+    highlights = []
+
+    for ew in example_words:
+        text_form = ew.text_form or ""
+        if not text_form:
+            continue
+
+        # Buscar el text_form en el texto (case-insensitive)
+        text_lower = example_text.lower()
+        form_lower = text_form.lower()
+
+        # Buscar todas las ocurrencias (aunque típicamente hay una)
+        start = 0
+        while True:
+            pos = text_lower.find(form_lower, start)
+            if pos == -1:
+                break
+
+            word_data = {
+                "id": ew.word_id,
+                "main": ew.word.main if ew.word else "",
+                "type": ew.word.type if ew.word else "",
+                "meaning": ew.word.meaning if ew.word else "",
+                "level": ew.word.level if ew.word else None,
+                "is_boosted": ew.word.is_boosted if ew.word else False,
+                "batch_id": ew.word.batch_id if ew.word else None,
+            }
+
+            highlights.append({
+                "start": pos,
+                "end": pos + len(text_form),
+                "text": example_text[pos:pos + len(text_form)],
+                "word": word_data
+            })
+
+            start = pos + 1
+
+    if not highlights:
+        return [{"text": example_text, "is_highlighted": False}]
+
+    # Ordenar por posición y eliminar overlaps
+    highlights.sort(key=lambda x: x["start"])
+
+    # Construir segmentos
+    segments = []
+    current_pos = 0
+
+    for highlight in highlights:
+        # Texto antes del highlight
+        if current_pos < highlight["start"]:
+            segments.append({
+                "text": example_text[current_pos:highlight["start"]],
+                "is_highlighted": False
+            })
+
+        # Texto del highlight
+        segments.append({
+            "text": highlight["text"],
+            "is_highlighted": True,
+            "target_word": highlight["word"]
+        })
+
+        current_pos = highlight["end"]
+
+    # Texto al final
+    if current_pos < len(example_text):
+        segments.append({
+            "text": example_text[current_pos:],
+            "is_highlighted": False
+        })
+
+    return segments
+
+
+def _approximate_text_form(example_text: str, suggested_text_form: str) -> str:
+    """
+    Aproxima la forma correcta del text_form basada en cómo aparece en el texto del ejemplo.
+
+    Args:
+        example_text: El texto completo del ejemplo
+        suggested_text_form: La forma sugerida por IA (puede ser incorrecta)
+
+    Returns:
+        La forma más aproximada encontrada en el texto, o la sugerida si no se puede mejorar
+    """
+    if not suggested_text_form or not suggested_text_form.strip():
+        return ""
+
+    text_lower = example_text.lower()
+    suggested_lower = suggested_text_form.lower()
+
+    # 1. Buscar match exacto (case-insensitive)
+    if suggested_lower in text_lower:
+        # Recuperar la forma exacta como aparece en el texto
+        idx = text_lower.find(suggested_lower)
+        return example_text[idx:idx + len(suggested_text_form)]
+
+    # 2. Si no hay match exacto, intentar aproximar
+    words = suggested_lower.split()
+
+    if len(words) == 1:
+        # Palabra única: buscar variaciones flexionadas comunes
+        word = words[0]
+        # Buscar la palabra tal cual está en el texto
+        import re
+        pattern = r'\b' + re.escape(word) + r'\w*\b'
+        matches = re.finditer(pattern, text_lower)
+
+        if matches:
+            for match in matches:
+                found_word = example_text[match.start():match.end()]
+                # Preferir exacto, pero aceptar raíz similar
+                if found_word.lower() == word:
+                    return found_word
+
+            # Si no hay exacto, tomar el primer match
+            match = re.search(pattern, text_lower)
+            if match:
+                return example_text[match.start():match.end()]
+    else:
+        # Frase múltiple: intentar encontrar los componentes en orden
+        # Buscar en el texto las palabras de la frase propuesta
+        found_positions = []
+
+        for word in words:
+            import re
+            pattern = r'\b' + re.escape(word) + r'\w*\b'
+            match = re.search(pattern, text_lower)
+            if match:
+                found_positions.append((match.start(), match.end(), example_text[match.start():match.end()]))
+
+        # Si encontramos al menos una palabra
+        if found_positions:
+            # Si encontramos todas o la mayoría, reconstruir la frase
+            if len(found_positions) >= max(1, len(words) - 1):
+                # Ordenar por posición en el texto
+                found_positions.sort(key=lambda x: x[0])
+
+                # Si los matches están consecutivos (sin grandes gaps), recuperar todo
+                first_start = found_positions[0][0]
+                last_end = found_positions[-1][1]
+
+                # Verificar que no hay demasiado espacio entre ellos
+                gap = last_end - first_start
+                expected_length = sum(len(form) for _, _, form in found_positions) + (len(found_positions) - 1) * 2
+
+                if gap <= expected_length * 1.5:  # Permitir espacios y palabras pequeñas entre ellas
+                    reconstructed = example_text[first_start:last_end].strip()
+                    return reconstructed
+
+            # Si solo encontramos una palabra, devolver esa
+            if len(found_positions) == 1:
+                return found_positions[0][2]
+
+    # 3. Si no se puede aproximar, devolver la sugerencia original
+    return suggested_text_form
+
+
 def create_examples(db: Session, raw_examples: List[dict], example_type: ExampleType = ExampleType.EXPLORE) -> List[Example]:
     created = []
     for item in raw_examples:
@@ -350,10 +523,14 @@ def create_examples(db: Session, raw_examples: List[dict], example_type: Example
         for word in words_list:
             word_id = word.get("word_id") if isinstance(word, dict) else (word.id if hasattr(word, "id") else word)
             if word_id:
+                suggested_text_form = word.get("text_form", "") if isinstance(word, dict) else ""
+                # Aproximar la forma correcta del text_form basada en cómo aparece en el texto
+                corrected_text_form = _approximate_text_form(example.text, suggested_text_form)
+
                 assoc = ExampleWord(
                     example_id=example.id,
                     word_id=word_id,
-                    text_form=word.get("text_form", "") if isinstance(word, dict) else ""
+                    text_form=corrected_text_form
                 )
                 db.add(assoc)
 

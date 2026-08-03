@@ -6,17 +6,26 @@ import api from '@/utils/api'
 import LoadingCard from '@/components/LoadingCard.vue'
 
 // ─── Types ───
-interface WordInExample {
-  word_id: number
+interface TargetWord {
+  id: number
   main: string
-  text_form: string
+  type: string
+  meaning?: string
+  level?: number
+  is_boosted: boolean
+  batch_id?: number
+}
+
+interface TextSegment {
+  text: string
+  is_highlighted: boolean
+  target_word?: TargetWord
 }
 
 interface ExampleItem {
   id: number
-  text: string
+  text: TextSegment[]
   origin: string
-  words: WordInExample[]
 }
 
 interface WordDetail {
@@ -51,59 +60,11 @@ const currentExample = computed(() => {
   return examples.value[currentIndex.value]
 })
 
-const wordsInSentence = computed(() => {
+const textSegments = computed(() => {
   const ex = currentExample.value
   if (!ex) return []
-
-  let text = ex.text
-  const parts: { text: string; isHighlight: boolean; index: number }[] = []
-  let lastIndex = 0
-  let partIdx = 0
-
-  // Ordenar words por posición en el texto para procesar de izquierda a derecha
-  const sortedWords = [...ex.words].sort((a, b) => {
-    const idxA = text.toLowerCase().indexOf(a.text_form.toLowerCase())
-    const idxB = text.toLowerCase().indexOf(b.text_form.toLowerCase())
-    return idxA - idxB
-  })
-
-  // Track posiciones ya usadas para evitar overlaps
-  const usedRanges: [number, number][] = []
-
-  for (const word of sortedWords) {
-    const lowerText = text.toLowerCase()
-    const lowerForm = word.text_form.toLowerCase()
-    let searchStart = 0
-
-    // Buscar una ocurrencia que no esté en un rango usado
-    while (true) {
-      const idx = lowerText.indexOf(lowerForm, searchStart)
-      if (idx === -1) break
-
-      const endIdx = idx + word.text_form.length
-      const overlaps = usedRanges.some(([s, e]) => !(endIdx <= s || idx >= e))
-
-      if (!overlaps) {
-        // Añadir texto antes
-        if (idx > lastIndex) {
-          parts.push({ text: text.slice(lastIndex, idx), isHighlight: false, index: partIdx++ })
-        }
-        // Añadir palabra resaltada (usar el texto original para preservar casing)
-        parts.push({ text: text.slice(idx, endIdx), isHighlight: true, index: partIdx++ })
-        usedRanges.push([idx, endIdx])
-        lastIndex = endIdx
-        break
-      }
-      searchStart = idx + 1
-    }
-  }
-
-  // Añadir resto del texto
-  if (lastIndex < text.length) {
-    parts.push({ text: text.slice(lastIndex), isHighlight: false, index: partIdx++ })
-  }
-
-  return parts
+  // Los segmentos ya vienen precalculados del backend
+  return ex.text
 })
 
 const frequencySegments = computed(() => {
@@ -163,7 +124,9 @@ function speakWord() {
 function speakExample() {
   const ex = currentExample.value
   if (ex) {
-    speak(ex.text)
+    // Construir el texto completo desde los segmentos
+    const fullText = ex.text.map(segment => segment.text).join('')
+    speak(fullText)
   }
 }
 
@@ -218,13 +181,8 @@ function loadExamples(data: any) {
   const rawExamples = data.examples || []
   const newExamples: ExampleItem[] = rawExamples.map((item: any) => ({
     id: item.id,
-    text: item.text,
-    origin: data.active_batch_title || 'General',
-    words: (item.target_words || []).map((w: any) => ({
-      word_id: w.id,
-      main: w.main,
-      text_form: w.main
-    }))
+    text: item.text || [],
+    origin: data.active_batch_title || 'General'
   }))
 
   if (newExamples.length > 0 && newExamples[0]) {
@@ -302,8 +260,8 @@ async function toggleExampleFav() {
 }
 
 // ─── Methods ───
-function handleWordClick(word: WordInExample) {
-  fetchWordDetail(word.word_id)
+function handleWordClick(word: TargetWord) {
+  fetchWordDetail(word.id)
   if (window.innerWidth <= 768) {
     isMobileDetailOpen.value = true
   }
@@ -357,10 +315,11 @@ function nextExample() {
 function shareExample() {
   const ex = currentExample.value
   if (!ex) return
+  const fullText = ex.text.map(segment => segment.text).join('')
   if (navigator.share) {
-    navigator.share({ text: ex.text })
+    navigator.share({ text: fullText })
   } else {
-    navigator.clipboard.writeText(ex.text)
+    navigator.clipboard.writeText(fullText)
     alert('Copied to clipboard!')
   }
 }
@@ -403,12 +362,12 @@ onUnmounted(() => {
     <div v-else class="sentence-area" :class="{ 'panel-open': selectedWord && !isMobileDetailOpen }">
       <div class="sentence-wrapper">
         <p class="sentence-text">
-          <template v-for="part in wordsInSentence" :key="part.index">
-            <span v-if="part.isHighlight" class="word-highlight"
-              @click="handleWordClick(currentExample!.words.find(w => w.text_form.toLowerCase() === part.text.toLowerCase())!)">
-              {{ part.text }}
+          <template v-for="(segment, idx) in textSegments" :key="idx">
+            <span v-if="segment.is_highlighted && segment.target_word" class="word-highlight"
+              @click="handleWordClick(segment.target_word)">
+              {{ segment.text }}
             </span>
-            <span v-else>{{ part.text }}</span>
+            <span v-else>{{ segment.text }}</span>
           </template>
         </p>
         <!-- Play full sentence audio -->
