@@ -42,7 +42,7 @@ def seed_global_configurations():
     configs_to_load = [
         GlobalConfiguration(
             key="TARGET_CYCLE_SEEN",
-            value="1",
+            value="3",
             description="Number of times a word must be seen in the current cycle to be marked as learned"
         ),
         GlobalConfiguration(
