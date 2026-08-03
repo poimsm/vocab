@@ -47,15 +47,13 @@ def get_best_options(
 
     logger.debug(f"[get_best_options] Found {len(pending_items)} pending items from queue")
 
-    # 2. Si hay menos de 'limit' ejercicios, dispara la tarea de refill en background
-    # Pero solo si no hay un refill ya en progreso
-    if len(pending_items) < limit:
-        is_refilling = crud.is_queue_refilling(db, current_user.id, QueueType.BEST_OPTION)
-        if is_refilling:
-            logger.info(f"[get_best_options] Queue refill already in progress for user {current_user.id}. Skipping.")
-        else:
-            logger.info(f"[get_best_options] Queue has {len(pending_items)} items, less than {limit}. Triggering refill task.")
-            refill_best_options_queue_task.delay(user_id=current_user.id)
+    # 2. Determinar estado y disparar refill si es necesario
+    is_refilling = crud.is_queue_refilling(db, current_user.id, QueueType.BEST_OPTION)
+
+    if len(pending_items) < limit and not is_refilling:
+        logger.info(f"[get_best_options] Queue has {len(pending_items)} items, less than {limit}. Triggering refill task.")
+        refill_best_options_queue_task.delay(user_id=current_user.id)
+        is_refilling = True  # Acaba de dispararse
 
     # 3. Cambiar estado de PENDING a SENT para los ejercicios que se van a devolver
     for item in pending_items:
@@ -110,13 +108,20 @@ def get_best_options(
         )
     ).one() or 0
 
-    is_generating = len(pending_items) < limit
-    logger.info(f"[get_best_options] Returning {len(formatted_options)} best options. Remaining in queue: {remaining_count}. Status: {'generating' if is_generating else 'ok'}")
+    # Determinar el estado de la respuesta
+    if len(formatted_options) > 0:
+        status = "ok"
+    elif is_refilling:
+        status = "generating"
+    else:
+        status = "no_words"
+
+    logger.info(f"[get_best_options] Returning {len(formatted_options)} best options. Remaining in queue: {remaining_count}. Status: {status}")
 
     return {
-        "best_options": formatted_options if not is_generating else [],
+        "best_options": formatted_options,
         "total_queue_remaining": remaining_count,
-        "status": "generating" if is_generating else "ok"
+        "status": status
     }
 
 

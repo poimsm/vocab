@@ -18,9 +18,10 @@ import models
 from models import (
     Batch,
     BatchFeatured,
-    BatchFeaturedType,
+    FeaturedType,
     BatchSource,
     BatchStatus,
+    BatchFeaturedStatus,
     Word,
     WordStatistics,
 )
@@ -91,7 +92,7 @@ class BatchManager:
 
         # Crear BatchFeatured de todos los tipos para cada batch creado
         for batch in affected_batches:
-            for featured_type in BatchFeaturedType:
+            for featured_type in FeaturedType:
                 self._create_or_update_batch_featured(
                     batch_id=batch.id,
                     featured_type=featured_type
@@ -131,7 +132,7 @@ class BatchManager:
         ).one() or 0
 
         title = batch_title or f"Lote {count + 1}"
-        status = BatchStatus.ACTIVE if source == BatchSource.BULK_IMPORT else BatchStatus.OPEN
+        status = BatchStatus.OPEN
 
         new_batch = Batch(
             user_id=user_id,
@@ -178,7 +179,7 @@ class BatchManager:
         self.db.flush()
 
         # Crear estadísticas para la palabra por cada tipo
-        for featured_type in BatchFeaturedType:
+        for featured_type in FeaturedType:
             stats = WordStatistics(
                 word_id=word.id,
                 type=featured_type
@@ -195,7 +196,7 @@ class BatchManager:
     def get_words_by_batch_featured_type(
         self,
         user_id: int,
-        featured_type: BatchFeaturedType,
+        featured_type: FeaturedType,
         limit: int = 50
     ) -> List[Word]:
         """
@@ -249,7 +250,7 @@ class BatchManager:
             select(Batch, BatchFeatured)
             .where(
                 Batch.user_id == user_id,
-                Batch.status.in_([BatchStatus.OPEN, BatchStatus.ACTIVE]),
+                Batch.status == BatchStatus.OPEN,
                 Batch.completed_at.is_(None)
             )
             .outerjoin(BatchFeatured, BatchFeatured.batch_id == Batch.id)
@@ -280,7 +281,7 @@ class BatchManager:
     def create_batch_featured(
         self,
         batch_id: int,
-        featured_type: BatchFeaturedType
+        featured_type: FeaturedType
     ) -> BatchFeatured:
         """
         Crea un BatchFeatured para un batch.
@@ -297,7 +298,7 @@ class BatchManager:
     def _create_or_update_batch_featured(
         self,
         batch_id: int,
-        featured_type: BatchFeaturedType
+        featured_type: FeaturedType
     ) -> BatchFeatured:
         """Crea o actualiza BatchFeatured."""
         batch = self.db.get(Batch, batch_id)
@@ -318,13 +319,11 @@ class BatchManager:
 
         # Crear nuevo
         words = batch.words or []
-        learned = sum(1 for w in words if w.statistics and any(stat.is_learned for stat in w.statistics))
+        learned = sum(1 for w in words if w.statistics and all(stat.is_learned for stat in w.statistics if stat.type == featured_type))
 
         featured = BatchFeatured(
             batch_id=batch_id,
             type=featured_type,
-            total_words=len(words),
-            learned_words=learned,
             mastery_progress=round((learned / len(words) * 100), 2) if words else 0.0
         )
         self.db.add(featured)
@@ -339,10 +338,8 @@ class BatchManager:
             return
 
         words = batch.words or []
-        learned = sum(1 for w in words if w.statistics and any(stat.is_learned for stat in w.statistics))
+        learned = sum(1 for w in words if w.statistics and all(stat.is_learned for stat in w.statistics if stat.type == featured.type))
 
-        featured.total_words = len(words)
-        featured.learned_words = learned
         featured.mastery_progress = round((learned / len(words) * 100), 2) if words else 0.0
         featured.last_activity_at = datetime.now(timezone.utc)
 
@@ -355,7 +352,7 @@ class BatchManager:
     def get_all_batch_featured(
         self,
         user_id: int,
-        featured_type: Optional[BatchFeaturedType] = None
+        featured_type: Optional[FeaturedType] = None
     ) -> List[Dict[str, Any]]:
         """
         Obtiene todos los BatchFeatured de un usuario, opcionalmente filtrados por tipo.
@@ -385,8 +382,6 @@ class BatchManager:
                 "batch_title": batch.title,
                 "type": featured.type.value,
                 "mastery_progress": featured.mastery_progress,
-                "total_words": featured.total_words,
-                "learned_words": featured.learned_words,
                 "completed_at": featured.completed_at,
                 "last_activity_at": featured.last_activity_at,
                 "days_since_activity": (datetime.now(timezone.utc) - featured.last_activity_at).days
@@ -420,7 +415,7 @@ class BatchManager:
     def get_words_with_transition(
         self,
         user_id: int,
-        featured_type: BatchFeaturedType,
+        featured_type: FeaturedType,
         limit: int = 10,
         threshold_for_transition: int = 4
     ) -> List[Word]:
@@ -450,7 +445,7 @@ class BatchManager:
             .where(
                 Batch.user_id == user_id,
                 BatchFeatured.type == featured_type,
-                BatchFeatured.status.in_([BatchStatus.ACTIVE, BatchStatus.OPEN])
+                BatchFeatured.status == BatchFeaturedStatus.ACTIVE
             )
             .order_by(Batch.created_at.asc())
         ).unique().all()
@@ -508,7 +503,7 @@ class BatchManager:
                 )
             ).first()
 
-            if batch_featured and batch_featured.status != BatchStatus.COMPLETED:
+            if batch_featured and batch_featured.status != BatchFeaturedStatus.MASTERED:
                 total_words_in_batch = self.db.exec(
                     select(func.count(Word.id)).where(Word.batch_id == batch.id, Word.is_active == True)
                 ).one() or 0
@@ -526,7 +521,7 @@ class BatchManager:
 
                     if learned_words_for_type >= total_words_in_batch:
                         # Todas las palabras del batch están aprendidas para este tipo
-                        batch_featured.status = BatchStatus.COMPLETED
+                        batch_featured.status = BatchFeaturedStatus.MASTERED
                         batch_featured.completed_at = datetime.now(timezone.utc)
                         self.db.add(batch_featured)
 
@@ -540,7 +535,7 @@ class BatchManager:
     def get_all_batch_featured_by_user(
         self,
         user_id: int,
-        featured_type: Optional[BatchFeaturedType] = None
+        featured_type: Optional[FeaturedType] = None
     ) -> List[Dict[str, Any]]:
         """
         Obtiene todos los BatchFeatured del usuario, opcionalmente filtrados por tipo.
@@ -559,7 +554,7 @@ class BatchManager:
         featured_list = []
         for batch, featured in results:
             total_words = len(batch.words)
-            learned_words = featured.learned_words
+            learned_words = sum(1 for w in batch.words if w.statistics and all(stat.is_learned for stat in w.statistics if stat.type == featured.type))
             progress = round((learned_words / total_words * 100), 2) if total_words > 0 else 0.0
 
             featured_list.append({
@@ -569,8 +564,6 @@ class BatchManager:
                 "featured_type": featured.type.value,
                 "status": featured.status.value,
                 "progress": progress,
-                "total_words": total_words,
-                "learned_words": learned_words,
                 "created_at": featured.created_at,
                 "completed_at": featured.completed_at
             })
@@ -607,7 +600,7 @@ class BatchManager:
                     "meaning": w.meaning,
                     "type": w.type,
                     "level": w.level,
-                    "is_learned": any(stat.is_learned for stat in w.statistics) if w.statistics else False,
+                    "is_learned": all(stat.is_learned for stat in w.statistics if stat.type == featured.type) if w.statistics else False,
                     "is_active": w.is_active
                 }
                 for w in words
@@ -644,8 +637,8 @@ class BatchManager:
                 stats.is_learned = False
                 self.db.add(stats)
 
-        # Cambiar estado a OPEN
-        featured.status = BatchStatus.OPEN
+        # Cambiar estado a ACTIVE
+        featured.status = BatchFeaturedStatus.ACTIVE
         featured.completed_at = None
         self.db.add(featured)
         self.db.commit()

@@ -5,7 +5,8 @@ from db import engine
 import crud
 import ai
 from logging_config import logger
-from models import BestOption, BestOptionQueue, QueueStatus, QueueType
+from models import BestOption, BestOptionQueue, QueueStatus, QueueType, FeaturedType
+from batch_manager import BatchManager
 
 
 def shuffle_options_with_correct_index(options: list, correct_option_idx: int) -> tuple:
@@ -49,13 +50,17 @@ def refill_best_options_queue_task(user_id: int):
             # Marcar el refill como iniciado
             crud.start_queue_refill(db, user_id, QueueType.BEST_OPTION)
 
-            # 1. Obtener 8 palabras que el usuario ha visto (least seen words)
-            words = crud.get_words_least_seen_ordered(db, user_id=user_id, limit=8)
+            # 1. Obtener palabras para BEST_OPTIONS usando BatchManager
+            manager = BatchManager(db)
+            words = manager.get_words_with_transition(
+                user_id=user_id,
+                featured_type=FeaturedType.BEST_OPTIONS,
+                limit=8
+            )
 
-            if not words or len(words) < 8:
+            if not words:
                 logger.warning(
-                    f"[Celery BestOptions] Not enough words available for user {user_id}. "
-                    f"Got {len(words) if words else 0}, need 8. Skipping refill."
+                    f"[Celery BestOptions] No words available for user {user_id} for BEST_OPTIONS type. Skipping refill."
                 )
                 return
 

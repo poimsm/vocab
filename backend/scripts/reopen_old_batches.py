@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlmodel import Session, select
 from db import engine
-from models import User, Batch, BatchStatus, BatchFeatured, BatchFeaturedType, Word, WordStatistics
+from models import User, Batch, BatchStatus, BatchFeatured, FeaturedType, BatchFeaturedStatus, Word, WordStatistics
 from logging_config import logger
 
 def reopen_batches_spaced_repetition():
@@ -38,8 +38,7 @@ def reopen_batches_spaced_repetition():
                     .join(BatchFeatured, BatchFeatured.batch_id == Batch.id)
                     .where(
                         Batch.user_id == user.id,
-                        BatchFeatured.type == BatchFeaturedType.SPACED_REPETITION,
-                        BatchFeatured.status == BatchStatus.COMPLETED
+                        BatchFeatured.status == BatchFeaturedStatus.MASTERED
                     )
                     .order_by(BatchFeatured.completed_at.asc())
                 ).unique().all()
@@ -73,12 +72,12 @@ def reopen_batches_spaced_repetition():
                     featured = db.exec(
                         select(BatchFeatured).where(
                             BatchFeatured.batch_id == batch_to_reopen.id,
-                            BatchFeatured.type == BatchFeaturedType.SPACED_REPETITION
+                            BatchFeatured.type == FeaturedType.SPACED_REPETITION
                         )
                     ).first()
 
                     if featured:
-                        featured.status = BatchStatus.ACTIVE
+                        featured.status = BatchFeaturedStatus.ACTIVE
                         featured.completed_at = None
                         db.add(featured)
 

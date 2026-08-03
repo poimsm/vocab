@@ -16,9 +16,10 @@ import models
 from models import (
     Batch,
     BatchFeatured,
-    BatchFeaturedType,
+    FeaturedType,
     BatchSource,
     BatchStatus,
+    BatchFeaturedStatus,
     BestOption,
     BestOptionQueue,
     Example,
@@ -293,7 +294,7 @@ def create_word(db: Session, word_data: dict, user_id: int):
     db.flush()
 
     # Crear estadísticas para la palabra por cada tipo
-    for featured_type in models.BatchFeaturedType:
+    for featured_type in models.FeaturedType:
         stats = WordStatistics(
             word_id=new_word.id,
             type=featured_type
@@ -347,7 +348,7 @@ def toggle_word_learned(db: Session, word_id: int):
             db.add(stats)
     else:
         # If no statistics exist, create one with is_learned=True
-        new_stats = WordStatistics(word_id=word_id, type=BatchFeaturedType.ACTIVE_LEARNING, is_learned=True)
+        new_stats = WordStatistics(word_id=word_id, type=FeaturedType.EXAMPLE, is_learned=True)
         db.add(new_stats)
 
     db.commit()
@@ -528,6 +529,8 @@ def get_or_create_propitious_batch(
         ).first()
 
         if open_batch and len(open_batch.words) < open_batch.capacity:
+            # Asegurar que el batch existente tiene los BatchFeatured correspondientes
+            create_batch_featured_for_types(db, open_batch.id)
             return open_batch
 
         count_batches = db.exec(
@@ -564,7 +567,7 @@ def get_or_create_propitious_batch(
 
 def create_batch_featured_for_types(db: Session, batch_id: int):
     """Crea registros de BatchFeatured para todos los tipos disponibles."""
-    for featured_type in models.BatchFeaturedType:
+    for featured_type in models.FeaturedType:
         existing = db.exec(
             select(models.BatchFeatured).where(
                 models.BatchFeatured.batch_id == batch_id,
@@ -576,7 +579,7 @@ def create_batch_featured_for_types(db: Session, batch_id: int):
             featured = models.BatchFeatured(
                 batch_id=batch_id,
                 type=featured_type,
-                status=models.BatchStatus.OPEN
+                status=BatchFeaturedStatus.ACTIVE
             )
             db.add(featured)
     db.commit()
@@ -587,43 +590,6 @@ def update_batch_metrics(db: Session, batch_id: int):
     manager = BatchManager(db)
     manager.update_featured_stats_for_batch(batch_id)
 
-
-def get_priority_words_via_batches(db: Session, user_id: int, limit: int = 10) -> List[Word]:
-    """
-    Obtiene palabras prioritarias para un usuario.
-    Prioridad: Boosted > Palabras de lotes
-    """
-    # 1. BOOST (Solo activas y NO aprendidas)
-    boosted_words = db.exec(
-        select(Word)
-        .outerjoin(WordStatistics, WordStatistics.word_id == Word.id)
-        .where(
-            Word.user_id == user_id,
-            Word.is_active == True,
-            Word.is_boosted == True,
-            or_(WordStatistics.is_learned == False, WordStatistics.id == None)
-        )
-        .limit(3)
-    ).all()
-
-    # 2. Palabras de lotes activos (ordenadas por ciclo y fecha)
-    batch_words = db.exec(
-        select(Word)
-        .outerjoin(WordStatistics, WordStatistics.word_id == Word.id)
-        .where(
-            Word.user_id == user_id,
-            Word.is_active == True,
-            Word.batch_id != None,
-            or_(WordStatistics.is_learned == False, WordStatistics.id == None),
-            Word.is_boosted == False
-        )
-        .order_by(WordStatistics.current_cycle_seen.asc(), WordStatistics.last_seen_at.asc().nullsfirst())
-        .limit(limit - len(boosted_words))
-    ).all()
-
-    # 3. CONSOLIDAR - Evitar duplicados
-    candidate_dict = {w.id: w for w in (boosted_words + batch_words)}
-    return list(candidate_dict.values())[:limit]
 
 # ==========================================
 # COLA DE EXPLORACIÓN (EXAMPLE QUEUE MULTI-USER)
@@ -677,7 +643,7 @@ def refill_example_queue(db: Session, user_id: int):
     manager = BatchManager(db)
     priority_words = manager.get_words_with_transition(
         user_id=user_id,
-        featured_type=models.BatchFeaturedType.EXAMPLE,
+        featured_type=models.FeaturedType.EXAMPLE,
         limit=max(total_words_needed, 8)
     )
 
@@ -928,29 +894,29 @@ def resolve_and_increment_example(db: Session, example_id: int, user_id: int) ->
         if word and word.id not in seen_word_ids:
             seen_word_ids.add(word.id)
 
-            # Obtener o crear estadísticas para esta palabra por cada tipo
-            for featured_type in models.BatchFeaturedType:
-                stats = db.exec(
-                    select(WordStatistics).where(
-                        WordStatistics.word_id == word.id,
-                        WordStatistics.type == featured_type
-                    )
-                ).first()
+            # Obtener o crear estadísticas para esta palabra solo para EXAMPLE (ejemplos)
+            featured_type = models.FeaturedType.EXAMPLE
+            stats = db.exec(
+                select(WordStatistics).where(
+                    WordStatistics.word_id == word.id,
+                    WordStatistics.type == featured_type
+                )
+            ).first()
 
-                if not stats:
-                    stats = WordStatistics(word_id=word.id, type=featured_type)
-                    db.add(stats)
-                    db.flush()
-
-                stats.times_seen += 1
-                stats.current_cycle_seen += 1
-                stats.last_seen_at = now_utc
+            if not stats:
+                stats = WordStatistics(word_id=word.id, type=featured_type)
                 db.add(stats)
+                db.flush()
 
-                # ✅ EVALUACIÓN AUTOMÁTICA DE IS_LEARNED
-                if stats.current_cycle_seen >= target_cycle_seen and not stats.is_learned:
-                    stats.is_learned = True
-                    logger.info(f"[resolve_and_increment_example] Word {word.id} ({word.main}) marked as LEARNED for type {featured_type.value} (current_cycle_seen={stats.current_cycle_seen})")
+            stats.times_seen += 1
+            stats.current_cycle_seen += 1
+            stats.last_seen_at = now_utc
+            db.add(stats)
+
+            # ✅ EVALUACIÓN AUTOMÁTICA DE IS_LEARNED
+            if stats.current_cycle_seen >= target_cycle_seen and not stats.is_learned:
+                stats.is_learned = True
+                logger.info(f"[resolve_and_increment_example] Word {word.id} ({word.main}) marked as LEARNED for type {featured_type.value} (current_cycle_seen={stats.current_cycle_seen})")
 
             db.add(word)
 
@@ -1056,12 +1022,12 @@ def reopen_batches_for_spaced_repetition(db: Session, user_id: int) -> dict:
         featured_items = db.exec(
             select(BatchFeatured).where(
                 BatchFeatured.batch_id == batch_to_reopen.id,
-                BatchFeatured.type == models.BatchFeaturedType.SPACED_REPETITION
+                BatchFeatured.type == models.FeaturedType.SPACED_REPETITION
             )
         ).all()
 
         for featured in featured_items:
-            featured.status = BatchStatus.OPEN
+            featured.status = BatchFeaturedStatus.ACTIVE
             featured.completed_at = None
             db.add(featured)
 
@@ -1126,7 +1092,7 @@ def reopen_specific_batches(db: Session, user_id: int, batch_ids: List[int]) -> 
             ).all()
 
             for featured in featured_items:
-                featured.status = BatchStatus.ACTIVE
+                featured.status = BatchFeaturedStatus.ACTIVE
                 featured.completed_at = None
                 db.add(featured)
 
@@ -1292,7 +1258,7 @@ def save_words_to_batches(
 def get_words_by_batch_featured_type(
     db: Session,
     user_id: int,
-    featured_type: BatchFeaturedType,
+    featured_type: FeaturedType,
     limit: int = 50
 ) -> List[Word]:
     """Obtiene palabras por tipo de BatchFeatured."""
@@ -1313,7 +1279,7 @@ def get_dormant_batches(
 def get_all_batch_featured(
     db: Session,
     user_id: int,
-    featured_type: Optional[BatchFeaturedType] = None
+    featured_type: Optional[FeaturedType] = None
 ) -> List[Dict[str, Any]]:
     """Obtiene todos los BatchFeatured de un usuario."""
     manager = BatchManager(db)

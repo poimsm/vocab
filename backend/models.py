@@ -55,10 +55,14 @@ class WordLevel:
 
 
 class BatchStatus(str, Enum):
-    OPEN = "open"          # Aceptando palabras sueltas
-    ACTIVE = "active"      # En proceso de estudio activo (Explore)
-    COMPLETED = "completed"  # Dominado (todas sus palabras aprendidas)
-    ARCHIVED = "archived"  # Pausado/Archivado por el usuario
+    OPEN = "open"            # Aceptando palabras sueltas
+    COMPLETED = "completed"  # Alcanzó su capacidad máxima
+    ARCHIVED = "archived"    # Pausado/archivado por el usuario
+
+
+class BatchFeaturedStatus(str, Enum):
+    ACTIVE = "active"        # En proceso de estudio
+    MASTERED = "mastered"    # Todas sus palabras dominadas
 
 
 class BatchSource(str, Enum):
@@ -66,7 +70,7 @@ class BatchSource(str, Enum):
     ORGANIC = "organic"          # Palabras agregadas una a una
 
 
-class BatchFeaturedType(str, Enum):
+class FeaturedType(str, Enum):
     EXAMPLE = "example"                  # Generación de ejemplos
     BEST_OPTIONS = "best_options"        # Ejercicios de opciones
 
@@ -78,6 +82,7 @@ class Batch(SQLModel, table=True):
     title: str = Field(default="Lote sin título")
     source: BatchSource = Field(default=BatchSource.ORGANIC)
     capacity: int = Field(default=15)
+    status: BatchStatus = Field(default=BatchStatus.OPEN, index=True)
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc))
@@ -93,13 +98,11 @@ class BatchFeatured(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     batch_id: int = Field(foreign_key="batch.id", index=True)
-    type: BatchFeaturedType = Field(index=True)
-    status: BatchStatus = Field(default=BatchStatus.OPEN, index=True)
+    type: FeaturedType = Field(index=True)
+    status: BatchFeaturedStatus = Field(default=BatchFeaturedStatus.ACTIVE, index=True)
 
     # Estadísticas y progreso
     mastery_progress: float = Field(default=0.0)  # 0.0 a 100.0%
-    total_words: int = Field(default=0)
-    learned_words: int = Field(default=0)
 
     # Seguimiento temporal
     created_at: datetime = Field(
@@ -129,7 +132,7 @@ class WordStatistics(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     word_id: int = Field(foreign_key="words.id", index=True)
-    type: BatchFeaturedType = Field(index=True)
+    type: FeaturedType = Field(index=True)
 
     is_learned: bool = Field(default=False, index=True)
     last_seen_at: Optional[datetime] = Field(default=None)

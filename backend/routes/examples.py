@@ -11,7 +11,8 @@ from tasks.examples import refill_queue_task
 from schemas.explore import ExploreResponse, ExploreExampleSchema, ExploreWordSchema
 from auth import get_current_user
 from models import (User, ExampleQueue, Example, Word,
-                    Batch, QueueStatus, ExampleWord, QueueType)
+                    Batch, QueueStatus, ExampleWord, QueueType, FeaturedType)
+from batch_manager import BatchManager
 
 router = APIRouter()
 
@@ -102,22 +103,23 @@ def get_explore_feed(
         f"[get_explore_feed] User {current_user.id}: Fetching explore feed (limit={limit})")
 
     # 1. Obtener ejemplos listos desde la cola de ejemplos (ExampleQueue) del usuario
+    from sqlalchemy.orm import selectinload
+
     queued_items = db.exec(
         select(ExampleQueue)
-        .join(Example)
         .where(
             ExampleQueue.user_id == current_user.id,
             ExampleQueue.status == QueueStatus.PENDING
         )
-        .options(
-            joinedload(ExampleQueue.example).joinedload(
-                Example.example_words).joinedload(ExampleWord.word)
-        )
+        .options(selectinload(ExampleQueue.example).selectinload(Example.example_words).selectinload(ExampleWord.word))
         .order_by(ExampleQueue.created_at.asc())
         .limit(limit)
-    ).unique().all()
-    logger.debug(
+    ).all()
+    logger.info(
         f"[get_explore_feed] Found {len(queued_items)} queued items from queue")
+
+    if queued_items:
+        logger.info(f"[get_explore_feed] Queue items: {[item.id for item in queued_items]}")
 
     # Determinar si está generando
     is_generating = False
@@ -126,8 +128,12 @@ def get_explore_feed(
     if len(queued_items) < limit:
         # Obtenemos las palabras prioritarias respetando la lógica de Lotes + Transición
         refill_limit = crud.get_refill_queue_emergency_limit(db)
-        priority_words = crud.get_priority_words_via_batches(
-            db, user_id=current_user.id, limit=refill_limit)
+        manager = BatchManager(db)
+        priority_words = manager.get_words_with_transition(
+            user_id=current_user.id,
+            featured_type=FeaturedType.EXAMPLE,
+            limit=refill_limit
+        )
 
         logger.info(
             f"[get_explore_feed] Found {len(priority_words)} priority words")
@@ -178,7 +184,8 @@ def get_explore_feed(
                 )
             )
             # Verificar si al menos una palabra no ha sido aprendida
-            word_is_learned = any(stat.is_learned for stat in word.statistics) if word.statistics else False
+            # Una palabra está aprendida solo si TODOS sus stats del tipo EXAMPLE están marcados como learned
+            word_is_learned = all(stat.is_learned for stat in word.statistics if stat.type == FeaturedType.EXAMPLE) if word.statistics else False
             if not word_is_learned:
                 has_unlearned_word = True
 

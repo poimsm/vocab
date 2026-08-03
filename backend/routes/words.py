@@ -11,7 +11,7 @@ from fastapi import (APIRouter, Depends, HTTPException,
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 from db import get_db, engine
-from models import WordLevel, ExampleType, User, BatchSource, Word, WordStatistics
+from models import WordLevel, ExampleType, User, BatchSource, Word, WordStatistics, FeaturedType
 from helpers import TextFormatter, chunk_list
 from auth import get_current_user
 from tasks.words import process_bulk_words_task
@@ -45,7 +45,7 @@ def get_words(
             "level": WordLevel.to_str(w.level),
             "context": TextFormatter.capitalize(w.context),
             "is_favorite": w.is_favorite,
-            "is_learned": any(stat.is_learned for stat in w.statistics) if w.statistics else False,
+            "is_learned": all(stat.is_learned for stat in w.statistics if stat.type == FeaturedType.EXAMPLE) if w.statistics else False,
             "total_examples": total_examples
         }
         for w, total_examples in paginated_data["items"]
@@ -77,7 +77,7 @@ def get_word(
         if ew.example.is_active and ew.example.type == ExampleType.INITIAL
     ]
 
-    is_learned = any(stat.is_learned for stat in word.statistics) if word.statistics else False
+    is_learned = all(stat.is_learned for stat in word.statistics if stat.type == FeaturedType.EXAMPLE) if word.statistics else False
 
     return {
         "id": word.id,
@@ -291,20 +291,26 @@ def create_words_bulk(
 @router.patch("/{word_id}/mark-learned")
 def mark_word_learned(
     word_id: int,
+    featured_type: FeaturedType = Query(FeaturedType.EXAMPLE),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Marca una palabra como dominada/aprendida y actualiza
+    Marca una palabra como dominada/aprendida para un tipo específico y actualiza
     las métricas de su lote correspondiente.
     """
     word = crud.get_word_by_id(db, word_id)
     if not word or word.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Palabra no encontrada")
 
-    # Marcar como aprendida en todos los registros de WordStatistics
+    # Marcar como aprendida solo para el tipo específico
     from models import WordStatistics
-    word_stats = db.exec(select(WordStatistics).where(WordStatistics.word_id == word_id)).all()
+    word_stats = db.exec(
+        select(WordStatistics).where(
+            WordStatistics.word_id == word_id,
+            WordStatistics.type == featured_type
+        )
+    ).all()
     for stat in word_stats:
         stat.is_learned = True
         db.add(stat)
@@ -367,7 +373,7 @@ def toggle_word_learned(word_id: int, db: Session = Depends(get_db)):
         logger.warning(f"[toggle_word_learned] Word {word_id} not found")
         raise HTTPException(status_code=404, detail="Word not found")
 
-    is_learned = any(stat.is_learned for stat in word.statistics) if word.statistics else False
+    is_learned = all(stat.is_learned for stat in word.statistics if stat.type == FeaturedType.EXAMPLE) if word.statistics else False
     logger.info(f"[toggle_word_learned] Word {word_id} marked as {'learned' if is_learned else 'not learned'}")
     return {
         "id": word.id,
@@ -415,7 +421,7 @@ def export_words_csv(db: Session = Depends(get_db)):
     ])
 
     for word in words_list:
-        is_learned = any(stat.is_learned for stat in word.statistics) if word.statistics else False
+        is_learned = all(stat.is_learned for stat in word.statistics if stat.type == FeaturedType.EXAMPLE) if word.statistics else False
         writer.writerow([
             word.id,
             word.main,

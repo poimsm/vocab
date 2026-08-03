@@ -8,7 +8,7 @@ from sqlmodel import Session
 from logging_config import logger
 
 from db import get_db
-from models import User, BatchFeaturedType
+from models import User, FeaturedType
 from auth import get_current_user
 import crud
 from batch_manager import BatchManager
@@ -34,7 +34,7 @@ def get_all_batch_featured(
     featured_type_enum = None
     if featured_type:
         try:
-            featured_type_enum = BatchFeaturedType(featured_type)
+            featured_type_enum = FeaturedType(featured_type)
         except ValueError:
             raise HTTPException(
                 status_code=400,
@@ -93,7 +93,7 @@ def get_words_by_featured_type(
     - limit: Límite de palabras (default: 50)
     """
     try:
-        featured_type_enum = BatchFeaturedType(featured_type)
+        featured_type_enum = FeaturedType(featured_type)
         words = crud.get_words_by_batch_featured_type(
             db,
             current_user.id,
