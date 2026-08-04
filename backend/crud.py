@@ -633,77 +633,12 @@ def get_or_create_propitious_batch(
     source: BatchSource = BatchSource.ORGANIC,
     title: Optional[str] = None
 ) -> Batch:
-    if source == BatchSource.ORGANIC:
-        open_batch = db.exec(
-            select(Batch)
-            .where(
-                Batch.user_id == user_id,
-                Batch.source == BatchSource.ORGANIC
-            )
-            .order_by(Batch.created_at.desc())
-        ).first()
-
-        if open_batch and len(open_batch.words) < open_batch.capacity:
-            # Asegurar que el batch existente tiene los BatchFeatured correspondientes
-            create_batch_featured_for_types(db, open_batch.id)
-            return open_batch
-
-        count_batches = db.exec(
-            select(func.count(Batch.id)).where(Batch.user_id == user_id)
-        ).one() or 0
-
-        new_batch = Batch(
-            user_id=user_id,
-            title=f"Lote {count_batches + 1}",
-            source=BatchSource.ORGANIC
-        )
-        db.add(new_batch)
-        db.commit()
-        db.refresh(new_batch)
-        create_batch_featured_for_types(db, new_batch.id)
-        return new_batch
-
-    else:
-        count_batches = db.exec(
-            select(func.count(Batch.id)).where(Batch.user_id == user_id)
-        ).one() or 0
-
-        new_batch = Batch(
-            user_id=user_id,
-            title=title or f"Importación {count_batches + 1}",
-            source=BatchSource.BULK_IMPORT
-        )
-        db.add(new_batch)
-        db.commit()
-        db.refresh(new_batch)
-        create_batch_featured_for_types(db, new_batch.id)
-        return new_batch
-
-
-def create_batch_featured_for_types(db: Session, batch_id: int):
-    """Crea registros de BatchFeatured para todos los tipos disponibles."""
-    for featured_type in models.FeaturedType:
-        existing = db.exec(
-            select(models.BatchFeatured).where(
-                models.BatchFeatured.batch_id == batch_id,
-                models.BatchFeatured.type == featured_type
-            )
-        ).first()
-
-        if not existing:
-            featured = models.BatchFeatured(
-                batch_id=batch_id,
-                type=featured_type,
-                status=BatchFeaturedStatus.ACTIVE
-            )
-            db.add(featured)
-    db.commit()
-
-
-def update_batch_metrics(db: Session, batch_id: int):
-    """Actualiza métricas de todos los BatchFeatured de un batch."""
+    """
+    Wrapper para BatchManager.get_or_create_propitious_batch().
+    Mantenido para compatibilidad con código existente.
+    """
     manager = BatchManager(db)
-    manager.update_featured_stats_for_batch(batch_id)
+    return manager.get_or_create_propitious_batch(user_id, source, title)
 
 
 # ==========================================
@@ -1159,204 +1094,29 @@ def _activate_next_open_batch(db: Session, user_id: int):
 
 def reopen_batches_for_spaced_repetition(db: Session, user_id: int) -> dict:
     """
-    Reabre gradualmente batches completados antiguos para memoria espaciada.
-
-    Estrategia:
-    - Cada día, reabre solo 1 batch completado (el más antiguo)
-    - Marca todas sus palabras como is_learned=False (para revisión)
-    - Cambia su estado a OPEN
-
-    Esto permite que el usuario revise palabras "antiguas" de forma gradual.
+    Wrapper para BatchManager.reopen_batch_for_spaced_repetition().
+    Mantenido para compatibilidad con código existente.
     """
-    from datetime import datetime, timedelta, timezone
-
-    # Obtener batches COMPLETED del usuario, ordenados por antigüedad
-    completed_batches = db.exec(
-        select(Batch)
-        .where(
-            Batch.user_id == user_id,
-            Batch.status == BatchStatus.COMPLETED
-        )
-        .order_by(Batch.completed_at.asc())  # Más antiguos primero
-    ).all()
-
-    if not completed_batches:
-        logger.info(f"[reopen_batches_spaced_repetition] User {user_id}: No completed batches to reopen")
-        return {"reopened": 0, "message": "No hay batches completados para reabrir"}
-
-    # Reabre solo el batch más antiguo (1 por día)
-    batch_to_reopen = completed_batches[0]
-
-    try:
-        # Marcar todas las palabras del batch como is_learned=False
-        words = db.exec(
-            select(Word).where(Word.batch_id == batch_to_reopen.id)
-        ).all()
-
-        for word in words:
-            db.add(word)
-
-            # Resetear estadísticas para todos los tipos
-            all_stats = db.exec(
-                select(WordStatistics).where(WordStatistics.word_id == word.id)
-            ).all()
-
-            for stats in all_stats:
-                stats.current_cycle_seen = 0
-                stats.is_learned = False
-                db.add(stats)
-
-        # Cambiar estado de BatchFeatured a OPEN (para memoria espaciada)
-        featured_items = db.exec(
-            select(BatchFeatured).where(
-                BatchFeatured.batch_id == batch_to_reopen.id,
-                BatchFeatured.type == models.FeaturedType.SPACED_REPETITION
-            )
-        ).all()
-
-        for featured in featured_items:
-            featured.status = BatchFeaturedStatus.ACTIVE
-            featured.completed_at = None
-            db.add(featured)
-
-        db.commit()
-
-        logger.info(f"[reopen_batches_spaced_repetition] Batch #{batch_to_reopen.id} reopened for user {user_id}. Words: {len(words)}")
-
-        return {
-            "reopened": 1,
-            "batch_id": batch_to_reopen.id,
-            "batch_title": batch_to_reopen.title,
-            "words_count": len(words),
-            "message": f"Batch '{batch_to_reopen.title}' reabierto para revisión"
-        }
-
-    except Exception as e:
-        logger.error(f"[reopen_batches_spaced_repetition] Error reopening batch: {str(e)}", exc_info=True)
-        return {"reopened": 0, "error": str(e)}
+    manager = BatchManager(db)
+    return manager.reopen_batch_for_spaced_repetition(user_id)
 
 
 def reopen_specific_batches(db: Session, user_id: int, batch_ids: List[int]) -> dict:
     """
-    Reabre manualmente batches específicos (para el usuario).
+    Wrapper para BatchManager.reopen_batches_by_ids().
+    Mantenido para compatibilidad con código existente.
     """
-    reopened = []
-    failed = []
-
-    for batch_id in batch_ids:
-        try:
-            batch = db.exec(
-                select(Batch).where(
-                    Batch.id == batch_id,
-                    Batch.user_id == user_id
-                )
-            ).first()
-
-            if not batch:
-                failed.append({"batch_id": batch_id, "reason": "No encontrado"})
-                continue
-
-            # Marcar palabras como is_learned=False
-            words = db.exec(
-                select(Word).where(Word.batch_id == batch.id)
-            ).all()
-
-            for word in words:
-                db.add(word)
-
-                # Resetear estadísticas para todos los tipos
-                all_stats = db.exec(
-                    select(WordStatistics).where(WordStatistics.word_id == word.id)
-                ).all()
-
-                for stats in all_stats:
-                    stats.current_cycle_seen = 0
-                    stats.is_learned = False
-                    db.add(stats)
-
-            # Cambiar estado de BatchFeatured a ACTIVE (para revisión)
-            featured_items = db.exec(
-                select(BatchFeatured).where(BatchFeatured.batch_id == batch.id)
-            ).all()
-
-            for featured in featured_items:
-                featured.status = BatchFeaturedStatus.ACTIVE
-                featured.completed_at = None
-                db.add(featured)
-
-            reopened.append({
-                "batch_id": batch.id,
-                "title": batch.title,
-                "words_count": len(words)
-            })
-
-            logger.info(f"[reopen_specific_batches] Batch #{batch_id} manually reopened")
-
-        except Exception as e:
-            failed.append({"batch_id": batch_id, "reason": str(e)})
-            logger.error(f"[reopen_specific_batches] Error in batch {batch_id}: {str(e)}")
-
-    db.commit()
-
-    return {
-        "reopened_count": len(reopened),
-        "reopened": reopened,
-        "failed": failed
-    }
+    manager = BatchManager(db)
+    return manager.reopen_batches_by_ids(user_id, batch_ids)
 
 
 def get_batch_words(db: Session, batch_id: int, user_id: int) -> Optional[dict]:
     """
-    Retorna todas las palabras asociadas a un batch.
+    Wrapper para BatchManager.get_batch_words().
+    Mantenido para compatibilidad con código existente.
     """
-    batch = db.exec(
-        select(Batch).where(
-            Batch.id == batch_id,
-            Batch.user_id == user_id
-        )
-    ).first()
-
-    if not batch:
-        return None
-
-    words = db.exec(
-        select(Word).where(Word.batch_id == batch_id)
-    ).all()
-
-    # Obtener estadísticas de palabras
-    word_stats_map = {}
-    for w in words:
-        stats = db.exec(
-            select(WordStatistics).where(WordStatistics.word_id == w.id)
-        ).first()
-        word_stats_map[w.id] = stats
-
-    # Calcular progreso desde las palabras
-    total_words = len(words)
-    learned_words = sum(1 for w in words if word_stats_map.get(w.id) and word_stats_map[w.id].is_learned)
-    batch_progress = round((learned_words / total_words * 100), 2) if total_words > 0 else 0.0
-
-    return {
-        "batch_id": batch.id,
-        "batch_title": batch.title,
-        "batch_status": batch.status.value,
-        "batch_progress": batch_progress,
-        "total_words": total_words,
-        "words": [
-            {
-                "id": w.id,
-                "main": w.main,
-                "meaning": w.meaning,
-                "type": w.type,
-                "level": w.level,
-                "is_learned": word_stats_map[w.id].is_learned if word_stats_map[w.id] else False,
-                "is_active": w.is_active,
-                "times_seen": word_stats_map[w.id].times_seen if word_stats_map[w.id] else 0,
-                "last_seen_at": word_stats_map[w.id].last_seen_at if word_stats_map[w.id] else None
-            }
-            for w in words
-        ]
-    }
+    manager = BatchManager(db)
+    return manager.get_batch_words(batch_id, user_id)
 
 
 # ==========================================
