@@ -11,11 +11,13 @@ from logging_client import logger
 from tasks.best_options import refill_best_options_queue_task
 from auth import get_current_user
 from models import User, BestOption, BestOptionQueue, QueueStatus, QueueType, ExampleType, ExampleWord
+from decorators import log_endpoint
 
 router = APIRouter()
 
 
 @router.get("/explore")
+@log_endpoint
 def get_best_options(
     limit: int = 6,
     db: Session = Depends(get_db),
@@ -140,6 +142,7 @@ def get_best_options(
 
 
 @router.patch("/{queue_item_id}/resolve")
+@log_endpoint
 def resolve_best_option(
     queue_item_id: int,
     db: Session = Depends(get_db),

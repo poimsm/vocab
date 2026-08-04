@@ -6,6 +6,7 @@ from models import User
 from auth import hash_password, verify_password, create_access_token
 from pydantic import BaseModel, EmailStr
 from logging_client import logger
+from decorators import log_endpoint
 
 router = APIRouter()
 
@@ -23,6 +24,7 @@ class Token(BaseModel):
     token_type: str
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
+@log_endpoint
 def register(user_data: UserRegister, db: Session = Depends(get_db)):
     logger.info(f"User registration attempt: {user_data.email}")
     # Verificar si ya existe el correo
@@ -40,6 +42,7 @@ def register(user_data: UserRegister, db: Session = Depends(get_db)):
     return {"message": "Usuario creado con éxito", "user_id": new_user.id}
 
 @router.post("/login", response_model=Token)
+@log_endpoint
 def login(
     credentials: LoginRequest,
     db: Session = Depends(get_db)

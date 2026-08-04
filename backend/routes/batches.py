@@ -12,12 +12,14 @@ from models import User, FeaturedType
 from auth import get_current_user
 import crud
 from batch_manager import BatchManager
+from decorators import log_endpoint
 
 
 router = APIRouter(prefix="/batches", tags=["batches"])
 
 
 @router.get("/featured")
+@log_endpoint
 def get_all_batch_featured(
     featured_type: Optional[str] = Query(None),
     db: Session = Depends(get_db),
@@ -52,6 +54,7 @@ def get_all_batch_featured(
 
 
 @router.get("/dormant")
+@log_endpoint
 def get_dormant_batches(
     days_threshold: int = Query(7, ge=1, le=365),
     db: Session = Depends(get_db),
@@ -77,6 +80,7 @@ def get_dormant_batches(
 
 
 @router.get("/featured/type/{featured_type}/words")
+@log_endpoint
 def get_words_by_featured_type(
     featured_type: str,
     limit: int = Query(50, ge=1, le=500),
@@ -126,6 +130,7 @@ def get_words_by_featured_type(
 
 
 @router.post("/save-words-to-batches")
+@log_endpoint
 def save_words_to_batches(
     words_data: List[dict],
     source: str = Query("organic"),
@@ -183,6 +188,7 @@ def save_words_to_batches(
 # ==========================================
 
 @router.get("/featured/{batch_featured_id}/words")
+@log_endpoint
 def get_batch_featured_words(
     batch_featured_id: int,
     db: Session = Depends(get_db),
@@ -204,6 +210,7 @@ def get_batch_featured_words(
 
 
 @router.patch("/featured/{batch_featured_id}/reopen")
+@log_endpoint
 def reopen_batch_featured(
     batch_featured_id: int,
     db: Session = Depends(get_db),
@@ -225,6 +232,7 @@ def reopen_batch_featured(
 
 
 @router.patch("/featured/reopen/multiple")
+@log_endpoint
 def reopen_multiple_batch_featured(
     batch_featured_ids: List[int] = None,
     db: Session = Depends(get_db),

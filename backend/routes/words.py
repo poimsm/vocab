@@ -17,11 +17,13 @@ from auth import get_current_user
 from tasks.words import process_bulk_words_task
 from datetime import datetime, timezone
 from schemas.words import WordCreate
+from decorators import log_endpoint
 
 router = APIRouter()
 
 
 @router.get("/words")
+@log_endpoint
 def get_words(
     sort: str = "newest",
     page: int = Query(1, ge=1),
@@ -55,6 +57,7 @@ def get_words(
 
 
 @router.get("/words/{word_id}")
+@log_endpoint
 def get_word(
     word_id: int = Path(..., ge=1),
     db: Session = Depends(get_db),
@@ -98,6 +101,7 @@ def get_word(
 
 
 @router.post("/old")
+@log_endpoint
 def create_word(word: WordCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     extracted = ai.extract_learning_intent(word.text)
 
@@ -149,6 +153,7 @@ def create_word(word: WordCreate, db: Session = Depends(get_db), current_user: U
 
 
 @router.post("/test")
+@log_endpoint
 def test_create_word(data: dict):
     """Endpoint de prueba para verificar que POST funciona"""
     logger.info(f"[test_create_word] Data received: {data}")
@@ -156,6 +161,7 @@ def test_create_word(data: dict):
 
 
 @router.post("")
+@log_endpoint
 def create_single_word(
     request_data: dict = Body(...),
     db: Session = Depends(get_db),
@@ -274,6 +280,7 @@ def create_single_word(
 
 
 @router.post("/bulk", status_code=status.HTTP_202_ACCEPTED)
+@log_endpoint
 def create_words_bulk(
     texts: List[str],
     db: Session = Depends(get_db),
@@ -289,6 +296,7 @@ def create_words_bulk(
 
 
 @router.patch("/{word_id}/mark-learned")
+@log_endpoint
 def mark_word_learned(
     word_id: int,
     featured_type: FeaturedType = Query(FeaturedType.EXAMPLE),
@@ -320,6 +328,7 @@ def mark_word_learned(
 
 
 @router.patch("/{word_id}/toggle-boost")
+@log_endpoint
 def toggle_word_boost(
     word_id: int,
     db: Session = Depends(get_db),
@@ -345,7 +354,7 @@ def toggle_word_boost(
 
 
 @router.patch("/{word_id}/toggle-active")
-# CAMBIO: Tipado de sesión
+@log_endpoint
 def toggle_word_active(word_id: int, db: Session = Depends(get_db)):
     logger.debug(f"[toggle_word_active] Toggling active status for word {word_id}")
     word = crud.toggle_word_active(db, word_id)
@@ -360,7 +369,7 @@ def toggle_word_active(word_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{word_id}/toggle-learned")
-# CAMBIO: Tipado de sesión
+@log_endpoint
 def toggle_word_learned(word_id: int, db: Session = Depends(get_db)):
     logger.debug(f"[toggle_word_learned] Toggling learned status for word {word_id}")
     word = crud.toggle_word_learned(db, word_id)
@@ -379,7 +388,7 @@ def toggle_word_learned(word_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{word_id}/toggle-fav")
-# CAMBIO: Tipado de sesión
+@log_endpoint
 def toggle_word_favorite(word_id: int, db: Session = Depends(get_db)):
     logger.debug(f"[toggle_word_favorite] Toggling favorite status for word {word_id}")
     word = crud.toggle_word_favorite(db, word_id)
@@ -399,6 +408,7 @@ def toggle_word_favorite(word_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/export/csv")
+@log_endpoint
 def export_words_csv(db: Session = Depends(get_db)):
     logger.info("[export_words_csv] Starting CSV export")
     words_list = crud.get_all_words(db)

@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from tasks.test import procesar_tarea_pesada
 from celery.result import AsyncResult
 from logging_client import logger
+from decorators import log_endpoint
 
 router = APIRouter()
 
@@ -12,6 +13,7 @@ class TareaRequest(BaseModel):
     dato: str
 
 @router.post("/procesar")
+@log_endpoint
 def disparar_tarea(body: TareaRequest):
     logger.info(f"Starting Celery task with data: {body.dato}")
     task = procesar_tarea_pesada.delay(body.dato)
@@ -23,6 +25,7 @@ def disparar_tarea(body: TareaRequest):
     }
 
 @router.get("/tarea/{task_id}")
+@log_endpoint
 def obtener_estado_tarea(task_id: str):
     logger.debug(f"Checking status for task ID: {task_id}")
     result = AsyncResult(task_id)

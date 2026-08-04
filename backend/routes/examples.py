@@ -14,11 +14,13 @@ from models import (User, ExampleQueue, Example, Word,
                     Batch, QueueStatus, ExampleWord, QueueType, FeaturedType)
 from batch_manager import BatchManager
 from config_manager import ConfigManager
+from decorators import log_endpoint
 
 router = APIRouter()
 
 
 @router.get("/examples")
+@log_endpoint
 def get_examples(
     sort: str = "newest",
     word_id: int = Query(None),
@@ -55,6 +57,7 @@ def get_examples(
 
 
 @router.patch("/{example_id}/toggle-active")
+@log_endpoint
 def toggle_example_active(example_id: int, db: Session = Depends(get_db)):
     logger.debug(
         f"[toggle_example_active] Toggling active status for example {example_id}")
@@ -71,6 +74,7 @@ def toggle_example_active(example_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{example_id}/toggle-fav")
+@log_endpoint
 def toggle_example_favorite(example_id: int, db: Session = Depends(get_db)):
     logger.debug(
         f"[toggle_example_favorite] Toggling favorite status for example {example_id}")
@@ -91,6 +95,7 @@ def toggle_example_favorite(example_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/explore", response_model=ExploreResponse)
+@log_endpoint
 def get_explore_feed(
     limit: int = 5,
     db: Session = Depends(get_db),
@@ -229,6 +234,7 @@ def get_explore_feed(
 
 
 @router.patch("/{example_id}/resolve-pending")
+@log_endpoint
 def resolve_example_pending(example_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     logger.debug(
         f"[resolve_example_pending] User {current_user.id}: Resolving example {example_id}")

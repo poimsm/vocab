@@ -12,6 +12,7 @@ def extract_learning_intent(raw_inputs: list[str]) -> list[dict] | None:
     Toma input libre del usuario y extrae las palabras/expresiones en
     inglés que quiso capturar para aprender vocabulario.
     """
+    logger.info(f"extract_learning_intent")
     logger.info(f"Extracting learning intent from {len(raw_inputs)} inputs")
     payload = [{"raw": line} for line in raw_inputs if line.strip()]
 
@@ -103,6 +104,7 @@ Return a JSON array of objects matching this exact structure:
 
 
 def enrich_word(main: str):
+    logger.info(f"enrich_word")
     logger.debug(f"Enriching single word: {main}")
     response = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -154,6 +156,7 @@ def enrich_words_bulk(words: list[str]) -> list[dict] | None:
     Enriquece un lote de palabras en inglés en una sola llamada a la IA.
     Soporta procesar hasta 15 palabras a la vez.
     """
+    logger.info(f"enrich_words_bulk")
     logger.info(f"Enriching bulk of {len(words)} words")
     if not words:
         return []
@@ -229,6 +232,7 @@ def generate_examples_for_single_word(
     word: models.Word,
     amount: int = 1
 ):
+    logger.info(f"generate_examples_for_single_word")
     payload = {
         "target": word.main,
     }
@@ -289,6 +293,7 @@ Example:
 
 
 def generate_examples_from_words(words: list[models.Word]):
+    logger.info(f"generate_examples_from_words")
     payload = [
         {
             "word_id": w.id,
@@ -358,6 +363,7 @@ def generate_examples_from_words(words: list[models.Word]):
 
 
 def generate_mixed_examples_from_words(words: list[models.Word]):
+    logger.info(f"generate_mixed_examples_from_words")
     payload = [
         {
             "word_id": w.id,
@@ -427,6 +433,7 @@ def generate_mixed_examples_from_words(words: list[models.Word]):
 
 
 def explain_vocabulary(word: str):
+    logger.info(f"explain_vocabulary")
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -477,6 +484,7 @@ Format:
 
 
 def generate_best_options_from_words(words: list[models.Word]):
+    logger.info(f"generate_best_options_from_words")
     payload = [
         {
             "word_id": w.id,
