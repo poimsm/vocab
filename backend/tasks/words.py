@@ -170,10 +170,6 @@ def process_bulk_words_task(texts: List[str], user_id: int):
                 if chunk_idx < len(text_chunks) - 1:
                     time.sleep(1.0)
 
-            # Actualizar las métricas y estado del último lote procesado
-            if current_batch and current_batch.id:
-                crud.update_batch_metrics(db, current_batch.id)
-
             logger.info("[Celery Bulk] Batch processing completed successfully.")
 
         except Exception as e:

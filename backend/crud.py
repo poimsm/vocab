@@ -524,6 +524,7 @@ def create_examples(db: Session, raw_examples: List[dict], example_type: Example
             word_id = word.get("word_id") if isinstance(word, dict) else (word.id if hasattr(word, "id") else word)
             if word_id:
                 suggested_text_form = word.get("text_form", "") if isinstance(word, dict) else ""
+                logger.info(f'[CREATE_EXAMPLES] word_id={word_id}, suggested_text_form="{suggested_text_form}"')
                 # Aproximar la forma correcta del text_form basada en cómo aparece en el texto
                 corrected_text_form = _approximate_text_form(example.text, suggested_text_form)
 

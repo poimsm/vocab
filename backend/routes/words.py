@@ -316,10 +316,6 @@ def mark_word_learned(
         db.add(stat)
     db.commit()
 
-    # RECALCULAR PROGRESO DEL LOTE AUTOMÁTICAMENTE
-    if word.batch_id:
-        crud.update_batch_metrics(db, word.batch_id)
-
     return {"message": "Palabra marcada como aprendida", "word_id": word.id}
 
 
