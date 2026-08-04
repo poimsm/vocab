@@ -9,7 +9,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlmodel import Session, select
 from db import get_db
 from models import User
-from logging_config import logger
+from logging_client import logger
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")

@@ -7,7 +7,7 @@ from sqlmodel import Session, select, func
 
 import crud
 from db import get_db
-from logging_config import logger
+from logging_client import logger
 from tasks.best_options import refill_best_options_queue_task
 from auth import get_current_user
 from models import User, BestOption, BestOptionQueue, QueueStatus, QueueType, ExampleType, ExampleWord

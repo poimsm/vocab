@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, List
-from logging_config import logger
+from logging_client import logger
 
 
 class WordCreate(BaseModel):

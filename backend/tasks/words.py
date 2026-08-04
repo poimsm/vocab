@@ -8,7 +8,7 @@ from models import WordLevel, ExampleType, BatchSource
 from helpers import chunk_list
 import crud
 import ai
-from logging_config import logger
+from logging_client import logger
 from config_manager import ConfigManager
 
 
@@ -131,7 +131,7 @@ def process_bulk_words_task(texts: List[str], user_id: int):
                                         {
                                             "text": text_string,
                                             "words": [
-                                                {"word_id": new_word.id, "text_form": ""}
+                                                {"word_id": new_word.id, "text_form": new_word.main}
                                             ],
                                         }
                                         for text_string in initial_examples
@@ -146,7 +146,7 @@ def process_bulk_words_task(texts: List[str], user_id: int):
                                         {
                                             "text": text_string,
                                             "words": [
-                                                {"word_id": new_word.id, "text_form": ""}
+                                                {"word_id": new_word.id, "text_form": new_word.main}
                                             ],
                                         }
                                         for text_string in explore_examples

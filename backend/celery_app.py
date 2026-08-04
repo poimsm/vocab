@@ -4,7 +4,7 @@ import pkgutil
 import tasks
 from celery import Celery
 from celery.schedules import crontab
-from logging_config import logger
+from logging_client import logger
 
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND")
@@ -16,6 +16,12 @@ celery_app = Celery(
     backend=CELERY_RESULT_BACKEND
 )
 logger.info("Celery application created successfully")
+
+# Configure Celery
+celery_app.conf.update(
+    worker_log_format='%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+    worker_task_log_format='%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+)
 
 # 1. Escaneamos dinámicamente todos los subarchivos .py dentro del paquete tasks/
 task_modules = [

@@ -5,7 +5,7 @@ from db import get_db
 from models import User
 from auth import hash_password, verify_password, create_access_token
 from pydantic import BaseModel, EmailStr
-from logging_config import logger
+from logging_client import logger
 
 router = APIRouter()
 

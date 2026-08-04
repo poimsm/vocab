@@ -1,7 +1,7 @@
 # backend/tasks.py
 import time
 from celery_app import celery_app
-from logging_config import logger
+from logging_client import logger
 
 @celery_app.task(name="tasks.test.procesar_palabra")
 def procesar_tarea_pesada(parametro: str):

@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from tasks.test import procesar_tarea_pesada
 from celery.result import AsyncResult
-from logging_config import logger
+from logging_client import logger
 
 router = APIRouter()
 

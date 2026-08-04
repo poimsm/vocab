@@ -4,7 +4,7 @@ from celery_app import celery_app
 from db import engine
 import crud
 import ai
-from logging_config import logger
+from logging_client import logger
 from models import BestOption, BestOptionQueue, QueueStatus, QueueType, FeaturedType
 from batch_manager import BatchManager
 

@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import joinedload
 from sqlmodel import Session, func, or_, select
 
-from logging_config import logger
+from logging_client import logger
 
 import crud
 from batch_manager import BatchManager
@@ -437,45 +437,46 @@ def _approximate_text_form(example_text: str, suggested_text_form: str) -> str:
     if not suggested_text_form or not suggested_text_form.strip():
         return ""
 
+    import re
+
     text_lower = example_text.lower()
     suggested_lower = suggested_text_form.lower()
 
-    # 1. Buscar match exacto (case-insensitive)
-    if suggested_lower in text_lower:
-        # Recuperar la forma exacta como aparece en el texto
-        idx = text_lower.find(suggested_lower)
-        return example_text[idx:idx + len(suggested_text_form)]
+    # 1. Buscar match exacto con límites de palabra (case-insensitive)
+    # Para evitar encontrar "dream" dentro de "dreams"
+    exact_pattern = r'\b' + re.escape(suggested_lower) + r'\b'
+    match = re.search(exact_pattern, text_lower)
+    if match:
+        return example_text[match.start():match.end()]
 
     # 2. Si no hay match exacto, intentar aproximar
     words = suggested_lower.split()
 
     if len(words) == 1:
-        # Palabra única: buscar variaciones flexionadas comunes
+        # Palabra única: buscar variaciones flexionadas
         word = words[0]
-        # Buscar la palabra tal cual está en el texto
-        import re
-        pattern = r'\b' + re.escape(word) + r'\w*\b'
-        matches = re.finditer(pattern, text_lower)
+        # Buscar la palabra raíz con extensiones (inflexiones)
+        # Esto capturará: dream, dreams, dreamed, dreaming, dreamer, dreamy, etc.
+        pattern = r'\b' + re.escape(word) + r'[a-z]*\b'
+        matches = list(re.finditer(pattern, text_lower))
 
         if matches:
+            # Preferir exacto primero
             for match in matches:
                 found_word = example_text[match.start():match.end()]
-                # Preferir exacto, pero aceptar raíz similar
                 if found_word.lower() == word:
                     return found_word
 
-            # Si no hay exacto, tomar el primer match
-            match = re.search(pattern, text_lower)
-            if match:
-                return example_text[match.start():match.end()]
+            # Si no hay exacto, retornar el primer match (inflexión)
+            match = matches[0]
+            return example_text[match.start():match.end()]
     else:
         # Frase múltiple: intentar encontrar los componentes en orden
-        # Buscar en el texto las palabras de la frase propuesta
         found_positions = []
 
         for word in words:
-            import re
-            pattern = r'\b' + re.escape(word) + r'\w*\b'
+            # Buscar palabra con sus posibles variaciones
+            pattern = r'\b' + re.escape(word) + r'[a-z]*\b'
             match = re.search(pattern, text_lower)
             if match:
                 found_positions.append((match.start(), match.end(), example_text[match.start():match.end()]))
@@ -524,9 +525,11 @@ def create_examples(db: Session, raw_examples: List[dict], example_type: Example
             word_id = word.get("word_id") if isinstance(word, dict) else (word.id if hasattr(word, "id") else word)
             if word_id:
                 suggested_text_form = word.get("text_form", "") if isinstance(word, dict) else ""
-                logger.info(f'[CREATE_EXAMPLES] word_id={word_id}, suggested_text_form="{suggested_text_form}"')
                 # Aproximar la forma correcta del text_form basada en cómo aparece en el texto
                 corrected_text_form = _approximate_text_form(example.text, suggested_text_form)
+                logger.info(f'[CREATE_EXAMPLES] {example.text}')
+                logger.info(f'[suggested_text_form] word_id={word_id}, {suggested_text_form}')
+                logger.info(f'[corrected_text_form] word_id={word_id}, {corrected_text_form}')
 
                 assoc = ExampleWord(
                     example_id=example.id,

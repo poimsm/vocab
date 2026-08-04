@@ -1,5 +1,5 @@
 from typing import Union, List
-from logging_config import logger
+from logging_client import logger
 
 
 class TextFormatter:

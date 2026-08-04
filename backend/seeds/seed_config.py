@@ -2,7 +2,7 @@ import sys
 from sqlmodel import Session, select
 from db import engine
 from models import ExploreConfiguration, GlobalConfiguration
-from logging_config import logger
+from logging_client import logger
 
 def seed_explore_configurations():
     logger.info("Loading explore configurations...")

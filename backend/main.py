@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from logging_config import logger
+from logging_client import logger
 
 from fastapi.middleware.cors import CORSMiddleware
 

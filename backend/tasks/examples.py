@@ -2,7 +2,7 @@ from sqlmodel import Session, select
 from celery_app import celery_app
 from db import engine
 import crud
-from logging_config import logger
+from logging_client import logger
 from models import User, QueueType
 
 

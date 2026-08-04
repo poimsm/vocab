@@ -5,7 +5,7 @@ import crud
 import schemas
 import ai
 from typing import List
-from logging_config import logger
+from logging_client import logger
 from fastapi import (APIRouter, Depends, HTTPException,
                      Query, Path, BackgroundTasks, status, Body)
 from fastapi.responses import StreamingResponse

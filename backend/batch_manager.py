@@ -12,7 +12,7 @@ Proporciona métodos para:
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 from sqlmodel import Session, select, func
-from logging_config import logger
+from logging_client import logger
 
 import models
 from models import (

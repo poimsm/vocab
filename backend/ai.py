@@ -2,7 +2,7 @@ import os
 import json
 from openai import OpenAI
 import models
-from logging_config import logger
+from logging_client import logger
 
 client = OpenAI(api_key=os.getenv("AI_KEY"))
 
@@ -133,6 +133,7 @@ Rules:
 - level: beginner, intermediate, advanced.
 - category must be a single-word label in English.
 - examples must be 10 examples.
+- Vary the target word's inflected forms (e.g., tense, plural, -ing, -ed) when natural.
 
 Return ONLY JSON.
 """
@@ -193,8 +194,8 @@ Rules:
 - frequency: common, uncommon, rare.
 - level: beginner, intermediate, advanced.
 - category must be a single-word label in English (e.g., "emotions", "technology", "nature").
-- examples must contain exactly 10 natural sentences using the target word.
-- Maintain the exact "word" key for each item to match the input.
+- examples must be 10 examples.
+- Vary the target word's inflected forms (e.g., tense, plural, -ing, -ed) when natural.
 """
             },
             {

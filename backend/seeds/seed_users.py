@@ -4,7 +4,7 @@ from sqlmodel import Session, select
 from db import engine
 from models import User
 from auth import hash_password
-from logging_config import logger 
+from logging_client import logger 
 
 PASS_ADMIN = os.getenv("PASS_ADMIN_USER")
 

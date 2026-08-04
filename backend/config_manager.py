@@ -6,7 +6,7 @@ Proporciona métodos para obtener valores de configuración de forma tipada.
 
 from typing import Any, Optional
 from sqlmodel import Session, select
-from logging_config import logger
+from logging_client import logger
 
 from models import GlobalConfiguration
 

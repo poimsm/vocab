@@ -6,7 +6,7 @@ from sqlmodel import Session, select, func
 
 import crud
 from db import get_db
-from logging_config import logger
+from logging_client import logger
 from tasks.examples import refill_queue_task
 from schemas.explore import ExploreResponse, ExploreExampleSchema, ExploreWordSchema
 from auth import get_current_user

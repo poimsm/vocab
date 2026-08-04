@@ -68,5 +68,19 @@ services:
     depends_on:
       - backend
 
+  # 6. LOGGING SERVICE - Custom endpoint para recibir logs
+  logging_service:
+    build:
+      context: ./logging_service
+      dockerfile: Dockerfile
+    container_name: logging_service_container
+    restart: always
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./logs:/app/logs
+    environment:
+      - LOG_DIR=/app/logs
+
 volumes:
   postgres_data:

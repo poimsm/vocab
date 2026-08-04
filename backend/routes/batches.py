@@ -5,7 +5,7 @@ Rutas para gestión avanzada de batches usando BatchManager.
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Path
 from sqlmodel import Session
-from logging_config import logger
+from logging_client import logger
 
 from db import get_db
 from models import User, FeaturedType

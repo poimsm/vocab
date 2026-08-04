@@ -1,6 +1,6 @@
 import os
 from sqlmodel import create_engine, Session
-from logging_config import logger
+from logging_client import logger
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
