@@ -128,7 +128,7 @@ def create_word(word: WordCreate, db: Session = Depends(get_db), current_user: U
             raw_initial = [
                 {
                     "text": text_string,
-                    "words": [{"word_id": new_word.id, "word": new_word.main}]
+                    "words": [{"word_id": new_word.id, "text_form": new_word.main}]
                 }
                 for text_string in initial_examples
             ]
@@ -139,7 +139,7 @@ def create_word(word: WordCreate, db: Session = Depends(get_db), current_user: U
             raw_explore = [
                 {
                     "text": text_string,
-                    "words": [{"word_id": new_word.id, "word": new_word.main}]
+                    "words": [{"word_id": new_word.id, "text_form": new_word.main}]
                 }
                 for text_string in explore_examples
             ]
@@ -231,7 +231,7 @@ def create_single_word(
                     {
                         "text": example_text,
                         "words": [
-                            {"word_id": new_word.id, "text_form": ""}
+                            {"word_id": new_word.id, "text_form": new_word.main}
                         ],
                     }
                     for example_text in initial_examples
@@ -245,7 +245,7 @@ def create_single_word(
                     {
                         "text": example_text,
                         "words": [
-                            {"word_id": new_word.id, "text_form": ""}
+                            {"word_id": new_word.id, "text_form": new_word.main}
                         ],
                     }
                     for example_text in explore_examples
