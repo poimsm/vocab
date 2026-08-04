@@ -423,9 +423,45 @@ def _segment_example_text(example_text: str, example_words: List[Any]) -> List[d
     return segments
 
 
+# Caché global para diccionario de verbos irregulares
+_IRREGULAR_VERBS_CACHE = None
+
+def _load_irregular_verbs() -> dict:
+    """Carga el diccionario de verbos irregulares desde el archivo."""
+    global _IRREGULAR_VERBS_CACHE
+
+    if _IRREGULAR_VERBS_CACHE is not None:
+        return _IRREGULAR_VERBS_CACHE
+
+    import os
+    irregular_verbs_path = os.path.join(os.path.dirname(__file__), 'irregular_verbs.txt')
+
+    irregular_verbs = {}
+    try:
+        with open(irregular_verbs_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                forms = [form.strip().lower() for form in line.split(';')]
+                if forms:
+                    # La primera forma es la base
+                    base_form = forms[0]
+                    # Todas las formas se mapean a todas las otras
+                    for form in forms:
+                        if form not in irregular_verbs:
+                            irregular_verbs[form] = set(forms)
+    except Exception:
+        pass
+
+    _IRREGULAR_VERBS_CACHE = irregular_verbs
+    return irregular_verbs
+
+
 def _approximate_text_form(example_text: str, suggested_text_form: str) -> str:
     """
     Aproxima la forma correcta del text_form basada en cómo aparece en el texto del ejemplo.
+    Usa LemmInflect y diccionario de verbos irregulares para generar todas las inflexiones.
 
     Args:
         example_text: El texto completo del ejemplo
@@ -443,7 +479,6 @@ def _approximate_text_form(example_text: str, suggested_text_form: str) -> str:
     suggested_lower = suggested_text_form.lower()
 
     # 1. Buscar match exacto con límites de palabra (case-insensitive)
-    # Para evitar encontrar "dream" dentro de "dreams"
     exact_pattern = r'\b' + re.escape(suggested_lower) + r'\b'
     match = re.search(exact_pattern, text_lower)
     if match:
@@ -452,34 +487,101 @@ def _approximate_text_form(example_text: str, suggested_text_form: str) -> str:
     # 2. Si no hay match exacto, intentar aproximar
     words = suggested_lower.split()
 
+    # Filtrar artículos comunes (a, an, the) que pueden no estar en el texto
+    # pero dejar las otras palabras
+    articles = {'a', 'an', 'the'}
+    words_without_articles = [w for w in words if w not in articles]
+
+    # Si después de filtrar artículos quedan palabras, usar esas
+    # Si no, usar las palabras originales
+    if words_without_articles:
+        words = words_without_articles
+
     if len(words) == 1:
-        # Palabra única: buscar variaciones flexionadas
+        # Palabra única: generar todas las inflexiones posibles
         word = words[0]
-        # Buscar la palabra raíz con extensiones (inflexiones)
-        # Esto capturará: dream, dreams, dreamed, dreaming, dreamer, dreamy, etc.
+        possible_forms = {word}  # Incluir la forma original
+
+        # Obtener formas del diccionario de verbos irregulares
+        irregular_verbs = _load_irregular_verbs()
+        if word in irregular_verbs:
+            possible_forms.update(irregular_verbs[word])
+
+        try:
+            # Obtener todas las inflexiones con LemmInflect
+            from lemminflect.lemminflect import getInflections
+            inflections = getInflections(word)
+            if inflections:
+                for form_list in inflections.values():
+                    possible_forms.update(form_list)
+        except Exception:
+            pass
+
+        # Buscar las inflexiones en el texto
+        # Preferir exacto primero
+        for form in possible_forms:
+            if form and form.lower() == word:
+                pattern = r'\b' + re.escape(form) + r'\b'
+                match = re.search(pattern, text_lower)
+                if match:
+                    return example_text[match.start():match.end()]
+
+        # Si no hay exacto, buscar todas las inflexiones y retornar la más larga encontrada
+        # Esto asegura que "dreams" se retorne antes que "dream", y "dreaming" antes que "dream"
+        found_matches = []
+        sorted_forms = sorted(possible_forms, key=len, reverse=True)
+        for form in sorted_forms:
+            if form:
+                pattern = r'\b' + re.escape(form) + r'\b'
+                match = re.search(pattern, text_lower)
+                if match:
+                    found_matches.append((len(form), match.start(), match.end(), example_text[match.start():match.end()]))
+
+        if found_matches:
+            # Retornar el match más largo encontrado
+            found_matches.sort(reverse=True)
+            return found_matches[0][3]
+
+        # Fallback: patrón regex si nada encontrado
         pattern = r'\b' + re.escape(word) + r'[a-z]*\b'
-        matches = list(re.finditer(pattern, text_lower))
-
-        if matches:
-            # Preferir exacto primero
-            for match in matches:
-                found_word = example_text[match.start():match.end()]
-                if found_word.lower() == word:
-                    return found_word
-
-            # Si no hay exacto, retornar el primer match (inflexión)
-            match = matches[0]
+        match = re.search(pattern, text_lower)
+        if match:
             return example_text[match.start():match.end()]
     else:
         # Frase múltiple: intentar encontrar los componentes en orden
         found_positions = []
+        irregular_verbs = _load_irregular_verbs()
 
         for word in words:
-            # Buscar palabra con sus posibles variaciones
-            pattern = r'\b' + re.escape(word) + r'[a-z]*\b'
-            match = re.search(pattern, text_lower)
-            if match:
-                found_positions.append((match.start(), match.end(), example_text[match.start():match.end()]))
+            possible_forms = {word}
+
+            # Obtener formas del diccionario de verbos irregulares
+            if word in irregular_verbs:
+                possible_forms.update(irregular_verbs[word])
+
+            try:
+                from lemminflect.lemminflect import getInflections
+                inflections = getInflections(word)
+                if inflections:
+                    for form_list in inflections.values():
+                        possible_forms.update(form_list)
+            except Exception:
+                pass
+
+            # Buscar todas las formas y retornar la más larga encontrada
+            sorted_forms = sorted(possible_forms, key=len, reverse=True)
+            best_match = None
+            best_length = 0
+            for form in sorted_forms:
+                if form:
+                    pattern = r'\b' + re.escape(form) + r'\b'
+                    match = re.search(pattern, text_lower)
+                    if match and len(form) > best_length:
+                        best_match = (match.start(), match.end(), example_text[match.start():match.end()])
+                        best_length = len(form)
+
+            if best_match:
+                found_positions.append(best_match)
 
         # Si encontramos al menos una palabra
         if found_positions:

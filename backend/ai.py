@@ -133,8 +133,7 @@ Rules:
 - level: beginner, intermediate, advanced.
 - category must be a single-word label in English.
 - examples must be 10 examples.
-- Vary the target word's inflected forms (e.g., tense, plural, -ing, -ed) when natural.
-
+- Vary the target word's inflected forms in examples (e.g., tense, plural, -ing, -ed, past).
 Return ONLY JSON.
 """
             },
@@ -195,7 +194,7 @@ Rules:
 - level: beginner, intermediate, advanced.
 - category must be a single-word label in English (e.g., "emotions", "technology", "nature").
 - examples must be 10 examples.
-- Vary the target word's inflected forms (e.g., tense, plural, -ing, -ed) when natural.
+- Vary the target word's inflected forms in examples (e.g., tense, plural, -ing, -ed, past).
 """
             },
             {
