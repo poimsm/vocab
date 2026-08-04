@@ -807,141 +807,89 @@ def refill_example_queue(db: Session, user_id: int):
     if not priority_words:
         return
 
-    # 1. RECICLAR EJEMPLOS EXISTENTES (Que el usuario NUNCA haya visto)
-    recycled_examples = []
-    if recycle_amount > 0:
-        for word in priority_words:
-            if len(recycled_examples) >= recycle_amount:
-                break
+    # 1. PRIMERA PRIORIDAD: RECOLECTAR TODOS LOS EJEMPLOS PRISTINOS DISPONIBLES
+    # Sin límite de cantidad, simplemente obtén TODOS los que estén disponibles
+    all_pristine_examples = []
 
-            statement = (
-                select(Example)
-                .join(Example.example_words)
-                .join(ExampleWord.word)
-                .outerjoin(WordStatistics, WordStatistics.word_id == ExampleWord.word_id)
-                .where(
-                    Example.is_active == True,
-                    Example.type == ExampleType.EXPLORE,
-                    Example.is_pristine == True,
-                    ExampleWord.word_id == word.id,
-                    or_(WordStatistics.is_learned == False, WordStatistics.id == None), # No incluir si ya se aprendió
-                    Word.is_active == True
-                )
-            )
+    statement = (
+        select(Example)
+        .join(Example.example_words)
+        .join(ExampleWord.word)
+        .outerjoin(WordStatistics, WordStatistics.word_id == ExampleWord.word_id)
+        .where(
+            Example.is_active == True,
+            Example.type == ExampleType.EXPLORE,
+            Example.is_pristine == True,
+            ExampleWord.word_id.in_([w.id for w in priority_words]),
+            or_(WordStatistics.is_learned == False, WordStatistics.id == None),
+            Word.is_active == True
+        )
+    )
 
-            # Garantiza no repetir ejemplos ya presentes en la cola del usuario
-            if excluded_ids:
-                statement = statement.where(Example.id.not_in(excluded_ids))
+    if excluded_ids:
+        statement = statement.where(Example.id.not_in(excluded_ids))
 
-            statement = statement.order_by(
-                Example.times_seen.asc(), Example.created_at.desc()
-            ).limit(1)
+    statement = statement.order_by(
+        Example.times_seen.asc(), Example.created_at.desc()
+    )
 
-            best_example = db.exec(statement).first()
-            if best_example:
-                recycled_examples.append(best_example)
-                excluded_ids.append(best_example.id)
+    all_pristine_examples = db.exec(statement).all()
+    logger.info(f"[refill_example_queue] User {user_id}: Found {len(all_pristine_examples)} pristine examples")
 
-    # 2. GENERAR NUEVOS EJEMPLOS CON IA
+    # Actualizar excluded_ids con los ejemplos encontrados
+    for example in all_pristine_examples:
+        excluded_ids.append(example.id)
+        example.is_pristine = False  # Marcar como usado
+        db.add(example)
+
+    # 2. RECICLAR EJEMPLOS EXISTENTES (Que el usuario NUNCA haya visto)
+    recycled_examples = all_pristine_examples[:recycle_amount] if recycle_amount > 0 else []
+
+    # 3. GENERAR NUEVOS EJEMPLOS CON IA (SOLO si no hay suficientes pristinos)
     new_examples = []
-    total_ai_required = ai_simple_amount + ai_mixed_amount
+    total_needed = recycle_amount + ai_simple_amount + ai_mixed_amount
+    pristine_count = len(all_pristine_examples)
 
-    if total_ai_required > 0:
-        words_for_ai = priority_words[:total_ai_required * 2]
+    # Si ya tenemos suficientes ejemplos pristinos, no generar IA
+    if pristine_count >= total_needed:
+        logger.info(f"[refill_example_queue] User {user_id}: Enough pristine examples ({pristine_count}). Skipping AI generation")
+        new_examples = all_pristine_examples[recycle_amount:]  # El resto van a new_examples
+    else:
+        # Faltan ejemplos, generar con IA
+        total_ai_required = ai_simple_amount + ai_mixed_amount
 
-        # Simple - Primero obtener disponibles, luego generar si faltan
-        if ai_simple_amount > 0:
-            simple_words = words_for_ai[:ai_simple_amount]
-            collected_simple = []
+        if total_ai_required > 0:
+            words_for_ai = priority_words[:total_ai_required * 2]
 
-            # Intentar obtener ejemplos EXPLORE existentes sin usar
-            for word in simple_words:
-                if len(collected_simple) >= ai_simple_amount:
-                    break
+            # Simple - Generar si faltan
+            if ai_simple_amount > 0:
+                needed_simple = ai_simple_amount
+                if pristine_count > recycle_amount:
+                    # Algunos pristinos se pueden usar para simple
+                    needed_simple = max(0, ai_simple_amount - (pristine_count - recycle_amount))
 
-                statement = (
-                    select(Example)
-                    .join(Example.example_words)
-                    .join(ExampleWord.word)
-                    .outerjoin(WordStatistics, WordStatistics.word_id == ExampleWord.word_id)
-                    .where(
-                        Example.is_active == True,
-                        Example.type == ExampleType.EXPLORE,
-                        Example.is_pristine == True,
-                        ExampleWord.word_id == word.id,
-                        or_(WordStatistics.is_learned == False, WordStatistics.id == None),
-                        Word.is_active == True
-                    )
-                )
+                if needed_simple > 0:
+                    simple_words = words_for_ai[:ai_simple_amount]
+                    raw_simple = ai.generate_examples_from_words(simple_words)
+                    if raw_simple:
+                        generated_simple = create_examples(db, raw_simple[:needed_simple])
+                        new_examples.extend(generated_simple)
 
-                if excluded_ids:
-                    statement = statement.where(Example.id.not_in(excluded_ids))
+            # Mixed - Generar si faltan
+            if ai_mixed_amount > 0:
+                # Calcular cuántos mixed aún se necesitan
+                already_collected = len(recycled_examples) + len(new_examples)
+                needed_mixed = max(0, total_ai_required - already_collected)
 
-                statement = statement.order_by(
-                    Example.times_seen.asc(), Example.created_at.desc()
-                ).limit(1)
+                if needed_mixed > 0:
+                    mixed_words = words_for_ai[ai_simple_amount:ai_simple_amount + ai_mixed_amount]
+                    raw_mixed = ai.generate_mixed_examples_from_words(mixed_words)
+                    if raw_mixed:
+                        generated_mixed = create_examples(db, raw_mixed[:needed_mixed])
+                        new_examples.extend(generated_mixed)
 
-                available_example = db.exec(statement).first()
-                if available_example:
-                    collected_simple.append(available_example)
-                    excluded_ids.append(available_example.id)
-
-            # Si aún faltan, generar con IA
-            remaining_needed = ai_simple_amount - len(collected_simple)
-            if remaining_needed > 0 and len(simple_words) > 0:
-                raw_simple = ai.generate_examples_from_words(simple_words)
-                if raw_simple:
-                    generated_simple = create_examples(db, raw_simple[:remaining_needed])
-                    collected_simple.extend(generated_simple)
-
-            new_examples.extend(collected_simple)
-
-        # Mixta - Primero obtener disponibles, luego generar si faltan
-        if ai_mixed_amount > 0:
-            mixed_words = words_for_ai[ai_simple_amount:ai_simple_amount + ai_mixed_amount]
-            collected_mixed = []
-
-            # Intentar obtener ejemplos EXPLORE existentes sin usar
-            for word in mixed_words:
-                if len(collected_mixed) >= ai_mixed_amount:
-                    break
-
-                statement = (
-                    select(Example)
-                    .join(Example.example_words)
-                    .join(ExampleWord.word)
-                    .outerjoin(WordStatistics, WordStatistics.word_id == ExampleWord.word_id)
-                    .where(
-                        Example.is_active == True,
-                        Example.type == ExampleType.EXPLORE,
-                        Example.is_pristine == True,
-                        ExampleWord.word_id == word.id,
-                        or_(WordStatistics.is_learned == False, WordStatistics.id == None),
-                        Word.is_active == True
-                    )
-                )
-
-                if excluded_ids:
-                    statement = statement.where(Example.id.not_in(excluded_ids))
-
-                statement = statement.order_by(
-                    Example.times_seen.asc(), Example.created_at.desc()
-                ).limit(1)
-
-                available_example = db.exec(statement).first()
-                if available_example:
-                    collected_mixed.append(available_example)
-                    excluded_ids.append(available_example.id)
-
-            # Si aún faltan, generar con IA
-            remaining_needed = ai_mixed_amount - len(collected_mixed)
-            if remaining_needed > 0 and len(mixed_words) > 0:
-                raw_mixed = ai.generate_mixed_examples_from_words(mixed_words)
-                if raw_mixed:
-                    generated_mixed = create_examples(db, raw_mixed[:remaining_needed])
-                    collected_mixed.extend(generated_mixed)
-
-            new_examples.extend(collected_mixed)
+        # Agregar pristinos restantes a new_examples
+        new_examples = all_pristine_examples[recycle_amount:] + new_examples
 
     # 3. ENCOLAR EN ESTADO PENDING SIN BORRAR REGISTROS PREVIOS
     all_candidates = recycled_examples + new_examples
