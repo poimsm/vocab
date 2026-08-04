@@ -642,6 +642,7 @@ def create_examples(db: Session, raw_examples: List[dict], example_type: Example
 
         created.append(example)
 
+    db.commit()
     return created
 
 
