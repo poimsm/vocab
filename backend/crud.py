@@ -629,7 +629,7 @@ def create_examples(db: Session, raw_examples: List[dict], example_type: Example
                 suggested_text_form = word.get("text_form", "") if isinstance(word, dict) else ""
                 # Aproximar la forma correcta del text_form basada en cómo aparece en el texto
                 corrected_text_form = _approximate_text_form(example.text, suggested_text_form)
-                logger.info(f'[CREATE_EXAMPLES] {example.text}')
+                logger.info(f'[example] {example.text}')
                 logger.info(f'[suggested_text_form] word_id={word_id}, {suggested_text_form}')
                 logger.info(f'[corrected_text_form] word_id={word_id}, {corrected_text_form}')
 
