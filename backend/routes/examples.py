@@ -1,4 +1,5 @@
 from typing import List
+import random
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.orm import joinedload
@@ -118,9 +119,11 @@ def get_explore_feed(
             ExampleQueue.status == QueueStatus.PENDING
         )
         .options(selectinload(ExampleQueue.example).selectinload(Example.example_words).selectinload(ExampleWord.word))
-        .order_by(ExampleQueue.created_at.asc())
-        .limit(limit)
     ).all()
+
+    # Barajar aleatoriamente para mezclar ejemplos de diferentes palabras
+    random.shuffle(queued_items)
+    queued_items = queued_items[:limit]
     logger.info(
         f"[get_explore_feed] Found {len(queued_items)} queued items from queue")
 
