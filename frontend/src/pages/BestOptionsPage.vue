@@ -101,7 +101,7 @@ function startPolling() {
         }
         isPolling.value = false
         generating.value = false
-        loadItems(data.best_options || [])
+        loadItems(data.items || [])
       } catch (e: any) {
         isPolling.value = false
         generating.value = false
@@ -183,7 +183,7 @@ async function fetchItems() {
       return
     }
     generating.value = false
-    loadItems(data.best_options || [])
+    loadItems(data.items || [])
   } catch (e: any) {
     generating.value = false
     error.value = e.response?.data?.message || e.message || 'Failed to load'

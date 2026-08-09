@@ -1,0 +1,172 @@
+# backend/tasks/words.py
+import time
+from typing import List
+from sqlmodel import Session
+from celery_app import celery_app
+from db import engine
+from models import WordLevel, ExampleType, BatchSource
+from helpers import chunk_list
+import ai
+from logging_client import logger
+from config_manager import ConfigManager
+from words import repository as WordRepository
+from examples import repository as ExampleRepository
+from batch_manager import BatchManager
+
+
+@celery_app.task(name="tasks.words.process_bulk_words")
+def process_bulk_words_task(texts: List[str], user_id: int):
+    logger.info(
+        f"[Celery Bulk] Starting batch processing for {len(texts)} lines (User: {user_id})."
+    )
+
+    with Session(engine) as db:
+        config = ConfigManager(db)
+        chunk_size = config.get_chunk_size()
+
+    text_chunks = list(chunk_list(texts, chunk_size))
+
+    with Session(engine) as db:
+        try:
+            manager = BatchManager(db)
+
+            current_batch = manager.get_or_create_propitious_batch(
+                user_id=user_id, 
+                source=BatchSource.BULK_IMPORT,
+                title="Importación masiva"
+            )
+
+            for chunk_idx, text_chunk in enumerate(text_chunks):
+                start_index = chunk_idx * chunk_size
+
+                logger.info(f"--- Processing Chunk {chunk_idx + 1}/{len(text_chunks)} (Size: {len(text_chunk)}) ---")
+
+                # Step 1: Extraer intenciones de aprendizaje
+                extracted_list = ai.extract_learning_intent(text_chunk)
+                if not extracted_list or not isinstance(extracted_list, list):
+                    logger.warning(
+                        f"Could not extract words for chunk {chunk_idx + 1}. Skipping."
+                    )
+                    continue
+
+                # Step 2: Términos limpios
+                words_to_enrich = [
+                    item["main"] for item in extracted_list if item.get("main")
+                ]
+                if not words_to_enrich:
+                    logger.info("No valid words found in this chunk.")
+                    continue
+
+                # Step 3: Enriquecer con IA
+                enriched_results = ai.enrich_words_bulk(words_to_enrich)
+                if not enriched_results:
+                    logger.warning("Could not enrich current chunk. Skipping.")
+                    continue
+
+                enriched_map = {
+                    res["word"].lower().strip(): res
+                    for res in enriched_results
+                    if "word" in res
+                }
+
+                # Step 4: Guardar en Base de Datos asignando Lote
+                for extracted in extracted_list:
+                    main_word = extracted.get("main")
+                    if not main_word:
+                        continue
+
+                    try:
+                        enriched = enriched_map.get(main_word.lower().strip())
+                        if not enriched:
+                            logger.warning(
+                                f"AI omitted details for '{main_word}'."
+                            )
+                            continue
+
+                        if len(current_batch.words) >= current_batch.capacity:
+                            logger.info(f"Current batch #{current_batch.id} reached capacity ({current_batch.capacity}). Creating new batch.")
+                            current_batch = manager.get_or_create_propitious_batch(
+                                user_id=user_id,
+                                source=BatchSource.BULK_IMPORT,
+                                title="Importación masiva"
+                            )
+
+                        local_idx = extracted.get("raw_index", 0)
+                        absolute_idx = start_index + local_idx
+                        source_text = (
+                            texts[absolute_idx]
+                            if absolute_idx < len(texts)
+                            else "Bulk input"
+                        )
+
+                        word_data = {
+                            "main": main_word,
+                            "type": extracted["type"],
+                            "meaning": enriched.get("meaning"),
+                            "synonyms": enriched.get("synonyms", []),
+                            "frequency": enriched.get("frequency"),
+                            "level": WordLevel.to_int(enriched.get("level")),
+                            "context": enriched.get("category"),
+                            "source_text": source_text,
+                            "batch_id": current_batch.id,
+                        }
+
+                        new_word = WordRepository.create(db, word_data, user_id)
+
+                        if new_word:
+                            db.refresh(current_batch)
+
+                            if enriched.get("examples"):
+                                examples_list = enriched.get("examples", [])
+                                initial_examples = examples_list[:3]
+                                explore_examples = examples_list[3:]
+
+                                # Create INITIAL examples (first 3)
+                                if initial_examples:
+                                    raw_initial = [
+                                        {
+                                            "text": text_string,
+                                            "words": [
+                                                {"word_id": new_word.id, "text_form": new_word.main}
+                                            ],
+                                        }
+                                        for text_string in initial_examples
+                                    ]
+                                    ExampleRepository.create(
+                                        db, raw_initial, example_type=ExampleType.INITIAL
+                                    )
+
+                                # Create EXPLORE examples (rest)
+                                if explore_examples:
+                                    raw_explore = [
+                                        {
+                                            "text": text_string,
+                                            "words": [
+                                                {"word_id": new_word.id, "text_form": new_word.main}
+                                            ],
+                                        }
+                                        for text_string in explore_examples
+                                    ]
+                                    ExampleRepository.create(
+                                        db, raw_explore, example_type=ExampleType.EXPLORE
+                                    )
+                            logger.info(f"✓ Saved: '{new_word.main}' in Batch #{current_batch.id}")
+                        else:
+                            logger.info(
+                                f"⚠ Saltada (Duplicada): '{main_word}'"
+                            )
+
+                    except Exception as item_error:
+                        logger.error(
+                            f"Error processing individual word '{main_word}': {item_error}"
+                        )
+                        continue
+
+                # Pausa preventiva entre chunks
+                if chunk_idx < len(text_chunks) - 1:
+                    time.sleep(1.0)
+
+            logger.info("[Celery Bulk] Batch processing completed successfully.")
+
+        except Exception as e:
+            logger.error(f"Critical error in Celery bulk task: {e}", exc_info=True)

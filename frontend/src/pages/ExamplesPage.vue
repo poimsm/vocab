@@ -25,7 +25,6 @@ interface TextSegment {
 interface ExampleItem {
   id: number
   text: TextSegment[]
-  origin: string
 }
 
 interface WordDetail {
@@ -86,8 +85,8 @@ const canGoPrev = computed(() => {
 })
 
 // ─── Side Effects ───
-function fireAndForgetResolve(exampleId: number) {
-  api.patch(`/examples/${exampleId}/resolve-pending`)
+function fireAndForgetResolve(queueItemId: number) {
+  api.patch(`/examples/${queueItemId}/resolve`)
     .catch(() => { }) // Silencioso, no nos importa si falla
 }
 
@@ -181,8 +180,7 @@ function loadExamples(data: any) {
   const rawExamples = data.examples || []
   const newExamples: ExampleItem[] = rawExamples.map((item: any) => ({
     id: item.id,
-    text: item.text || [],
-    origin: data.active_batch_title || 'General'
+    text: item.text || []
   }))
 
   if (newExamples.length > 0 && newExamples[0]) {
@@ -399,9 +397,6 @@ onUnmounted(() => {
       </div>
 
       <div class="example-meta">
-        <span class="origin-badge" :class="currentExample.origin">
-          {{ currentExample.origin }}
-        </span>
         <span class="counter">{{ currentIndex + 1 }} / {{ examples.length }}</span>
       </div>
     </div>

@@ -3,8 +3,8 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 from sqlmodel import Field, SQLModel, Relationship
 from sqlalchemy import JSON, Integer
+from sqlalchemy.orm import foreign
 from enum import Enum
-from logging_client import logger
 
 
 class User(SQLModel, table=True):
@@ -70,7 +70,7 @@ class BatchSource(str, Enum):
     ORGANIC = "organic"          # Palabras agregadas una a una
 
 
-class FeaturedType(str, Enum):
+class ContentType(str, Enum):
     EXAMPLE = "example"                  # Generación de ejemplos
     BEST_OPTIONS = "best_options"        # Ejercicios de opciones
 
@@ -98,8 +98,9 @@ class BatchFeatured(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     batch_id: int = Field(foreign_key="batch.id", index=True)
-    type: FeaturedType = Field(index=True)
-    status: BatchFeaturedStatus = Field(default=BatchFeaturedStatus.ACTIVE, index=True)
+    type: ContentType = Field(index=True)
+    status: BatchFeaturedStatus = Field(
+        default=BatchFeaturedStatus.ACTIVE, index=True)
 
     # Estadísticas y progreso
     mastery_progress: float = Field(default=0.0)  # 0.0 a 100.0%
@@ -132,7 +133,7 @@ class WordStatistics(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     word_id: int = Field(foreign_key="words.id", index=True)
-    type: FeaturedType = Field(index=True)
+    type: ContentType = Field(index=True)
 
     is_learned: bool = Field(default=False, index=True)
     last_seen_at: Optional[datetime] = Field(default=None)
@@ -217,49 +218,45 @@ class BestOption(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     word_id: int = Field(foreign_key="words.id", index=True)
-    sequence_order: int = Field(default=1)  # 1, 2, 3, o 4 (cuál de los 4 ejercicios es)
+    # 1, 2, 3, o 4 (cuál de los 4 ejercicios es)
+    sequence_order: int = Field(default=1)
     question: str = Field(nullable=False)
-    options: str = Field(nullable=False) # guardar options separadas por ";"
+    options: str = Field(nullable=False)  # guardar options separadas por ";"
     correct_option: int = Field(default=0)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc))
     normalized: Optional[str] = Field(
         default=None, max_length=255, unique=True, index=True)
     is_active: bool = Field(default=True)
+    is_pristine: bool = Field(default=True)
 
     word: "Word" = Relationship()
 
+
 class QueueStatus(str, enum.Enum):
     PENDING = "pending"   # Encolado listo para enviar
-    SENT = "sent"         # Enviado al usuario en el explore (revisando en app)
-    RESOLVED = "resolved"  # Ya procesado e incrementado
+    SENT = "sent"         # Enviado al usuario
+    RESOLVED = "resolved"  # Ya procesado
 
 
-class ExampleQueue(SQLModel, table=True):
-    __tablename__: str = "example_queue"
+class GenerationQueue(SQLModel, table=True):
+    __tablename__: str = "generation_queue"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    example_id: int = Field(foreign_key="examples.id", index=True)
+    content_id: int = Field(index=True)
+    type: ContentType = Field(index=True)
     status: QueueStatus = Field(default=QueueStatus.PENDING, index=True)
     is_active: bool = Field(default=True, index=True)
 
-    example: "Example" = Relationship()
     user_id: int = Field(foreign_key="users.id", index=True)
 
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc))
-
-
-class BestOptionQueue(SQLModel, table=True):
-    __tablename__: str = "best_option_queue"
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    best_option_id: int = Field(foreign_key="best_options.id", index=True)
-    status: QueueStatus = Field(default=QueueStatus.PENDING, index=True)
-    is_active: bool = Field(default=True, index=True)
-
-    best_option: "BestOption" = Relationship()
-    user_id: int = Field(foreign_key="users.id", index=True)
+    example: Optional["Example"] = Relationship(
+        sa_relationship_kwargs={
+            "primaryjoin": "and_(foreign(generation_queue.c.content_id)==examples.c.id, generation_queue.c.type=='example')",
+            "viewonly": True,
+            "uselist": False
+        }
+    )
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc))
@@ -291,17 +288,12 @@ class Activity(SQLModel, table=True):
     user: User = Relationship(back_populates="activities")
 
 
-class QueueType(str, enum.Enum):
-    EXAMPLE = "example"
-    BEST_OPTION = "best_option"
-
-
 class QueueRefillStatus(SQLModel, table=True):
     __tablename__: str = "queue_refill_status"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", index=True)
-    queue_type: QueueType = Field(index=True)
+    queue_type: ContentType = Field(index=True)
     is_refilling: bool = Field(default=False, index=True)
     started_at: Optional[datetime] = Field(default=None)
     updated_at: datetime = Field(

@@ -18,7 +18,7 @@ import models
 from models import (
     Batch,
     BatchFeatured,
-    FeaturedType,
+    ContentType,
     BatchSource,
     BatchStatus,
     BatchFeaturedStatus,
@@ -92,7 +92,7 @@ class BatchManager:
 
         # Crear BatchFeatured de todos los tipos para cada batch creado
         for batch in affected_batches:
-            for featured_type in FeaturedType:
+            for featured_type in ContentType:
                 self._create_or_update_batch_featured(
                     batch_id=batch.id,
                     featured_type=featured_type
@@ -179,7 +179,7 @@ class BatchManager:
         self.db.flush()
 
         # Crear estadísticas para la palabra por cada tipo
-        for featured_type in FeaturedType:
+        for featured_type in ContentType:
             stats = WordStatistics(
                 word_id=word.id,
                 type=featured_type
@@ -196,7 +196,7 @@ class BatchManager:
     def get_words_by_batch_featured_type(
         self,
         user_id: int,
-        featured_type: FeaturedType,
+        featured_type: ContentType,
         limit: int = 50
     ) -> List[Word]:
         """
@@ -281,7 +281,7 @@ class BatchManager:
     def create_batch_featured(
         self,
         batch_id: int,
-        featured_type: FeaturedType
+        featured_type: ContentType
     ) -> BatchFeatured:
         """
         Crea un BatchFeatured para un batch.
@@ -298,7 +298,7 @@ class BatchManager:
     def _create_or_update_batch_featured(
         self,
         batch_id: int,
-        featured_type: FeaturedType
+        featured_type: ContentType
     ) -> BatchFeatured:
         """Crea o actualiza BatchFeatured."""
         batch = self.db.get(Batch, batch_id)
@@ -352,7 +352,7 @@ class BatchManager:
     def get_all_batch_featured(
         self,
         user_id: int,
-        featured_type: Optional[FeaturedType] = None
+        featured_type: Optional[ContentType] = None
     ) -> List[Dict[str, Any]]:
         """
         Obtiene todos los BatchFeatured de un usuario, opcionalmente filtrados por tipo.
@@ -415,7 +415,7 @@ class BatchManager:
     def get_words_with_transition(
         self,
         user_id: int,
-        featured_type: FeaturedType,
+        featured_type: ContentType,
         limit: int = 10,
         threshold_for_transition: int = 4
     ) -> List[Word]:
@@ -537,7 +537,7 @@ class BatchManager:
     def get_all_batch_featured_by_user(
         self,
         user_id: int,
-        featured_type: Optional[FeaturedType] = None
+        featured_type: Optional[ContentType] = None
     ) -> List[Dict[str, Any]]:
         """
         Obtiene todos los BatchFeatured del usuario, opcionalmente filtrados por tipo.
@@ -759,7 +759,7 @@ class BatchManager:
         Args:
             batch_id: ID del batch
         """
-        for featured_type in FeaturedType:
+        for featured_type in ContentType:
             existing = self.db.exec(
                 select(BatchFeatured).where(
                     BatchFeatured.batch_id == batch_id,
@@ -827,7 +827,7 @@ class BatchManager:
             featured_items = self.db.exec(
                 select(BatchFeatured).where(
                     BatchFeatured.batch_id == batch_to_reopen.id,
-                    BatchFeatured.type == FeaturedType.SPACED_REPETITION
+                    BatchFeatured.type == ContentType.SPACED_REPETITION
                 )
             ).all()
 

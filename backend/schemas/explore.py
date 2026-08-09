@@ -1,6 +1,6 @@
 # backend/schemas/explore.py
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 from logging_client import logger
 
@@ -28,5 +28,4 @@ class ExploreExampleSchema(BaseModel):
 
 class ExploreResponse(BaseModel):
     examples: List[ExploreExampleSchema]
-    total_queue_remaining: int
-    status: str = "ok"  # "ok" o "generating"
+    status: str = "ok"

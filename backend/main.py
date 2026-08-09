@@ -8,14 +8,12 @@ from db import engine
 import models
 
 from db import engine
-from routes import (
-    words,
-    examples,
-    auth,
-    celery,
-    best_options,
-    batches,
-)
+
+from examples import routes as examples
+from words import routes as words
+from best_options import routes as best_options
+from auth import routes as auth
+from batch import routes as batch
 
 app = FastAPI(redirect_slashes=False)
 
@@ -35,9 +33,9 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(words.router, prefix="/words", tags=["words"])
 app.include_router(examples.router, prefix="/examples", tags=["examples"])
-app.include_router(celery.router, prefix="/celery", tags=["celery"])
+# app.include_router(celery.router, prefix="/celery", tags=["celery"])
 app.include_router(best_options.router, prefix="/best-options", tags=["best_options"])
-app.include_router(batches.router, tags=["batches"])
+app.include_router(batch.router, tags=["batches"])
 
 @app.on_event("startup")
 def startup():
