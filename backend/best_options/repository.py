@@ -90,6 +90,21 @@ def available_for_queue(db: Session) -> List["BestOption"]:
     return selected_items
 
 
+def mark_as_not_pristine(db: Session, best_option_ids: List[int]) -> None:
+    """Marca best options como no pristinos (ya procesados)."""
+    if not best_option_ids:
+        return
+
+    statement = select(BestOption).where(BestOption.id.in_(best_option_ids))
+    best_options = db.exec(statement).all()
+
+    for option in best_options:
+        option.is_pristine = False
+        db.add(option)
+
+    db.commit()
+
+
 def get_words(db: Session, best_option_id: int) -> List:
     """Obtiene la palabra asociada a un best option."""
     best_option = db.exec(

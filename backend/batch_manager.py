@@ -92,10 +92,10 @@ class BatchManager:
 
         # Crear BatchFeatured de todos los tipos para cada batch creado
         for batch in affected_batches:
-            for featured_type in ContentType:
+            for content_type in ContentType:
                 self._create_or_update_batch_featured(
                     batch_id=batch.id,
-                    featured_type=featured_type
+                    content_type=content_type
                 )
 
         return {
@@ -179,10 +179,10 @@ class BatchManager:
         self.db.flush()
 
         # Crear estadísticas para la palabra por cada tipo
-        for featured_type in ContentType:
+        for content_type in ContentType:
             stats = WordStatistics(
                 word_id=word.id,
-                type=featured_type
+                type=content_type
             )
             self.db.add(stats)
         self.db.flush()
@@ -196,7 +196,7 @@ class BatchManager:
     def get_words_by_batch_featured_type(
         self,
         user_id: int,
-        featured_type: ContentType,
+        content_type: ContentType,
         limit: int = 50
     ) -> List[Word]:
         """
@@ -204,7 +204,7 @@ class BatchManager:
 
         Args:
             user_id: ID del usuario
-            featured_type: Tipo de BatchFeatured
+            content_type: Tipo de contenido (ContentType.EXAMPLE o ContentType.BEST_OPTIONS)
             limit: Límite de palabras a retornar
 
         Returns:
@@ -216,7 +216,7 @@ class BatchManager:
             .join(BatchFeatured, BatchFeatured.batch_id == Batch.id)
             .where(
                 Batch.user_id == user_id,
-                BatchFeatured.type == featured_type,
+                BatchFeatured.type == content_type,
                 BatchFeatured.is_active == True,
                 Word.is_active == True
             )
@@ -281,24 +281,24 @@ class BatchManager:
     def create_batch_featured(
         self,
         batch_id: int,
-        featured_type: ContentType
+        content_type: ContentType
     ) -> BatchFeatured:
         """
         Crea un BatchFeatured para un batch.
 
         Args:
             batch_id: ID del batch
-            featured_type: Tipo de BatchFeatured
+            content_type: Tipo de contenido (ContentType.EXAMPLE o ContentType.BEST_OPTIONS)
 
         Returns:
             BatchFeatured creado
         """
-        return self._create_or_update_batch_featured(batch_id, featured_type)
+        return self._create_or_update_batch_featured(batch_id, content_type)
 
     def _create_or_update_batch_featured(
         self,
         batch_id: int,
-        featured_type: ContentType
+        content_type: ContentType
     ) -> BatchFeatured:
         """Crea o actualiza BatchFeatured."""
         batch = self.db.get(Batch, batch_id)
@@ -309,7 +309,7 @@ class BatchManager:
         existing = self.db.exec(
             select(BatchFeatured).where(
                 BatchFeatured.batch_id == batch_id,
-                BatchFeatured.type == featured_type
+                BatchFeatured.type == content_type
             )
         ).first()
 
@@ -319,11 +319,11 @@ class BatchManager:
 
         # Crear nuevo
         words = batch.words or []
-        learned = sum(1 for w in words if w.statistics and all(stat.is_learned for stat in w.statistics if stat.type == featured_type))
+        learned = sum(1 for w in words if w.statistics and all(stat.is_learned for stat in w.statistics if stat.type == content_type))
 
         featured = BatchFeatured(
             batch_id=batch_id,
-            type=featured_type,
+            type=content_type,
             mastery_progress=round((learned / len(words) * 100), 2) if words else 0.0
         )
         self.db.add(featured)
@@ -352,14 +352,14 @@ class BatchManager:
     def get_all_batch_featured(
         self,
         user_id: int,
-        featured_type: Optional[ContentType] = None
+        content_type: Optional[ContentType] = None
     ) -> List[Dict[str, Any]]:
         """
         Obtiene todos los BatchFeatured de un usuario, opcionalmente filtrados por tipo.
 
         Args:
             user_id: ID del usuario
-            featured_type: Tipo de BatchFeatured (opcional)
+            content_type: Tipo de contenido (opcional)
 
         Returns:
             Lista de BatchFeatured con metadatos
@@ -370,8 +370,8 @@ class BatchManager:
             .where(Batch.user_id == user_id, BatchFeatured.is_active == True)
         )
 
-        if featured_type:
-            statement = statement.where(BatchFeatured.type == featured_type)
+        if content_type:
+            statement = statement.where(BatchFeatured.type == content_type)
 
         results = self.db.exec(statement).all()
 
@@ -415,7 +415,7 @@ class BatchManager:
     def get_words_with_transition(
         self,
         user_id: int,
-        featured_type: ContentType,
+        content_type: ContentType,
         limit: int = 10,
         threshold_for_transition: int = 4
     ) -> List[Word]:
@@ -427,11 +427,11 @@ class BatchManager:
         - Si el batch actual tiene pocas palabras restantes, comienza a incluir del siguiente
         - Cuando un batch se completa (todas sus palabras aprendidas para este tipo),
           se marca como COMPLETED
-        - Cada tipo (ACTIVE_LEARNING, REVIEW, SPACED_REPETITION) tiene su propio progreso
+        - Cada tipo (EXAMPLE, BEST_OPTIONS) tiene su propio progreso
 
         Args:
             user_id: ID del usuario
-            featured_type: Tipo de BatchFeatured (ACTIVE_LEARNING, REVIEW, SPACED_REPETITION)
+            content_type: Tipo de contenido (ContentType.EXAMPLE o ContentType.BEST_OPTIONS)
             limit: Cantidad de palabras a devolver
             threshold_for_transition: Mínimo de palabras no aprendidas para no hacer transición
 
@@ -444,7 +444,7 @@ class BatchManager:
             .join(BatchFeatured, BatchFeatured.batch_id == Batch.id)
             .where(
                 Batch.user_id == user_id,
-                BatchFeatured.type == featured_type,
+                BatchFeatured.type == content_type,
                 BatchFeatured.status == BatchFeaturedStatus.ACTIVE
             )
             .order_by(Batch.created_at.asc())
@@ -459,7 +459,7 @@ class BatchManager:
         # 2. Obtener palabras no aprendidas del batch primario (según el tipo)
         unlearned_primary = self.db.exec(
             select(Word)
-            .join(WordStatistics, (WordStatistics.word_id == Word.id) & (WordStatistics.type == featured_type))
+            .join(WordStatistics, (WordStatistics.word_id == Word.id) & (WordStatistics.type == content_type))
             .where(
                 Word.batch_id == primary_batch.id,
                 Word.is_active == True,
@@ -478,7 +478,7 @@ class BatchManager:
                 next_batch = active_batches[1]
                 secondary_words = self.db.exec(
                     select(Word)
-                    .join(WordStatistics, (WordStatistics.word_id == Word.id) & (WordStatistics.type == featured_type))
+                    .join(WordStatistics, (WordStatistics.word_id == Word.id) & (WordStatistics.type == content_type))
                     .where(
                         Word.batch_id == next_batch.id,
                         Word.is_active == True,
@@ -499,7 +499,7 @@ class BatchManager:
             batch_featured = self.db.exec(
                 select(BatchFeatured).where(
                     BatchFeatured.batch_id == batch.id,
-                    BatchFeatured.type == featured_type
+                    BatchFeatured.type == content_type
                 )
             ).first()
 
@@ -511,7 +511,7 @@ class BatchManager:
                 if total_words_in_batch > 0:
                     learned_words_for_type = self.db.exec(
                         select(func.count(Word.id))
-                        .join(WordStatistics, (WordStatistics.word_id == Word.id) & (WordStatistics.type == featured_type))
+                        .join(WordStatistics, (WordStatistics.word_id == Word.id) & (WordStatistics.type == content_type))
                         .where(
                             Word.batch_id == batch.id,
                             Word.is_active == True,
@@ -537,7 +537,7 @@ class BatchManager:
     def get_all_batch_featured_by_user(
         self,
         user_id: int,
-        featured_type: Optional[ContentType] = None
+        content_type: Optional[ContentType] = None
     ) -> List[Dict[str, Any]]:
         """
         Obtiene todos los BatchFeatured del usuario, opcionalmente filtrados por tipo.
@@ -548,8 +548,8 @@ class BatchManager:
             .where(Batch.user_id == user_id)
         )
 
-        if featured_type:
-            query = query.where(BatchFeatured.type == featured_type)
+        if content_type:
+            query = query.where(BatchFeatured.type == content_type)
 
         results = self.db.exec(query).all()
 
@@ -759,18 +759,18 @@ class BatchManager:
         Args:
             batch_id: ID del batch
         """
-        for featured_type in ContentType:
+        for content_type in ContentType:
             existing = self.db.exec(
                 select(BatchFeatured).where(
                     BatchFeatured.batch_id == batch_id,
-                    BatchFeatured.type == featured_type
+                    BatchFeatured.type == content_type
                 )
             ).first()
 
             if not existing:
                 featured = BatchFeatured(
                     batch_id=batch_id,
-                    type=featured_type,
+                    type=content_type,
                     status=BatchFeaturedStatus.ACTIVE
                 )
                 self.db.add(featured)
@@ -984,3 +984,86 @@ class BatchManager:
                 for w in words
             ]
         }
+
+    # ==========================================
+    # SELECCIÓN DE CONTENIDO POR BATCH (EXAMPLES, BEST_OPTIONS)
+    # ==========================================
+
+    def get_content_items_for_queue(
+        self,
+        user_id: int,
+        content_type: ContentType,
+        limit: int = 10,
+        threshold_for_transition: int = 4
+    ) -> List[Any]:
+        """
+        Obtiene items de contenido (Examples o BestOptions) para la cola.
+
+        Estrategia:
+        - Obtiene palabras del batch actual respetando transiciones
+        - Filtra contenido que contiene esas palabras
+        - Solo selecciona items pristine
+        - Randomiza y devuelve hasta el límite
+
+        Args:
+            user_id: ID del usuario
+            content_type: Tipo de contenido (ContentType.EXAMPLE o ContentType.BEST_OPTIONS)
+            limit: Cantidad máxima de items a devolver
+            threshold_for_transition: Umbral para transición entre batches
+
+        Returns:
+            Lista de items de contenido (Examples o BestOptions)
+        """
+        # 1. Obtener palabras de batches activos (con transiciones)
+        eligible_words = self.get_words_with_transition(
+            user_id=user_id,
+            content_type=content_type,
+            limit=500,  # Obtener muchas palabras para filtrar
+            threshold_for_transition=threshold_for_transition
+        )
+
+        if not eligible_words:
+            return []
+
+        eligible_word_ids = [w.id for w in eligible_words]
+
+        # 2. Filtrar contenido pristine que contenga estas palabras
+        if content_type == ContentType.EXAMPLE:
+            from models import Example, ExampleWord
+
+            # Obtener ejemplos pristine que contengan palabras elegibles
+            statement = (
+                select(Example)
+                .join(ExampleWord, ExampleWord.example_id == Example.id)
+                .where(
+                    ExampleWord.word_id.in_(eligible_word_ids),
+                    Example.is_pristine == True
+                )
+                .distinct()
+            )
+            eligible_items = self.db.exec(statement).all()
+
+        elif content_type == ContentType.BEST_OPTIONS:
+            from models import BestOption
+
+            # Obtener best_options pristine que contengan palabras elegibles
+            statement = (
+                select(BestOption)
+                .where(
+                    BestOption.word_id.in_(eligible_word_ids),
+                    BestOption.is_pristine == True
+                )
+            )
+            eligible_items = self.db.exec(statement).all()
+        else:
+            return []
+
+        if not eligible_items:
+            return []
+
+        # 3. Randomizar y seleccionar hasta el límite
+        import random
+        random.shuffle(eligible_items)
+        selected_items = eligible_items[:limit]
+
+        return selected_items

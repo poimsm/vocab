@@ -256,7 +256,7 @@ def create_words_bulk(
 @log_endpoint
 def mark_word_learned(
     word_id: int,
-    featured_type: ContentType = Query(ContentType.EXAMPLE),
+    content_type: ContentType = Query(ContentType.EXAMPLE),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -273,7 +273,7 @@ def mark_word_learned(
     word_stats = db.exec(
         select(WordStatistics).where(
             WordStatistics.word_id == word_id,
-            WordStatistics.type == featured_type
+            WordStatistics.type == content_type
         )
     ).all()
     for stat in word_stats:

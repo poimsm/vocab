@@ -43,12 +43,12 @@ def save_words_to_batches(
 def get_words_by_batch_featured_type(
     db: Session,
     user_id: int,
-    featured_type: ContentType,
+    content_type: ContentType,
     limit: int = 50
 ) -> List[Word]:
-    """Obtiene palabras por tipo de BatchFeatured."""
+    """Obtiene palabras por tipo de contenido."""
     manager = BatchManager(db)
-    return manager.get_words_by_batch_featured_type(user_id, featured_type, limit)
+    return manager.get_words_by_batch_featured_type(user_id, content_type, limit)
 
 
 def get_dormant_batches(
@@ -64,11 +64,11 @@ def get_dormant_batches(
 def get_all_batch_featured(
     db: Session,
     user_id: int,
-    featured_type: Optional[ContentType] = None
+    content_type: Optional[ContentType] = None
 ) -> List[Dict[str, Any]]:
     """Obtiene todos los BatchFeatured de un usuario."""
     manager = BatchManager(db)
-    return manager.get_all_batch_featured(user_id, featured_type)
+    return manager.get_all_batch_featured(user_id, content_type)
 
 
 def update_featured_stats_for_batch(db: Session, batch_id: int) -> None:

@@ -77,16 +77,16 @@ def increment_statistics(db: Session, example_id: int, user_id: int) -> Optional
             seen_word_ids.add(word.id)
 
             # Obtener o crear estadísticas para esta palabra solo para EXAMPLE (ejemplos)
-            featured_type = ContentType.EXAMPLE
+            content_type = ContentType.EXAMPLE
             stats = db.exec(
                 select(WordStatistics).where(
                     WordStatistics.word_id == word.id,
-                    WordStatistics.type == featured_type
+                    WordStatistics.type == content_type
                 )
             ).first()
 
             if not stats:
-                stats = WordStatistics(word_id=word.id, type=featured_type)
+                stats = WordStatistics(word_id=word.id, type=content_type)
                 db.add(stats)
                 db.flush()
 
@@ -99,7 +99,7 @@ def increment_statistics(db: Session, example_id: int, user_id: int) -> Optional
             if stats.current_cycle_seen >= target_cycle_seen and not stats.is_learned:
                 stats.is_learned = True
                 logger.info(
-                    f"[resolve_and_increment_example] Word {word.id} ({word.main}) marked as LEARNED for type {featured_type.value} (current_cycle_seen={stats.current_cycle_seen})")
+                    f"[resolve_and_increment_example] Word {word.id} ({word.main}) marked as LEARNED for type {content_type.value} (current_cycle_seen={stats.current_cycle_seen})")
 
             db.add(word)
 
@@ -211,6 +211,21 @@ def get_words(db: Session, example_id: int) -> List:
         .where(ExampleWord.example_id == example_id)
     )
     return db.exec(statement).all()
+
+
+def mark_as_not_pristine(db: Session, example_ids: List[int]) -> None:
+    """Marca ejemplos como no pristinos (ya procesados)."""
+    if not example_ids:
+        return
+
+    statement = select(Example).where(Example.id.in_(example_ids))
+    examples = db.exec(statement).all()
+
+    for example in examples:
+        example.is_pristine = False
+        db.add(example)
+
+    db.commit()
 
 
 def segment_example_text(example_text: str, example_words: List[Any]) -> List[dict]:

@@ -21,7 +21,7 @@ router = APIRouter(prefix="/batches", tags=["batches"])
 @router.get("/featured")
 @log_endpoint
 def get_all_batch_featured(
-    featured_type: Optional[str] = Query(None),
+    content_type: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -29,22 +29,22 @@ def get_all_batch_featured(
     Obtiene todos los BatchFeatured del usuario.
 
     Query params:
-    - featured_type: Opcional, filtrar por tipo (active_learning, review, spaced_repetition, example, best_options)
+    - content_type: Opcional, filtrar por tipo (example, best_options)
     """
-    logger.info(f"[get_all_batch_featured] User {current_user.id}: Fetching all batch featured (type={featured_type})")
+    logger.info(f"[get_all_batch_featured] User {current_user.id}: Fetching all batch featured (type={content_type})")
 
-    featured_type_enum = None
-    if featured_type:
+    content_type_enum = None
+    if content_type:
         try:
-            featured_type_enum = ContentType(featured_type)
+            content_type_enum = ContentType(content_type)
         except ValueError:
             raise HTTPException(
                 status_code=400,
-                detail="Tipo inválido. Opciones: active_learning, review, spaced_repetition, example, best_options"
+                detail="Tipo inválido. Opciones: example, best_options"
             )
 
     manager = BatchManager(db)
-    featured_list = manager.get_all_batch_featured_by_user(current_user.id, featured_type_enum)
+    featured_list = manager.get_all_batch_featured_by_user(current_user.id, content_type_enum)
     logger.info(f"[get_all_batch_featured] Retrieved {len(featured_list)} batch featured")
 
     return {
@@ -79,10 +79,10 @@ def get_dormant_batches(
         raise HTTPException(status_code=500, detail="Error obteniendo batches dormidos")
 
 
-@router.get("/featured/type/{featured_type}/words")
+@router.get("/featured/type/{content_type}/words")
 @log_endpoint
 def get_words_by_featured_type(
-    featured_type: str,
+    content_type: str,
     limit: int = Query(50, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -91,22 +91,22 @@ def get_words_by_featured_type(
     Obtiene palabras asociadas a un tipo específico de BatchFeatured.
 
     Path params:
-    - featured_type: active_learning, review, spaced_repetition
+    - content_type: example, best_options
 
     Query params:
     - limit: Límite de palabras (default: 50)
     """
     try:
-        featured_type_enum = ContentType(featured_type)
+        content_type_enum = ContentType(content_type)
         words = repository.get_words_by_batch_featured_type(
             db,
             current_user.id,
-            featured_type_enum,
+            content_type_enum,
             limit
         )
-        logger.info(f"[get_words_by_featured_type] User {current_user.id}: Retrieved {len(words)} words for type {featured_type}")
+        logger.info(f"[get_words_by_featured_type] User {current_user.id}: Retrieved {len(words)} words for type {content_type}")
         return {
-            "featured_type": featured_type,
+            "content_type": content_type,
             "words_count": len(words),
             "words": [
                 {
@@ -122,7 +122,7 @@ def get_words_by_featured_type(
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail="Tipo inválido. Opciones: active_learning, review, spaced_repetition"
+            detail="Tipo inválido. Opciones: example, best_options"
         )
     except Exception as e:
         logger.error(f"[get_words_by_featured_type] Error: {str(e)}", exc_info=True)

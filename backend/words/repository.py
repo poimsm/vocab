@@ -172,10 +172,10 @@ def create(db: Session, word_data: dict, user_id: int):
     db.flush()
 
     # Crear estadísticas para la palabra por cada tipo
-    for featured_type in models.ContentType:
+    for content_type in models.ContentType:
         stats = WordStatistics(
             word_id=new_word.id,
-            type=featured_type
+            type=content_type
         )
         db.add(stats)
     db.commit()

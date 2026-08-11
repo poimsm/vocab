@@ -6,6 +6,8 @@ from words import repository as WordRepository
 from generation.queue import repository as QueueRepository
 from generation.queue.generation_strategy import GenerationStrategy
 from models import ContentType
+from batch_manager import BatchManager
+from config_manager import ConfigManager
 
 
 class ExampleGenerationStrategy(GenerationStrategy):
@@ -15,12 +17,20 @@ class ExampleGenerationStrategy(GenerationStrategy):
     def __init__(self, db, user_id):
         self.db = db
         self.user_id = user_id
+        self.batch_manager = BatchManager(db)
+        self.config_manager = ConfigManager(db)
 
     def get_pending_items(self):
         return QueueRepository.pending(self.db, self.CONTENT_TYPE, self.user_id)
 
     def enqueue_generated_items(self):
-        generated = ExampleRepository.available_for_queue(self.db)
+        threshold = self.config_manager.get_threshold_for_transition()
+
+        generated = self.batch_manager.get_content_items_for_queue(
+            user_id=self.user_id,
+            content_type=self.CONTENT_TYPE,
+            limit=threshold
+        )
 
         if generated:
             QueueRepository.enqueue(
@@ -29,6 +39,9 @@ class ExampleGenerationStrategy(GenerationStrategy):
                 self.user_id,
                 generated
             )
+
+            example_ids = [item.id for item in generated]
+            ExampleRepository.mark_as_not_pristine(self.db, example_ids)
 
     def get_available_words(self):
         return WordRepository.available(self.db, self.CONTENT_TYPE, self.user_id)
