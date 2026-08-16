@@ -3,7 +3,6 @@ from typing import List
 from sqlmodel import Session, select
 from logging_client import logger
 from celery_app import celery_app
-from models import BestOption, Word
 import ai
 
 
@@ -28,8 +27,9 @@ def _shuffle_options_with_correct_index(options: list, correct_option_idx: int) 
 
     return shuffled_options, new_correct_idx
 
+
 @celery_app.task(name="tasks.best_options.generate")
-def generate(user_id: int, word_ids: List[int]) -> None:
+def generate_best_options_task(user_id: int, word_ids: List[int]) -> None:
     """
     Genera ejercicios best_option para una lista de palabras usando IA.
 
@@ -37,7 +37,12 @@ def generate(user_id: int, word_ids: List[int]) -> None:
         user_id: ID del usuario (para logging)
         word_ids: Lista de IDs de palabras para las que generar ejercicios
     """
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + '/..')
+
     from db import engine
+    from models import Word, BestOption
 
     if not word_ids:
         logger.warning(f"[BestOptionsGenerator] No words provided for user {user_id}")
@@ -75,7 +80,7 @@ def generate(user_id: int, word_ids: List[int]) -> None:
                     logger.warning(f"[BestOptionsGenerator] Skipping exercise set for word {word_id} (no questions)")
                     continue
 
-                # Crear un BestOption para cada pregunta con sequence_order 1, 2, 3, 4
+                # Crear un BestOption para cada pregunta
                 for sequence_idx, question_data in enumerate(questions, start=1):
                     question_text = question_data.get("question")
                     options = question_data.get("options", [])
@@ -96,11 +101,9 @@ def generate(user_id: int, word_ids: List[int]) -> None:
                     # Crear el BestOption en DB
                     best_option = BestOption(
                         word_id=word_id,
-                        sequence_order=sequence_idx,
                         question=question_text,
                         options=options_string,
-                        correct_option=new_correct_idx,
-                        is_pristine=True
+                        correct_option=new_correct_idx
                     )
                     db.add(best_option)
                     db.flush()
@@ -117,3 +120,10 @@ def generate(user_id: int, word_ids: List[int]) -> None:
         )
 
 
+class BestOptionGenerator:
+    """Wrapper para llamar a tasks de generación de best options desde ContentPlanner"""
+
+    @staticmethod
+    def generate(user_id: int, word_ids: List[int]):
+        """Solicita generación de best options"""
+        return generate_best_options_task.delay(user_id, word_ids)

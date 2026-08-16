@@ -1,113 +1,38 @@
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
-
-from sqlalchemy.orm import joinedload
-from sqlmodel import Session, func, or_, select
-
-from logging_client import logger
-
-from config_manager import ConfigManager
-
-from models import (
-    BestOption,
-    WordStatistics,
-    ContentType,
-)
-
-import random
+from typing import List
+from sqlmodel import Session, select
+from models import BestOption
 
 
-def increment_statistics(db: Session, content_id: int, user_id: int) -> Optional[BestOption]:
-    best_option = db.exec(
-        select(BestOption).where(BestOption.id == content_id)
-    ).first()
+class BestOptionRepository:
+    """Repository para gestión de best options"""
 
-    if not best_option:
-        return None
+    def __init__(self, session: Session):
+        self.session = session
 
-    word = best_option.word
+    def get_available_content_for_path(self, user_id: int) -> List[int]:
+        """
+        Obtiene IDs de best_options disponibles para el path del usuario.
 
-    if not word:
-        return None
+        Retorna best_options que existen pero todavía no están en ContentQueue.
+        """
+        # Retorna todas las best_options activas
+        best_options = self.session.exec(
+            select(BestOption).where(BestOption.is_active == True)
+        ).all()
 
-    now_utc = datetime.now(timezone.utc)
+        return [bo.id for bo in best_options]
 
-    config = ConfigManager(db)
-    target_cycle_seen = config.get_target_cycle_seen()
+    def save(self, best_option: BestOption) -> BestOption:
+        """Guarda una best_option en la BD"""
+        self.session.add(best_option)
+        self.session.commit()
+        self.session.refresh(best_option)
+        return best_option
 
-    stats = db.exec(
-        select(WordStatistics).where(
-            WordStatistics.word_id == word.id,
-            WordStatistics.type == ContentType.BEST_OPTIONS
-        )
-    ).first()
+    def mark_as_not_pristine(self, db: Session, best_option_ids: List[int]) -> None:
+        """
+        Marca best_options como no pristinas (ya encoladas).
 
-    if not stats:
-        stats = WordStatistics(word_id=word.id, type=ContentType.BEST_OPTIONS)
-        db.add(stats)
-        db.flush()
-
-    stats.times_seen += 1
-    stats.current_cycle_seen += 1
-    stats.last_seen_at = now_utc
-    db.add(stats)
-
-    if stats.current_cycle_seen >= target_cycle_seen and not stats.is_learned:
-        stats.is_learned = True
-        logger.info(f"[increment_statistics] Word {word.id} ({word.main}) marked as LEARNED (current_cycle_seen={stats.current_cycle_seen})")
-
-    db.add(word)
-
-    db.commit()
-    return best_option
-
-
-
-THRESHOLD_FOR_TRANSITION = 10
-
-def available_for_queue(db: Session) -> List["BestOption"]:
-    # Step 1: Get pristine items
-    statement = select(BestOption).where(BestOption.is_pristine == True)
-    pristine_items = db.exec(statement).all()
-
-    if not pristine_items:
-        return []
-
-    # Step 2: Shuffle items
-    random.shuffle(pristine_items)
-
-    # Step 3: Select up to threshold
-    selected_items = pristine_items[:THRESHOLD_FOR_TRANSITION]
-
-    # Step 4: Mark them as not pristine
-    for item in selected_items:
-        item.is_pristine = False
-        db.add(item)
-
-    db.commit()
-
-    # Step 5: Return updated items
-    return selected_items
-
-
-def mark_as_not_pristine(db: Session, best_option_ids: List[int]) -> None:
-    """Marca best options como no pristinos (ya procesados)."""
-    if not best_option_ids:
-        return
-
-    statement = select(BestOption).where(BestOption.id.in_(best_option_ids))
-    best_options = db.exec(statement).all()
-
-    for option in best_options:
-        option.is_pristine = False
-        db.add(option)
-
-    db.commit()
-
-
-def get_words(db: Session, best_option_id: int) -> List:
-    """Obtiene la palabra asociada a un best option."""
-    best_option = db.exec(
-        select(BestOption).where(BestOption.id == best_option_id)
-    ).first()
-    return [best_option.word] if best_option and best_option.word else []
+        Este método puede implementarse en el futuro si es necesario.
+        """
+        pass

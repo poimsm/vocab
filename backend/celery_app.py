@@ -30,15 +30,15 @@ celery_app.conf.update(
     enable_utc=True,
     worker_concurrency=1,  # Procesa estrictamente una tarea por vez
     imports=[
-        "examples.generator",
-        "best_options.generator",
-        "words.tasks",
+        "examples.example_generator",
+        "best_options.best_options_generator",
+        "words.word_generator",
     ],
     # Celery Beat: Tareas programadas
-    beat_schedule={
-        "spaced-repetition-daily": {
-            "task": "tasks.examples.spaced_repetition_daily",
-            "schedule": crontab(hour=2, minute=0),  # Ejecutar diariamente a las 2 AM UTC
-        },
-    },
+    # beat_schedule={
+    #     "spaced-repetition-daily": {
+    #         "task": "tasks.examples.spaced_repetition_daily",
+    #         "schedule": crontab(hour=2, minute=0),  # Ejecutar diariamente a las 2 AM UTC
+    #     },
+    # },
 )
