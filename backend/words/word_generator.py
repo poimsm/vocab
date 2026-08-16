@@ -147,7 +147,8 @@ def create_bulk_task(
             created_words = []
             created_word_ids = []
 
-            # Procesar cada texto
+            # Paso 1: Extraer información de todas las palabras
+            extracted_items = []  # Lista de (idx, text, main_word, word_type)
             for idx, text in enumerate(texts, 1):
                 try:
                     if not text or not text.strip():
@@ -169,11 +170,37 @@ def create_bulk_task(
                         logger.warning(f"[BulkWordGenerator] No main word extracted (item {idx})")
                         continue
 
-                    # Enriquecer la palabra con detalles completos
-                    enriched = ai.enrich_word(main_word)
+                    extracted_items.append((idx, text, main_word, word_type))
+
+                except Exception as e:
+                    logger.error(
+                        f"[BulkWordGenerator] Error extracting text item {idx}: {e}",
+                        exc_info=True
+                    )
+                    continue
+
+            if not extracted_items:
+                logger.warning(f"[BulkWordGenerator] No valid words extracted from any texts for user {user_id}")
+                return
+
+            # Paso 2: Enriquecer todas las palabras en lote (más eficiente)
+            main_words = [item[2] for item in extracted_items]
+            enriched_list = ai.enrich_words_bulk(main_words)
+
+            if not enriched_list:
+                logger.warning(f"[BulkWordGenerator] Could not enrich any words for user {user_id}")
+                return
+
+            # Crear un mapa de palabra -> datos enriquecidos
+            enriched_map = {item["word"]: item for item in enriched_list}
+
+            # Paso 3: Crear palabras en BD usando datos enriquecidos
+            for idx, text, main_word, word_type in extracted_items:
+                try:
+                    enriched = enriched_map.get(main_word)
 
                     if not enriched:
-                        logger.warning(f"[BulkWordGenerator] Could not enrich word {main_word} (item {idx})")
+                        logger.warning(f"[BulkWordGenerator] No enriched data for word {main_word} (item {idx})")
                         continue
 
                     # Crear palabra
@@ -208,7 +235,7 @@ def create_bulk_task(
 
                 except Exception as e:
                     logger.error(
-                        f"[BulkWordGenerator] Error processing text item {idx}: {e}",
+                        f"[BulkWordGenerator] Error creating word for item {idx}: {e}",
                         exc_info=True
                     )
                     continue
