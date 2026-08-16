@@ -23,8 +23,8 @@ class WordInfo(BaseModel):
 
 class BestOptionItem(BaseModel):
     """Schema para un best option individual en la respuesta"""
-    id: int
     queue_item_id: int
+    best_option_id: int
     word: WordInfo
     question: str
     options: List[str]

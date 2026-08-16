@@ -63,11 +63,15 @@ def get_explore_feed(
     example_repo = ExampleRepository(db)
     examples_response = []
 
+    # Crear un mapa de example_id -> queue_item_id
+    example_to_queue = {item.content_id: item.id for item in queue_items}
+
     for ex in examples:
         text_segments = example_repo.segment_example_text(ex)
         examples_response.append(
             {
-                "id": ex.id,
+                "queue_item_id": example_to_queue[ex.id],
+                "example_id": ex.id,
                 "text": text_segments,
             }
         )

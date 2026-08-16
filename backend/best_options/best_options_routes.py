@@ -98,8 +98,8 @@ def get_best_options(
         }
 
         items_response.append({
-            "id": best_option.id,
             "queue_item_id": queue_item.id,
+            "best_option_id": best_option.id,
             "word": word_data,
             "question": best_option.question,
             "options": best_option.options.split(";"),

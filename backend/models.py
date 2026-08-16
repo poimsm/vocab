@@ -131,6 +131,8 @@ class Example(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     normalized: Optional[str] = Field(default=None, max_length=255, unique=True, index=True)
     times_seen: int = Field(default=0)
+    sequence: int = Field(default=0, index=True)
+    enqueued: bool = Field(default=False, index=True)
 
     example_words: List["ExampleWord"] = Relationship(back_populates="example")
 
@@ -146,6 +148,8 @@ class BestOption(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     normalized: Optional[str] = Field(default=None, max_length=255, unique=True, index=True)
     is_active: bool = Field(default=True)
+    sequence: int = Field(default=0, index=True)
+    enqueued: bool = Field(default=False, index=True)
 
     word: Optional["Word"] = Relationship()
 

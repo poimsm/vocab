@@ -47,6 +47,14 @@ def generate_simple_examples_task(
                 logger.warning(f"[ExampleGenerator] Words not found for user {user_id}")
                 return
 
+            # Obtener el máximo sequence actual para continuar secuencia
+            from sqlalchemy import func as sql_func
+            max_sequence = db.exec(
+                select(sql_func.max(Example.sequence))
+            ).first() or 0
+
+            sequence_counter = max_sequence + 1
+
             # Generar ejemplos usando IA para cada palabra
             for word in words:
                 try:
@@ -59,11 +67,13 @@ def generate_simple_examples_task(
                         continue
 
                     for example_text in raw_examples:
-                        # Crear el Example
+                        # Crear el Example con sequence
                         example = Example(
                             type=ExampleType.EXPLORE,
                             text=example_text,
                             normalized=example_text.lower(),
+                            sequence=sequence_counter,
+                            enqueued=False,
                         )
                         db.add(example)
                         db.flush()
@@ -75,6 +85,8 @@ def generate_simple_examples_task(
                             text_form=word.main,
                         )
                         db.add(example_word)
+
+                        sequence_counter += 1
 
                 except Exception as e:
                     logger.error(
@@ -148,6 +160,14 @@ def generate_mixed_examples_task(
                 )
                 return
 
+            # Obtener el máximo sequence actual para continuar secuencia
+            from sqlalchemy import func as sql_func
+            max_sequence = db.exec(
+                select(sql_func.max(Example.sequence))
+            ).first() or 0
+
+            sequence_counter = max_sequence + 1
+
             for example_data in raw_mixed_examples:
                 try:
                     example_text = example_data.get("text")
@@ -159,11 +179,13 @@ def generate_mixed_examples_task(
                         )
                         continue
 
-                    # Crear el Example
+                    # Crear el Example con sequence
                     example = Example(
                         type=ExampleType.EXPLORE,
                         text=example_text,
                         normalized=example_text.lower(),
+                        sequence=sequence_counter,
+                        enqueued=False,
                     )
                     db.add(example)
                     db.flush()
@@ -178,6 +200,8 @@ def generate_mixed_examples_task(
                                 text_form=word.main,
                             )
                             db.add(example_word)
+
+                    sequence_counter += 1
 
                 except Exception as e:
                     logger.error(

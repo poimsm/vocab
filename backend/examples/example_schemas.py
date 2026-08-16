@@ -21,7 +21,8 @@ class TextSegment(BaseModel):
 
 class ExploreExample(BaseModel):
     """Schema para un ejemplo con texto segmentado"""
-    id: int
+    queue_item_id: int
+    example_id: int
     text: List[TextSegment]
 
 

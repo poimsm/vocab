@@ -24,8 +24,8 @@ interface Word {
 }
 
 interface BestOptionItem {
-  id: number
   queue_item_id: number
+  best_option_id: number
   word: Word
   question: string
   options: string[]
@@ -140,8 +140,8 @@ function loadItems(raw: any[]) {
     return
   }
   items.value = raw.map((item: any) => ({
-    id: item.id,
     queue_item_id: item.queue_item_id,
+    best_option_id: item.best_option_id,
     word: {
       id: item.word.id,
       main: item.word.main,

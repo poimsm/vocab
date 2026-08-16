@@ -55,6 +55,29 @@ class BestOptionRepository:
 
         return best_options
 
+    def get_available_content_for_word(self, word_id: int) -> Optional[int]:
+        """
+        Obtiene el próximo best_option disponible para una palabra específica.
+
+        Un best_option está disponible si:
+        - Pertenece a la palabra
+        - No ha sido encolado aún (enqueued=False)
+        - No está en ContentQueue (PENDING)
+
+        Retorna el best_option con la secuencia más baja (el más antiguo).
+        """
+        best_option_id = self.session.exec(
+            select(BestOption.id)
+            .where(
+                BestOption.word_id == word_id,
+                BestOption.is_active == True,
+                BestOption.enqueued == False
+            )
+            .order_by(BestOption.sequence.asc())
+        ).first()
+
+        return best_option_id
+
     def get_word_id(self, best_option_id: int) -> Optional[int]:
         """
         Obtiene el ID de la palabra asociada a un best_option.

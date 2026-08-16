@@ -600,6 +600,12 @@ class ContentPlanner:
         Busca contenido que ya existe pero todavía no está
         en ContentQueue.
 
+        Encola respetando el ORDEN DEL LEARNING PATH.
+
+        Itera el LearningPath (segment, position) y para cada palabra,
+        busca UN SOLO contenido disponible (el más antiguo por sequence)
+        y lo encola, marcándolo como enqueued=True.
+
         Esta operación debe ocurrir ANTES de pedir nueva
         generación a la AI.
 
@@ -615,44 +621,67 @@ class ContentPlanner:
 
         sin consumir tokens nuevamente.
         """
+        from models import Example, BestOption
 
         pending_count = 0
 
-        if content_type == ContentType.EXAMPLE:
-            content_ids = (
-                self.example_repository
-                .get_available_content_for_path(
-                    user_id=user_id,
-                )
+        # Obtener el LearningPath ordenado
+        path_items = self.session.exec(
+            select(LearningPath)
+            .where(
+                LearningPath.user_id == user_id,
+                LearningPath.type == content_type,
             )
+            .order_by(LearningPath.segment.asc(), LearningPath.position.asc())
+        ).all()
 
-        elif content_type == ContentType.BEST_OPTIONS:
-            content_ids = (
-                self.best_option_repository
-                .get_available_content_for_path(
-                    user_id=user_id,
+        # Iterar el LearningPath en orden
+        for path_item in path_items:
+            word_id = path_item.word_id
+
+            # Obtener UN SOLO contenido disponible para esta palabra
+            if content_type == ContentType.EXAMPLE:
+                content_id = (
+                    self.example_repository
+                    .get_available_content_for_word(word_id)
                 )
-            )
+            elif content_type == ContentType.BEST_OPTIONS:
+                content_id = (
+                    self.best_option_repository
+                    .get_available_content_for_word(word_id)
+                )
+            else:
+                content_id = None
 
-        else:
-            content_ids = []
+            if content_id is None:
+                continue
 
-        for content_id in content_ids:
-            if self.content_queue.is_pending(
+            # Encolar y marcar como encolado
+            if not self.content_queue.is_pending(
                 user_id=user_id,
                 content_type=content_type,
                 content_id=content_id,
             ):
-                continue
+                self.content_queue.enqueue(
+                    user_id=user_id,
+                    content_type=content_type,
+                    content_id=content_id,
+                )
+                pending_count += 1
 
-            self.content_queue.enqueue(
-                user_id=user_id,
-                content_type=content_type,
-                content_id=content_id,
-            )
+            # Marcar el contenido como encolado
+            if content_type == ContentType.EXAMPLE:
+                example = self.session.get(Example, content_id)
+                if example:
+                    example.enqueued = True
+                    self.session.add(example)
+            elif content_type == ContentType.BEST_OPTIONS:
+                best_option = self.session.get(BestOption, content_id)
+                if best_option:
+                    best_option.enqueued = True
+                    self.session.add(best_option)
 
-            pending_count += 1
-
+        self.session.commit()
         return pending_count
 
     def calculate_content_gap(

@@ -23,7 +23,8 @@ interface TextSegment {
 }
 
 interface ExampleItem {
-  id: number
+  queue_item_id: number
+  example_id: number
   text: TextSegment[]
 }
 
@@ -179,14 +180,15 @@ function stopPolling() {
 function loadExamples(data: any) {
   const rawExamples = data.examples || []
   const newExamples: ExampleItem[] = rawExamples.map((item: any) => ({
-    id: item.id,
+    queue_item_id: item.queue_item_id,
+    example_id: item.example_id,
     text: item.text || []
   }))
 
   if (newExamples.length > 0 && newExamples[0]) {
     examples.value = newExamples
     currentIndex.value = 0
-    fireAndForgetResolve(newExamples[0].id)
+    fireAndForgetResolve(newExamples[0].queue_item_id)
   }
 }
 
@@ -249,7 +251,7 @@ async function toggleExampleFav() {
 
   try {
     await api.patch('/examples/toggle-fav', {
-      example_id: ex.id
+      example_id: ex.example_id
     })
 
   } catch (e) {
@@ -274,7 +276,7 @@ function refreshExample() {
   // Side effect: marcar el siguiente ejemplo como visto (si existe)
   const nextExample = examples.value[currentIndex.value + 1]
   if (nextExample) {
-    fireAndForgetResolve(nextExample.id)
+    fireAndForgetResolve(nextExample.queue_item_id)
   }
 
   // Si hay más ejemplos en el batch, avanzar al siguiente

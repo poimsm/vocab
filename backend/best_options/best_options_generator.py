@@ -71,6 +71,14 @@ def generate_best_options_task(user_id: int, word_ids: List[int]) -> None:
 
             logger.info(f"[BestOptionsGenerator] AI generated {len(raw_best_options)} exercise sets")
 
+            # Obtener el máximo sequence actual para continuar secuencia
+            from sqlalchemy import func as sql_func
+            max_sequence = db.exec(
+                select(sql_func.max(BestOption.sequence))
+            ).first() or 0
+
+            sequence_counter = max_sequence + 1
+
             # Procesar cada set de ejercicios
             for exercise_set in raw_best_options:
                 word_id = exercise_set.get("word_id")
@@ -98,15 +106,19 @@ def generate_best_options_task(user_id: int, word_ids: List[int]) -> None:
                     # Crear la cadena de opciones separadas por ";"
                     options_string = ";".join(shuffled_options)
 
-                    # Crear el BestOption en DB
+                    # Crear el BestOption en DB con sequence
                     best_option = BestOption(
                         word_id=word_id,
                         question=question_text,
                         options=options_string,
-                        correct_option=new_correct_idx
+                        correct_option=new_correct_idx,
+                        sequence=sequence_counter,
+                        enqueued=False,
                     )
                     db.add(best_option)
                     db.flush()
+
+                    sequence_counter += 1
 
             db.commit()
             logger.info(

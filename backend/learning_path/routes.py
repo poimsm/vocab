@@ -8,8 +8,8 @@ from decorators import log_endpoint
 from learning_path.content_planner import ContentPlanner
 from learning_path.priority_engine import PriorityEngine
 from learning_path.content_queue import ContentQueue
-from examples.repository import ExampleRepository
-from best_options.repository import BestOptionRepository
+from examples.example_repository import ExampleRepository
+from best_options.best_options_repository import BestOptionRepository
 from words.word_repository import WordRepository
 
 

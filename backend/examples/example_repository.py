@@ -53,6 +53,32 @@ class ExampleRepository:
 
         return examples
 
+    def get_available_content_for_word(self, word_id: int) -> Optional[int]:
+        """
+        Obtiene el próximo example disponible para una palabra específica.
+
+        Un example está disponible si:
+        - Contiene la palabra (a través de ExampleWord)
+        - Es de tipo EXPLORER
+        - No ha sido encolado aún (enqueued=False)
+        - No está en ContentQueue (PENDING)
+
+        Retorna el example con la secuencia más baja (el más antiguo).
+        """
+
+        example_id = self.session.exec(
+            select(Example.id)
+            .join(ExampleWord, Example.id == ExampleWord.example_id)
+            .where(
+                ExampleWord.word_id == word_id,
+                Example.type == ExampleType.EXPLORE,
+                Example.enqueued == False
+            )
+            .order_by(Example.sequence.asc())
+        ).first()
+
+        return example_id
+
     def get_word_ids(self, example_id: int) -> List[int]:
         """
         Obtiene los IDs de las palabras asociadas a un example.
