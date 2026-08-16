@@ -7,7 +7,7 @@ from logging_client import logger
 from auth.repository import get_current_user
 from models import User, ContentType, ContentQueue, Example
 from decorators import log_endpoint
-from examples.example_schemas import ExploreResponse
+from examples.example_schemas import ExploreResponse, ExploreExample
 from learning_path.content_queue import ContentQueue as ContentQueueManager
 from learning_path.learning_tracker import LearningTracker
 from examples.example_repository import ExampleRepository
@@ -30,11 +30,9 @@ def get_explore_feed(
     Flujo:
     1. Obtener items PENDING de ContentQueue
     2. Para cada item, obtener el Example correspondiente
-    3. Retornar con detalles del contenido
+    3. Segmentar el texto en chunks con target words resaltados
+    4. Retornar con estructura de texto segmentado
     """
-    from models import ContentType, ContentQueue
-    from learning_path.content_queue import ContentQueue as ContentQueueManager
-
     logger.info(f"[get_explore_feed] User {current_user.id}: Fetching examples (limit={limit})")
 
     queue_mgr = ContentQueueManager(db)
@@ -49,31 +47,34 @@ def get_explore_feed(
     if not queue_items:
         logger.debug(f"[get_explore_feed] No pending examples for user {current_user.id}")
         return {
-            "items": [],
-            "total": 0,
+            "examples": [],
+            "status": "ok",
         }
 
     # Obtener los examples asociados
     example_ids = [item.content_id for item in queue_items]
-
-    from models import Example
     examples = db.exec(
         select(Example).where(Example.id.in_(example_ids))
     ).all()
 
     logger.debug(f"[get_explore_feed] Retrieved {len(examples)} examples")
 
-    return {
-        "items": [
+    # Segmentar el texto de cada ejemplo
+    example_repo = ExampleRepository(db)
+    examples_response = []
+
+    for ex in examples:
+        text_segments = example_repo.segment_example_text(ex)
+        examples_response.append(
             {
-                "queue_item_id": item.id,
-                "example_id": ex.id,
-                "text": ex.text,
-                "type": ex.type,
+                "id": ex.id,
+                "text": text_segments,
             }
-            for item, ex in zip(queue_items, examples)
-        ],
-        "total": len(examples),
+        )
+
+    return {
+        "examples": examples_response,
+        "status": "ok",
     }
 
 

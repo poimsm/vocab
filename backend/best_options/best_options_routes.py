@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
+from sqlalchemy.orm import joinedload
 
 from db import get_db
 from logging_client import logger
 from auth.repository import get_current_user
-from models import User, ContentType, ContentQueue, BestOption
+from models import User, ContentType, ContentQueue, BestOption, Word
 from decorators import log_endpoint
 from best_options.best_options_schemas import BestOptionResponse
 from best_options.best_options_repository import BestOptionRepository
@@ -71,26 +72,42 @@ def get_best_options(
             "status": "generating",
         }
 
-    # Obtener los best options asociados
+    # Obtener los best options asociados con sus palabras
     best_option_ids = [item.content_id for item in queue_items]
 
     best_options = db.exec(
-        select(BestOption).where(BestOption.id.in_(best_option_ids))
+        select(BestOption)
+        .where(BestOption.id.in_(best_option_ids))
+        .options(joinedload(BestOption.word))
     ).all()
 
     logger.debug(f"[get_best_options] Retrieved {len(best_options)} best options")
 
+    # Construir respuesta con información completa de palabras
+    items_response = []
+    for queue_item, best_option in zip(queue_items, best_options):
+        word_data = {
+            "id": best_option.word.id,
+            "main": best_option.word.main,
+            "meaning": best_option.word.meaning,
+            "type": best_option.word.type,
+            "level": best_option.word.level,
+            "synonyms": best_option.word.synonyms or [],
+            "frequency": best_option.word.frequency,
+            "examples": [],  # TODO: cargar ejemplos si es necesario
+        }
+
+        items_response.append({
+            "id": best_option.id,
+            "queue_item_id": queue_item.id,
+            "word": word_data,
+            "question": best_option.question,
+            "options": best_option.options.split(";"),
+            "correct_option": best_option.correct_option,
+        })
+
     return {
-        "items": [
-            {
-                "queue_item_id": item.id,
-                "best_option_id": bo.id,
-                "question": bo.question,
-                "options": bo.options.split(";"),
-                "correct_option": bo.correct_option,
-            }
-            for item, bo in zip(queue_items, best_options)
-        ],
+        "items": items_response,
         "total": len(best_options),
         "status": "ok",
     }
