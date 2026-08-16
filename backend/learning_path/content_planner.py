@@ -189,7 +189,7 @@ class ContentPlanner:
             cursor = LearningPathCursor(
                 user_id=user_id,
                 type=content_type,
-                current_segment=1,
+                current_segment=0,
                 current_position=0,
                 created_at=datetime.now(timezone.utc),
                 updated_at=datetime.now(timezone.utc),

@@ -166,7 +166,7 @@ def create_single_word(
 @router.post("/bulk", status_code=status.HTTP_202_ACCEPTED)
 @log_endpoint
 def create_words_bulk(
-    request_data: dict = Body(...),
+    texts: List[str] = Body(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -180,14 +180,10 @@ def create_words_bulk(
     2. Disparar task en Celery
     3. Retornar status inmediatamente
 
-    Body esperado:
-    {
-        "texts": ["texto 1", "texto 2", ...]
-    }
+    Body esperado (array directo):
+    ["texto 1", "texto 2", ...]
     """
     from words.word_generator import WordGenerator
-
-    texts = request_data.get("texts", [])
 
     logger.info(f"[create_words_bulk] User {current_user.id}: Creating {len(texts)} words")
 
