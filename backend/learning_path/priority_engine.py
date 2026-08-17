@@ -16,6 +16,22 @@ from models import (
 )
 
 
+def ensure_aware_datetime(dt: Optional[datetime]) -> Optional[datetime]:
+    """
+    Convierte un datetime naive a aware (UTC).
+    Si ya es aware, lo retorna sin cambios.
+    Si es None, retorna None.
+    """
+    if dt is None:
+        return None
+
+    if dt.tzinfo is None:
+        # Es naive, convertir a aware (asumir UTC)
+        return dt.replace(tzinfo=timezone.utc)
+
+    return dt
+
+
 class PriorityEngine:
     """
     Calcula la necesidad/prioridad actual de una palabra.
@@ -145,7 +161,8 @@ class PriorityEngine:
         if statistics.last_seen_at is None:
             return 1.0
 
-        elapsed = now - statistics.last_seen_at
+        last_seen = ensure_aware_datetime(statistics.last_seen_at)
+        elapsed = now - last_seen
         days = elapsed.total_seconds() / 86400.0
 
         if days <= 1:
@@ -217,7 +234,8 @@ class PriorityEngine:
         if statistics.last_seen_at is None:
             return 0.0
 
-        elapsed = now - statistics.last_seen_at
+        last_seen = ensure_aware_datetime(statistics.last_seen_at)
+        elapsed = now - last_seen
         hours = elapsed.total_seconds() / 3600.0
 
         if hours < 1:

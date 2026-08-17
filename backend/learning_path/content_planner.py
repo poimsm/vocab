@@ -69,8 +69,9 @@ class ContentPlanner:
             1. Asegurar LearningPath suficiente.
             2. Buscar contenido ya generado.
             3. Encolarlo.
-            4. Medir cuánto contenido falta.
-            5. Si falta, solicitar generación background.
+            4. Actualizar cursor basándose en contenido encolado.
+            5. Medir cuánto contenido falta.
+            6. Si falta, solicitar generación background.
 
         Esto permite que el usuario reciba contenido inmediatamente
         siempre que exista suficiente contenido preparado.
@@ -82,6 +83,12 @@ class ContentPlanner:
         )
 
         self.enqueue_existing_content(
+            user_id=user_id,
+            content_type=content_type,
+        )
+
+        # Actualizar cursor basándose en qué contenido fue encolado
+        self.update_cursor_by_enqueued_content(
             user_id=user_id,
             content_type=content_type,
         )
@@ -106,9 +113,12 @@ class ContentPlanner:
         """
         Garantiza que exista suficiente LearningPath futuro.
 
+        Basándose en el CURSOR (hasta dónde preparamos contenido),
+        verifica si hay suficiente look-ahead.
+
         No elimina palabras existentes del Path.
 
-        Si ya existe suficiente look-ahead:
+        Si ya existe suficiente look-ahead después del cursor:
             no hace nada.
 
         Si falta:
@@ -118,32 +128,68 @@ class ContentPlanner:
         la cantidad de palabras disponibles.
         """
 
-        current_size = self.get_path_size(
-            user_id=user_id,
-            content_type=content_type,
-        )
+        # Obtener cursor actual
+        cursor = self.session.exec(
+            select(LearningPathCursor).where(
+                LearningPathCursor.user_id == user_id,
+                LearningPathCursor.type == content_type,
+            )
+        ).first()
+
+        if not cursor:
+            # Si no existe cursor, crear uno en el inicio
+            cursor = LearningPathCursor(
+                user_id=user_id,
+                type=content_type,
+                current_segment=0,
+                current_position=0,
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+            )
+            self.session.add(cursor)
+            self.session.commit()
+
+        # Obtener palabras totales en path desde cursor en adelante
+        total_path_items = self.session.exec(
+            select(LearningPath)
+            .where(
+                LearningPath.user_id == user_id,
+                LearningPath.type == content_type,
+            )
+            .order_by(LearningPath.segment.asc(), LearningPath.position.asc())
+        ).all()
+
+        # Contar cuántas palabras hay DESPUÉS del cursor
+        look_ahead_count = 0
+        for path_item in total_path_items:
+            is_after_cursor = (
+                path_item.segment > cursor.current_segment or
+                (path_item.segment == cursor.current_segment and
+                 path_item.position > cursor.current_position)
+            )
+            if is_after_cursor:
+                look_ahead_count += 1
 
         available_words = self.get_candidate_words(
             user_id=user_id,
             content_type=content_type,
         )
 
-        target_size = self.calculate_segment_size(
+        target_look_ahead = self.calculate_segment_size(
             user_id=user_id,
             available_word_count=len(available_words),
         )
 
-        if current_size >= target_size:
-            return
+        # Si no hay suficiente look-ahead, crear nuevo segmento
+        if look_ahead_count < target_look_ahead:
+            missing = target_look_ahead - look_ahead_count
 
-        missing = target_size - current_size
-
-        self.build_segment(
-            user_id=user_id,
-            content_type=content_type,
-            size=missing,
-            candidates=available_words,
-        )
+            self.build_segment(
+                user_id=user_id,
+                content_type=content_type,
+                size=missing,
+                candidates=available_words,
+            )
 
     def get_path_size(
         self,
@@ -392,19 +438,21 @@ class ContentPlanner:
         candidates: List[Word],
     ) -> List[LearningPath]:
         """
-        Construye un segmento completo.
+        Construye un segmento completo mezclando:
 
-        La misma palabra puede aparecer múltiples veces.
+        - Palabras con prioridad alta (ya vistas, necesitan refuerzo)
+        - Palabras nuevas (intercaladas aleatoriamente)
 
-        La selección combina:
+        La proporción de nuevas depende de cuántas haya disponibles.
 
-            prioridad
-            repetición dentro del segmento
-            aleatoriedad
+        Flujo:
+        1. Separar candidatos en NEW vs NO_NEW
+        2. Calcular cuántos slots reservar para nuevas
+        3. Intercalar aleatoriamente los slots
+        4. Construir segmento respetando la intercalación
 
-        Una palabra con prioridad alta puede aparecer varias veces,
-        pero existe una penalización por saturación para evitar
-        que monopolice el segmento.
+        La misma palabra puede aparecer múltiples veces dentro del
+        segmento, con penalización por saturación.
         """
 
         scored = self.score_candidates(
@@ -421,12 +469,41 @@ class ContentPlanner:
             content_type=content_type,
         )
 
+        # Paso 1: Separar palabras NEW de NO_NEW
+        new_words = []
+        not_new_words = []
+
+        for word, priority in scored:
+            stats = self.get_statistics(word.id, content_type)
+            if stats.learning_state == LearningState.NEW:
+                new_words.append((word, priority))
+            else:
+                not_new_words.append((word, priority))
+
+        # Paso 2: Calcular slots para palabras nuevas
+        new_slots = self._calculate_new_word_slots(
+            size=size,
+            new_word_count=len(new_words),
+        )
+
+        # Paso 3: Intercalar aleatoriamente los slots para nuevas
+        import random
+        all_positions = list(range(size))
+        new_positions = set(random.sample(all_positions, min(new_slots, size)))
+
+        # Paso 4: Construir segmento
         selected: List[Word] = []
         path_items: List[LearningPath] = []
 
         for position in range(size):
+            # Decidir si esta posición es para palabra nueva o prioritaria
+            if position in new_positions and new_words:
+                candidates_pool = new_words
+            else:
+                candidates_pool = not_new_words if not_new_words else new_words
+
             word = self.select_word_for_slot(
-                candidates=scored,
+                candidates=candidates_pool,
                 selected=selected,
             )
 
@@ -461,6 +538,34 @@ class ContentPlanner:
         self.session.commit()
 
         return path_items
+
+    def _calculate_new_word_slots(
+        self,
+        size: int,
+        new_word_count: int,
+    ) -> int:
+        """
+        Calcula cuántos slots reservar para palabras nuevas.
+
+        Lógica:
+        - Si hay pocas nuevas: reservar menos slots
+        - Si hay muchas nuevas: reservar más slots
+        - Máximo: 40% del segmento (para mantener equilibrio)
+        """
+
+        if new_word_count == 0:
+            return 0
+
+        if new_word_count <= 2:
+            return max(1, int(size * 0.15))
+
+        if new_word_count <= 5:
+            return max(2, int(size * 0.25))
+
+        if new_word_count <= 10:
+            return max(3, int(size * 0.35))
+
+        return max(4, int(size * 0.40))
 
     def select_word_for_slot(
         self,
@@ -600,33 +705,45 @@ class ContentPlanner:
         Busca contenido que ya existe pero todavía no está
         en ContentQueue.
 
-        Encola respetando el ORDEN DEL LEARNING PATH.
+        Encola SOLO lo necesario:
+        - Respetando el CURSOR (no encola más allá de donde preparamos)
+        - Basándose en el gap de contenido (cuánto falta en queue)
 
-        Itera el LearningPath (segment, position) y para cada palabra,
-        busca UN SOLO contenido disponible (el más antiguo por sequence)
-        y lo encola, marcándolo como enqueued=True.
+        Itera el LearningPath desde el cursor en adelante
+        hasta alcanzar el target de queue.
 
-        Esta operación debe ocurrir ANTES de pedir nueva
-        generación a la AI.
+        Para cada palabra, busca UN SOLO contenido disponible
+        (el más antiguo por sequence) y lo encola.
 
-        Así puedes tener:
-
-            AI generó anteriormente
-                ↓
-            contenido almacenado
-                ↓
-            todavía no estaba en queue
-                ↓
-            ahora se reutiliza
-
-        sin consumir tokens nuevamente.
+        Sin consumir tokens innecesarios.
         """
         from models import Example, BestOption
 
         pending_count = 0
 
+        # Obtener cursor
+        cursor = self.session.exec(
+            select(LearningPathCursor).where(
+                LearningPathCursor.user_id == user_id,
+                LearningPathCursor.type == content_type,
+            )
+        ).first()
+
+        if not cursor:
+            return 0
+
+        # Calcular cuánto contenido falta
+        gap = self.calculate_content_gap(
+            user_id=user_id,
+            content_type=content_type,
+        )
+
+        if gap <= 0:
+            # Ya hay suficiente contenido en queue
+            return 0
+
         # Obtener el LearningPath ordenado
-        path_items = self.session.exec(
+        all_path_items = self.session.exec(
             select(LearningPath)
             .where(
                 LearningPath.user_id == user_id,
@@ -635,8 +752,22 @@ class ContentPlanner:
             .order_by(LearningPath.segment.asc(), LearningPath.position.asc())
         ).all()
 
-        # Iterar el LearningPath en orden
-        for path_item in path_items:
+        # Filtrar solo items DESPUÉS del cursor
+        path_items_to_process = []
+        for path_item in all_path_items:
+            is_after_cursor = (
+                path_item.segment > cursor.current_segment or
+                (path_item.segment == cursor.current_segment and
+                 path_item.position > cursor.current_position)
+            )
+            if is_after_cursor:
+                path_items_to_process.append(path_item)
+
+        # Iterar el LearningPath en orden, solo hasta llenar el gap
+        for path_item in path_items_to_process:
+            if pending_count >= gap:
+                break
+
             word_id = path_item.word_id
 
             # Obtener UN SOLO contenido disponible para esta palabra
@@ -669,17 +800,17 @@ class ContentPlanner:
                 )
                 pending_count += 1
 
-            # Marcar el contenido como encolado
-            if content_type == ContentType.EXAMPLE:
-                example = self.session.get(Example, content_id)
-                if example:
-                    example.enqueued = True
-                    self.session.add(example)
-            elif content_type == ContentType.BEST_OPTIONS:
-                best_option = self.session.get(BestOption, content_id)
-                if best_option:
-                    best_option.enqueued = True
-                    self.session.add(best_option)
+                # Marcar el contenido como encolado
+                if content_type == ContentType.EXAMPLE:
+                    example = self.session.get(Example, content_id)
+                    if example:
+                        example.enqueued = True
+                        self.session.add(example)
+                elif content_type == ContentType.BEST_OPTIONS:
+                    best_option = self.session.get(BestOption, content_id)
+                    if best_option:
+                        best_option.enqueued = True
+                        self.session.add(best_option)
 
         self.session.commit()
         return pending_count
@@ -1061,6 +1192,109 @@ class ContentPlanner:
                 content_type=ContentType.EXAMPLE,
                 content_id=saved_example.id,
             )
+
+    def update_cursor_by_enqueued_content(
+        self,
+        user_id: int,
+        content_type: ContentType,
+    ) -> None:
+        """
+        Actualiza el cursor basándose en cuáles palabras del path
+        ya tienen contenido encolado/preparado.
+
+        El cursor marca la posición más alta del path cuya palabra
+        tiene al menos un contenido pendiente encolado.
+
+        Flujo:
+        1. Obtener todos los items del path ordenados (segment, position)
+        2. Para cada path_item, verificar si su palabra tiene contenido pending
+        3. Encontrar la posición más alta con contenido
+        4. Actualizar cursor a esa posición
+        """
+        from models import ContentQueue
+
+        cursor = self.session.exec(
+            select(LearningPathCursor).where(
+                LearningPathCursor.user_id == user_id,
+                LearningPathCursor.type == content_type,
+            )
+        ).first()
+
+        if not cursor:
+            return
+
+        # Obtener todos los items del path ordenados
+        path_items = self.session.exec(
+            select(LearningPath)
+            .where(
+                LearningPath.user_id == user_id,
+                LearningPath.type == content_type,
+            )
+            .order_by(LearningPath.segment.asc(), LearningPath.position.asc())
+        ).all()
+
+        if not path_items:
+            return
+
+        # Obtener todos los word_ids del path que tienen contenido pending
+        pending_queue_items = self.session.exec(
+            select(ContentQueue).where(
+                ContentQueue.user_id == user_id,
+                ContentQueue.type == content_type,
+                ContentQueue.status == "PENDING",
+            )
+        ).all()
+
+        pending_word_ids = set()
+        for item in pending_queue_items:
+            # Obtener el word_id del contenido encolado
+            word_ids = self._get_content_word_ids(
+                content_type=content_type,
+                content_id=item.content_id,
+            )
+            pending_word_ids.update(word_ids)
+
+        if not pending_word_ids:
+            return
+
+        # Encontrar la posición máxima del path cuya palabra tiene contenido
+        max_segment = 0
+        max_position = 0
+
+        for path_item in path_items:
+            if path_item.word_id in pending_word_ids:
+                max_segment = path_item.segment
+                max_position = path_item.position
+
+        # Actualizar cursor a la posición más alta con contenido
+        if (max_segment > cursor.current_segment or
+            (max_segment == cursor.current_segment and max_position > cursor.current_position)):
+            cursor.current_segment = max_segment
+            cursor.current_position = max_position
+            cursor.updated_at = datetime.now(timezone.utc)
+            self.session.add(cursor)
+            self.session.commit()
+
+    def _get_content_word_ids(
+        self,
+        content_type: ContentType,
+        content_id: int,
+    ) -> list:
+        """Obtiene los word_ids asociados a un contenido"""
+        from models import Example, BestOption, ExampleWord
+
+        if content_type == ContentType.EXAMPLE:
+            example_words = self.session.exec(
+                select(ExampleWord).where(ExampleWord.example_id == content_id)
+            ).all()
+            return [ew.word_id for ew in example_words]
+
+        elif content_type == ContentType.BEST_OPTIONS:
+            best_option = self.session.get(BestOption, content_id)
+            if best_option:
+                return [best_option.word_id]
+
+        return []
 
     def start_next_segment_if_needed(
         self,

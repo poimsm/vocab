@@ -60,7 +60,8 @@ class LearningTracker:
 
         Cada palabra recibe una exposición real.
 
-        Al final, avanza el cursor del LearningPath.
+        NOTA: El cursor NO se actualiza aquí.
+        El cursor avanza cuando se GENERA contenido, no cuando se consume.
         """
 
         word_ids = self.get_content_word_ids(
@@ -73,12 +74,6 @@ class LearningTracker:
                 word_id=word_id,
                 content_type=content_type,
             )
-
-        # Avanzar cursor
-        self.advance_cursor(
-            user_id=user_id,
-            content_type=content_type,
-        )
 
     def get_content_word_ids(
         self,
@@ -191,60 +186,3 @@ class LearningTracker:
 
         return LearningState.LEARNED
 
-    def advance_cursor(
-        self,
-        user_id: int,
-        content_type: ContentType,
-    ) -> None:
-        """
-        Avanza el cursor del LearningPath.
-
-        El cursor marca la posición actual del usuario.
-
-        Cuando alcanza el final de un segmento,
-        se mueve al siguiente.
-        """
-
-        cursor = self.session.exec(
-            select(LearningPathCursor).where(
-                LearningPathCursor.user_id == user_id,
-                LearningPathCursor.type == content_type,
-            )
-        ).first()
-
-        if not cursor:
-            # Si no existe, crear uno
-            cursor = LearningPathCursor(
-                user_id=user_id,
-                type=content_type,
-                current_segment=1,
-                current_position=0,
-                updated_at=datetime.now(timezone.utc),
-                created_at=datetime.now(timezone.utc),
-            )
-            self.session.add(cursor)
-            self.session.commit()
-            return
-
-        # Obtener tamaño del segmento actual
-        path_items = self.session.exec(
-            select(LearningPath).where(
-                LearningPath.user_id == user_id,
-                LearningPath.type == content_type,
-                LearningPath.segment == cursor.current_segment,
-            )
-        ).all()
-
-        segment_size = len(path_items)
-
-        # Avanzar posición
-        cursor.current_position += 1
-        cursor.updated_at = datetime.now(timezone.utc)
-
-        # Si alcanzó el final del segmento, ir al siguiente
-        if cursor.current_position >= segment_size:
-            cursor.current_segment += 1
-            cursor.current_position = 0
-
-        self.session.add(cursor)
-        self.session.commit()

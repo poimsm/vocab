@@ -29,10 +29,15 @@ def get_explore_feed(
 
     Flujo:
     1. Obtener items PENDING de ContentQueue
-    2. Para cada item, obtener el Example correspondiente
-    3. Segmentar el texto en chunks con target words resaltados
-    4. Retornar con estructura de texto segmentado
+    2. Si no hay, trigger ensure_ready() y retornar status "generating"
+    3. Si hay, segmentar el texto en chunks con target words resaltados
+    4. Retornar con estructura de texto segmentado y status "ok"
     """
+    from learning_path.content_planner import ContentPlanner
+    from learning_path.priority_engine import PriorityEngine
+    from words.word_repository import WordRepository
+    from best_options.best_options_repository import BestOptionRepository
+
     logger.info(f"[get_explore_feed] User {current_user.id}: Fetching examples (limit={limit})")
 
     queue_mgr = ContentQueueManager(db)
@@ -46,9 +51,25 @@ def get_explore_feed(
 
     if not queue_items:
         logger.debug(f"[get_explore_feed] No pending examples for user {current_user.id}")
+        # Si no hay contenido, asegurar que hay suficiente
+        priority_engine = PriorityEngine()
+        word_repo = WordRepository(db)
+        best_option_repo = BestOptionRepository(db)
+        example_repo = ExampleRepository(db)
+
+        content_planner = ContentPlanner(
+            session=db,
+            priority_engine=priority_engine,
+            content_queue=queue_mgr,
+            word_repository=word_repo,
+            example_repository=example_repo,
+            best_option_repository=best_option_repo,
+        )
+        content_planner.ensure_ready(current_user.id, ContentType.EXAMPLE)
+
         return {
             "examples": [],
-            "status": "ok",
+            "status": "generating",
         }
 
     # Obtener los examples asociados

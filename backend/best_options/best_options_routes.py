@@ -129,7 +129,7 @@ def resolve_best_option(
     2. Llamar a LearningTracker.record_exposure()
     3. Marcar item como CONSUMED
     """
-    from models import ContentQueue, ContentType
+    from models import ContentQueue
     from learning_path.content_queue import ContentQueue as ContentQueueManager
     from learning_path.learning_tracker import LearningTracker
     from examples.example_repository import ExampleRepository
