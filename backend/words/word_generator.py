@@ -5,6 +5,7 @@ from celery_app import celery_app
 import ai
 from datetime import datetime, timezone
 import time
+from sqlalchemy.exc import IntegrityError
 
 
 @celery_app.task(name="tasks.words.create_single")
@@ -251,11 +252,19 @@ def create_bulk_task(
 
                             db.commit()
 
+                        except IntegrityError as e:
+                            # Word already exists, skip it and continue
+                            logger.warning(
+                                f"[BulkWordGenerator] Word already exists (item {idx}: {main_word}), skipping..."
+                            )
+                            db.rollback()
+                            continue
                         except Exception as e:
                             logger.error(
                                 f"[BulkWordGenerator] Error creating word for item {idx}: {e}",
                                 exc_info=True
                             )
+                            db.rollback()
                             continue
 
                     # Paso 4: Generar contenido para el chunk
