@@ -3,6 +3,7 @@ from sqlmodel import Session, select
 from logging_client import logger
 from celery_app import celery_app
 import ai
+from examples.helpers import approximate_text_form
 
 
 @celery_app.task(name="tasks.examples.generate_simple")
@@ -79,10 +80,15 @@ def generate_simple_examples_task(
                         db.flush()
 
                         # Crear relación con la palabra
+                        # Usar el word.main como text_form y aproximar si es necesario
+                        text_form = approximate_text_form(example_text, word.main)
+                        if not text_form:
+                            text_form = word.main
+
                         example_word = ExampleWord(
                             example_id=example.id,
                             word_id=word.id,
-                            text_form=word.main,
+                            text_form=text_form,
                         )
                         db.add(example_word)
 
@@ -171,7 +177,7 @@ def generate_mixed_examples_task(
             for example_data in raw_mixed_examples:
                 try:
                     example_text = example_data.get("text")
-                    associated_word_ids = example_data.get("word_ids", [])
+                    words_data = example_data.get("words", [])
 
                     if not example_text:
                         logger.warning(
@@ -191,13 +197,25 @@ def generate_mixed_examples_task(
                     db.flush()
 
                     # Crear relaciones con todas las palabras asociadas
-                    for word_id in associated_word_ids:
+                    # La IA devuelve: [{"word_id": 1, "text_form": "hustled"}, ...]
+                    for word_info in words_data:
+                        word_id = word_info.get("word_id")
+                        suggested_text_form = word_info.get("text_form", "")
+
                         word = db.get(Word, word_id)
                         if word:
+                            # Aproximar el text_form si está vacío o no coincide
+                            text_form = approximate_text_form(
+                                example_text,
+                                suggested_text_form
+                            )
+                            if not text_form:
+                                text_form = word.main
+
                             example_word = ExampleWord(
                                 example_id=example.id,
                                 word_id=word_id,
-                                text_form=word.main,
+                                text_form=text_form,
                             )
                             db.add(example_word)
 
