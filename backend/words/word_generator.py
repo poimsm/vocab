@@ -94,10 +94,16 @@ def create_single_task(
             from examples.example_generator import ExampleGenerator
             from best_options.best_options_generator import BestOptionGenerator
 
+            # Pasar ejemplos pre-generados del enriquecimiento (10 ejemplos)
+            pre_generated_examples = {}
+            if enriched.get("examples"):
+                pre_generated_examples[str(word.id)] = enriched["examples"]
+
             ExampleGenerator.generate_simple(
                 user_id=user_id,
                 word_ids=[word.id],
-                amount=2,  # 2 ejemplos simples por defecto
+                amount=2,  # Fallback si no hay pre-generated
+                pre_generated_examples=pre_generated_examples,
             )
 
             BestOptionGenerator.generate(
@@ -210,7 +216,10 @@ def create_bulk_task(
 
                     # Crear un mapa de palabra -> datos enriquecidos
                     enriched_map = {item["word"]: item for item in enriched_list}
+                    # Mapa de palabra -> ejemplos pre-generados (10 ejemplos del enriquecimiento)
+                    pre_generated_examples = {}
                     chunk_word_ids = []
+                    chunk_word_id_to_main = {}  # Para mapping word_id -> main_word
 
                     # Paso 3: Crear palabras en BD usando datos enriquecidos
                     for idx, text, main_word, word_type in extracted_items:
@@ -237,6 +246,11 @@ def create_bulk_task(
                             created_words.append(word)
                             created_word_ids.append(word.id)
                             chunk_word_ids.append(word.id)
+                            chunk_word_id_to_main[word.id] = main_word
+
+                            # Guardar ejemplos pre-generados del enriquecimiento (10 ejemplos)
+                            if enriched.get("examples"):
+                                pre_generated_examples[str(word.id)] = enriched["examples"]
 
                             # Crear estadísticas iniciales
                             for content_type in [ContentType.EXAMPLE, ContentType.BEST_OPTIONS]:
@@ -275,7 +289,8 @@ def create_bulk_task(
                         ExampleGenerator.generate_simple(
                             user_id=user_id,
                             word_ids=chunk_word_ids,
-                            amount=1,  # 1 ejemplo simple por palabra
+                            amount=1,  # Fallback si no hay pre-generated
+                            pre_generated_examples=pre_generated_examples,
                         )
 
                         BestOptionGenerator.generate(

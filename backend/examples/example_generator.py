@@ -11,15 +11,18 @@ def generate_simple_examples_task(
     user_id: int,
     word_ids: List[int],
     amount: int = 1,
+    pre_generated_examples: dict = None,
 ) -> None:
     """
     Genera examples simples, donde cada example está asociado
     principalmente a una sola word.
 
-    Obtiene las words, solicita a la AI la cantidad indicada y
-    persiste los examples junto con sus relaciones ExampleWord.
+    Puede usar ejemplos pre-generados (del enriquecimiento) o generar nuevos.
 
-    Usar ai.generate_examples_for_single_word(word, amount)
+    Si pre_generated_examples viene con formato {word_id: [example_texts]},
+    usa esos ejemplos. De los 10 ejemplos: primeros 3 son INITIAL, resto EXPLORE.
+
+    Si no viene, genera ejemplos nuevos con ai.generate_examples_for_single_word().
     """
     import sys
     import os
@@ -56,21 +59,38 @@ def generate_simple_examples_task(
 
             sequence_counter = max_sequence + 1
 
-            # Generar ejemplos usando IA para cada palabra
+            # Generar ejemplos para cada palabra
             for word in words:
                 try:
-                    raw_examples = ai.generate_examples_for_single_word(word, amount)
+                    # Intentar obtener ejemplos pre-generados (del enriquecimiento)
+                    is_pre_generated = False
+                    if pre_generated_examples and str(word.id) in pre_generated_examples:
+                        raw_examples = pre_generated_examples[str(word.id)]
+                        is_pre_generated = True
+                        logger.debug(f"[ExampleGenerator] Using pre-generated examples for word {word.id}")
+                    else:
+                        # Generar nuevos ejemplos con IA
+                        raw_examples = ai.generate_examples_for_single_word(word, amount)
+                        logger.debug(f"[ExampleGenerator] Generated new examples for word {word.id}")
 
                     if not raw_examples:
                         logger.warning(
-                            f"[ExampleGenerator] No examples generated for word {word.id}"
+                            f"[ExampleGenerator] No examples available for word {word.id}"
                         )
                         continue
 
-                    for example_text in raw_examples:
+                    # Asignar tipos:
+                    # - Si son pre-generados: primeros 3 INITIAL, resto EXPLORE
+                    # - Si son generados por IA: todos EXPLORE
+                    for idx, example_text in enumerate(raw_examples):
+                        if is_pre_generated and idx < 3:
+                            example_type = ExampleType.INITIAL
+                        else:
+                            example_type = ExampleType.EXPLORE
+
                         # Crear el Example con sequence
                         example = Example(
-                            type=ExampleType.EXPLORE,
+                            type=example_type,
                             text=example_text,
                             normalized=example_text.lower(),
                             sequence=sequence_counter,
@@ -244,9 +264,9 @@ class ExampleGenerator:
     """Wrapper para llamar a tasks de generación de ejemplos desde ContentPlanner"""
 
     @staticmethod
-    def generate_simple(user_id: int, word_ids: List[int], amount: int = 1):
-        """Solicita generación de ejemplos simples"""
-        return generate_simple_examples_task.delay(user_id, word_ids, amount)
+    def generate_simple(user_id: int, word_ids: List[int], amount: int = 1, pre_generated_examples: dict = None):
+        """Solicita generación de ejemplos simples (con o sin ejemplos pre-generados)"""
+        return generate_simple_examples_task.delay(user_id, word_ids, amount, pre_generated_examples)
 
     @staticmethod
     def generate_mixed(user_id: int, word_ids: List[int], amount: int):
