@@ -164,12 +164,15 @@ class LearningTracker:
         statistics: WordStatistics,
     ) -> LearningState:
         """
-        Determina el estado actual de aprendizaje.
+        Determina el estado actual de aprendizaje con spaced repetition.
 
-        Estos thresholds son sólo una implementación inicial.
-
-        Posteriormente puedes reemplazarlos por un algoritmo
-        basado en spaced repetition más sofisticado.
+        Flujo de estados:
+        - NEW (0 veces): Palabra recién creada
+        - LEARNING (1-2 veces): Fijación inicial en memoria
+        - REINFORCING (3-4 veces): Refuerzo moderado
+        - SPACING (5-6 veces): Fase de espaciamiento prolongado (baja urgencia)
+        - LEARNED (7+ veces): Aprendida, listo para revisión ocasional
+        - REVIEW: Estado sticky, se mantiene indefinidamente
         """
 
         if statistics.times_seen == 0:
@@ -181,8 +184,11 @@ class LearningTracker:
         if statistics.times_seen < 3:
             return LearningState.LEARNING
 
-        if statistics.times_seen < 7:
+        if statistics.times_seen < 5:
             return LearningState.REINFORCING
+
+        if statistics.times_seen < 7:
+            return LearningState.SPACING
 
         return LearningState.LEARNED
 

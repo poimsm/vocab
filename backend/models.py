@@ -72,6 +72,7 @@ class LearningState(str, enum.Enum):
     NEW = "new"
     LEARNING = "learning"
     REINFORCING = "reinforcing"
+    SPACING = "spacing"
     LEARNED = "learned"
     REVIEW = "review"
 

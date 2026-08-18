@@ -121,6 +121,10 @@ class PriorityEngine:
         REINFORCING:
             prioridad media/alta.
 
+        SPACING:
+            prioridad muy baja (fase de espaciamiento prolongado).
+            Se muestra muy raramente para simular olvido natural.
+
         LEARNED:
             prioridad baja.
 
@@ -133,6 +137,7 @@ class PriorityEngine:
             LearningState.NEW: 1.00,
             LearningState.LEARNING: 0.85,
             LearningState.REINFORCING: 0.65,
+            LearningState.SPACING: 0.20,
             LearningState.LEARNED: 0.15,
             LearningState.REVIEW: 0.80,
         }
