@@ -4,6 +4,7 @@ from logging_client import logger
 from celery_app import celery_app
 import ai
 from datetime import datetime, timezone
+import time
 
 
 @celery_app.task(name="tasks.words.create_single")
@@ -147,115 +148,146 @@ def create_bulk_task(
             created_words = []
             created_word_ids = []
 
-            # Paso 1: Extraer información de todas las palabras
-            extracted_items = []  # Lista de (idx, text, main_word, word_type)
-            for idx, text in enumerate(texts, 1):
+            # Procesar en chunks de 15 textos
+            chunk_size = 15
+            total_items = len(texts)
+
+            for chunk_idx in range(0, total_items, chunk_size):
+                chunk_texts = texts[chunk_idx:chunk_idx + chunk_size]
+                chunk_num = (chunk_idx // chunk_size) + 1
+                total_chunks = (total_items + chunk_size - 1) // chunk_size
+                start_idx = chunk_idx + 1
+
+                logger.info(f"[BulkWordGenerator] Processing chunk {chunk_num}/{total_chunks} ({len(chunk_texts)} items)")
+
                 try:
-                    if not text or not text.strip():
-                        logger.warning(f"[BulkWordGenerator] Skipping empty text (item {idx})")
+                    # Paso 1: Extraer información de los textos del chunk
+                    extracted_items = []  # Lista de (idx, text, main_word, word_type)
+                    for offset, text in enumerate(chunk_texts):
+                        try:
+                            idx = start_idx + offset
+
+                            if not text or not text.strip():
+                                logger.warning(f"[BulkWordGenerator] Skipping empty text (item {idx})")
+                                continue
+
+                            # Extraer información de la palabra
+                            extracted = ai.extract_learning_intent([text])
+
+                            if not extracted or len(extracted) == 0:
+                                logger.warning(f"[BulkWordGenerator] Could not extract word data from text (item {idx})")
+                                continue
+
+                            # Obtener la palabra principal extraída
+                            main_word = extracted[0].get("main")
+                            word_type = extracted[0].get("type", "word")
+
+                            if not main_word:
+                                logger.warning(f"[BulkWordGenerator] No main word extracted (item {idx})")
+                                continue
+
+                            extracted_items.append((idx, text, main_word, word_type))
+
+                        except Exception as e:
+                            logger.error(
+                                f"[BulkWordGenerator] Error extracting text item {start_idx + offset}: {e}",
+                                exc_info=True
+                            )
+                            continue
+
+                    if not extracted_items:
+                        logger.warning(f"[BulkWordGenerator] No valid words extracted in chunk {chunk_num}")
                         continue
 
-                    # Extraer información de la palabra
-                    extracted = ai.extract_learning_intent([text])
+                    # Paso 2: Enriquecer palabras del chunk en lote
+                    main_words = [item[2] for item in extracted_items]
+                    enriched_list = ai.enrich_words_bulk(main_words)
 
-                    if not extracted or len(extracted) == 0:
-                        logger.warning(f"[BulkWordGenerator] Could not extract word data from text (item {idx})")
+                    if not enriched_list:
+                        logger.warning(f"[BulkWordGenerator] Could not enrich words in chunk {chunk_num}")
                         continue
 
-                    # Obtener la palabra principal extraída
-                    main_word = extracted[0].get("main")
-                    word_type = extracted[0].get("type", "word")
+                    # Crear un mapa de palabra -> datos enriquecidos
+                    enriched_map = {item["word"]: item for item in enriched_list}
+                    chunk_word_ids = []
 
-                    if not main_word:
-                        logger.warning(f"[BulkWordGenerator] No main word extracted (item {idx})")
-                        continue
+                    # Paso 3: Crear palabras en BD usando datos enriquecidos
+                    for idx, text, main_word, word_type in extracted_items:
+                        try:
+                            enriched = enriched_map.get(main_word)
 
-                    extracted_items.append((idx, text, main_word, word_type))
+                            if not enriched:
+                                logger.warning(f"[BulkWordGenerator] No enriched data for word {main_word} (item {idx})")
+                                continue
 
-                except Exception as e:
-                    logger.error(
-                        f"[BulkWordGenerator] Error extracting text item {idx}: {e}",
-                        exc_info=True
-                    )
-                    continue
+                            # Crear palabra
+                            word = word_repo.create(user_id, {
+                                "main": main_word,
+                                "meaning": enriched.get("meaning"),
+                                "synonyms": enriched.get("synonyms"),
+                                "type": word_type,
+                                "frequency": enriched.get("frequency"),
+                                "level": WordLevel.to_int(enriched.get("level")),
+                                "context": enriched.get("category"),
+                                "source_text": text,
+                            })
 
-            if not extracted_items:
-                logger.warning(f"[BulkWordGenerator] No valid words extracted from any texts for user {user_id}")
-                return
+                            logger.debug(f"[BulkWordGenerator] Word {word.id} created (item {idx})")
+                            created_words.append(word)
+                            created_word_ids.append(word.id)
+                            chunk_word_ids.append(word.id)
 
-            # Paso 2: Enriquecer todas las palabras en lote (más eficiente)
-            main_words = [item[2] for item in extracted_items]
-            enriched_list = ai.enrich_words_bulk(main_words)
+                            # Crear estadísticas iniciales
+                            for content_type in [ContentType.EXAMPLE, ContentType.BEST_OPTIONS]:
+                                stats = WordStatistics(
+                                    word_id=word.id,
+                                    type=content_type,
+                                    learning_state=LearningState.NEW,
+                                    times_seen=0,
+                                    current_cycle_seen=0,
+                                    created_at=datetime.now(timezone.utc),
+                                )
+                                db.add(stats)
 
-            if not enriched_list:
-                logger.warning(f"[BulkWordGenerator] Could not enrich any words for user {user_id}")
-                return
+                            db.commit()
 
-            # Crear un mapa de palabra -> datos enriquecidos
-            enriched_map = {item["word"]: item for item in enriched_list}
+                        except Exception as e:
+                            logger.error(
+                                f"[BulkWordGenerator] Error creating word for item {idx}: {e}",
+                                exc_info=True
+                            )
+                            continue
 
-            # Paso 3: Crear palabras en BD usando datos enriquecidos
-            for idx, text, main_word, word_type in extracted_items:
-                try:
-                    enriched = enriched_map.get(main_word)
+                    # Paso 4: Generar contenido para el chunk
+                    if chunk_word_ids:
+                        from examples.example_generator import ExampleGenerator
+                        from best_options.best_options_generator import BestOptionGenerator
 
-                    if not enriched:
-                        logger.warning(f"[BulkWordGenerator] No enriched data for word {main_word} (item {idx})")
-                        continue
-
-                    # Crear palabra
-                    word = word_repo.create(user_id, {
-                        "main": main_word,
-                        "meaning": enriched.get("meaning"),
-                        "synonyms": enriched.get("synonyms"),
-                        "type": word_type,
-                        "frequency": enriched.get("frequency"),
-                        "level": WordLevel.to_int(enriched.get("level")),
-                        "context": enriched.get("category"),
-                        "source_text": text,
-                    })
-
-                    logger.debug(f"[BulkWordGenerator] Word {word.id} created (item {idx})")
-                    created_words.append(word)
-                    created_word_ids.append(word.id)
-
-                    # Crear estadísticas iniciales
-                    for content_type in [ContentType.EXAMPLE, ContentType.BEST_OPTIONS]:
-                        stats = WordStatistics(
-                            word_id=word.id,
-                            type=content_type,
-                            learning_state=LearningState.NEW,
-                            times_seen=0,
-                            current_cycle_seen=0,
-                            created_at=datetime.now(timezone.utc),
+                        ExampleGenerator.generate_simple(
+                            user_id=user_id,
+                            word_ids=chunk_word_ids,
+                            amount=1,  # 1 ejemplo simple por palabra
                         )
-                        db.add(stats)
 
-                    db.commit()
+                        BestOptionGenerator.generate(
+                            user_id=user_id,
+                            word_ids=chunk_word_ids,
+                        )
+
+                        logger.debug(f"[BulkWordGenerator] Generated content for chunk {chunk_num} ({len(chunk_word_ids)} words)")
 
                 except Exception as e:
                     logger.error(
-                        f"[BulkWordGenerator] Error creating word for item {idx}: {e}",
+                        f"[BulkWordGenerator] Error processing chunk {chunk_num}: {e}",
                         exc_info=True
                     )
                     continue
+
+                # Sleep entre chunks (excepto el último)
+                if chunk_idx + chunk_size < total_items:
+                    time.sleep(1)
 
             if created_word_ids:
-                # Trigger generación de ejemplos en background
-                from examples.example_generator import ExampleGenerator
-                from best_options.best_options_generator import BestOptionGenerator
-
-                ExampleGenerator.generate_simple(
-                    user_id=user_id,
-                    word_ids=created_word_ids,
-                    amount=1,  # 1 ejemplo simple por palabra
-                )
-
-                BestOptionGenerator.generate(
-                    user_id=user_id,
-                    word_ids=created_word_ids,
-                )
-
                 logger.info(f"[BulkWordGenerator] Successfully created {len(created_words)} words for user {user_id}")
             else:
                 logger.warning(f"[BulkWordGenerator] No words were created for user {user_id}")
