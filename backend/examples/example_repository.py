@@ -53,6 +53,27 @@ class ExampleRepository:
 
         return examples
 
+    def count_available_examples_for_word(self, word_id: int) -> int:
+        """
+        Cuenta cuántos ejemplos disponibles hay para una palabra.
+
+        Un example está disponible si:
+        - Contiene la palabra (a través de ExampleWord)
+        - Es de tipo EXPLORE
+        - No ha sido encolado aún (enqueued=False)
+        """
+        count = self.session.exec(
+            select(func.count(Example.id))
+            .join(ExampleWord, Example.id == ExampleWord.example_id)
+            .where(
+                ExampleWord.word_id == word_id,
+                Example.type == ExampleType.EXPLORE,
+                Example.enqueued == False
+            )
+        ).first() or 0
+
+        return count
+
     def get_available_content_for_word(self, word_id: int) -> Optional[int]:
         """
         Obtiene el próximo example disponible para una palabra específica.

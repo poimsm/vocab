@@ -179,6 +179,10 @@ class ContentPlanner:
             content_type=content_type,
         )
 
+        logger.info(
+            f"[ContentPlanner] ensure_path: found {len(available_words)} candidate words"
+        )
+
         # Usar wave-based sizing para controlar la saturación
         target_look_ahead = self.calculate_segment_size_wave_based(
             user_id=user_id,
@@ -186,23 +190,32 @@ class ContentPlanner:
             content_type=content_type,
         )
 
-        logger.debug(
+        logger.info(
             f"[ContentPlanner] ensure_path for user {user_id} ({content_type}): "
-            f"look_ahead={look_ahead_count}, target={target_look_ahead}"
+            f"look_ahead={look_ahead_count}, target={target_look_ahead}, "
+            f"candidates={len(available_words)}"
         )
 
         # Si no hay suficiente look-ahead, crear nuevo segmento
         if look_ahead_count < target_look_ahead:
             missing = target_look_ahead - look_ahead_count
             logger.info(
-                f"[ContentPlanner] Creating {missing} new path items for user {user_id} ({content_type})"
+                f"[ContentPlanner] BUILDING: Creating {missing} new path items for user {user_id} ({content_type})"
             )
 
-            self.build_segment(
+            result = self.build_segment(
                 user_id=user_id,
                 content_type=content_type,
                 size=missing,
                 candidates=available_words,
+            )
+
+            logger.info(
+                f"[ContentPlanner] BUILD RESULT: created {len(result) if result else 0} path items"
+            )
+        else:
+            logger.info(
+                f"[ContentPlanner] SKIP BUILD: look_ahead ({look_ahead_count}) >= target ({target_look_ahead})"
             )
 
     def get_path_size(
@@ -374,10 +387,13 @@ class ContentPlanner:
         saturation = min(1.0, active_load / max_capacity)
 
         # Lógica de olas
-        can_accept_wave = saturation < 0.7  # Acepta ola si < 70%
+        # Bloqueamos solo si REALMENTE muy saturado (>95%)
+        # De otra forma permitimos olas pequeñas para mantener contenido disponible
+        can_accept_wave = saturation < 0.95  # Acepta ola si < 95% (más permisivo)
 
         # Intensidad de la ola (inversamente proporcional a saturación)
-        wave_intensity = max(0.0, 1.0 - saturation)
+        # Cuando saturación baja, olas grandes; cuando alta, olas muy pequeñas
+        wave_intensity = max(0.05, 1.0 - saturation)  # Mínimo 5% de intensidad
 
         return {
             'saturation_level': saturation,
@@ -404,6 +420,7 @@ class ContentPlanner:
         - Baja saturación (<30%): ola grande
         - Saturación media (30-70%): ola pequeña
         - Alta saturación (>70%): pausa (retorna 0)
+        - PLUS: respeta límite máximo del path (~50 palabras)
 
         Esto simula pulsaciones de entrada vs consumo de contenido.
         """
@@ -412,44 +429,64 @@ class ContentPlanner:
             user_id, content_type
         )
 
-        if not saturation_data['can_accept_wave']:
-            # Saturación alta: pausa la entrada
+        # Verificar tamaño actual del path
+        current_path_size = self.get_path_size(user_id, content_type)
+        max_path_size = 20  # Límite máximo del learning path
+
+        # Contar palabras activas (LEARNING, REINFORCING, SPACING)
+        # Ponderar SPACING con peso bajo (0.2) porque tiene prioridad muy baja
+        # Esto permite que se intercalen palabras SPACING con LEARNING sin bloquear entrada
+        active_words = (
+            saturation_data['words_in_learning'] * 1.0 +
+            saturation_data['words_in_reinforcing'] * 0.8 +
+            saturation_data['words_in_spacing'] * 0.4
+        )
+
+        logger.info(
+            f"[ContentPlanner] Wave check for user {user_id} ({content_type}): "
+            f"path_size={current_path_size}/{max_path_size}, active_words={active_words}, "
+            f"available_words={available_word_count}, saturation={saturation_data['saturation_level']:.2f}"
+        )
+
+        # OBJETIVO: mantener ~15-20 palabras ACTIVAS en aprendizaje
+        # Algoritmo: "refill when depleting"
+        # Si active_words <= 10 → agregar palabras nuevas AGRESIVAMENTE
+        # (incluso si path_size > 20, porque hay muchas palabras LEARNED que no se usan)
+        if active_words <= 10:
             logger.info(
-                f"[ContentPlanner] Path saturado para user {user_id} "
-                f"({content_type}): saturation={saturation_data['saturation_level']:.2f} "
-                f"- bloqueando ola nueva"
+                f"[ContentPlanner] Low active words ({active_words} <= 10) - FILLING path "
+                f"(current path_size={current_path_size} has mostly LEARNED words)"
+            )
+            if available_word_count <= 5:
+                return 5
+            elif available_word_count <= 15:
+                return 8
+            else:
+                return 10
+
+        # LÍMITE DURO: si path está lleno Y hay suficientes palabras activas, no agregar más
+        if current_path_size >= max_path_size:
+            logger.info(
+                f"[ContentPlanner] Path FULL for user {user_id} ({content_type}): "
+                f"{current_path_size}/{max_path_size} and active_words={active_words} - blocking new words"
             )
             return 0
 
-        wave_intensity = saturation_data['wave_intensity']
+        # Si 10 < active_words < 15 → agregar moderadamente
+        if active_words < 15:
+            logger.info(
+                f"[ContentPlanner] Medium active words ({active_words}) - moderate refill"
+            )
+            if available_word_count <= 10:
+                return 2
+            else:
+                return 3
 
-        # Base según palabras disponibles
-        if available_word_count <= 1:
-            base_size = 3
-        elif available_word_count <= 3:
-            base_size = 5
-        elif available_word_count <= 7:
-            base_size = 8
-        elif available_word_count <= 15:
-            base_size = 12
-        elif available_word_count <= 30:
-            base_size = 16
-        else:
-            base_size = 20
-
-        # Ajustar por intensidad de ola
-        wave_adjusted_size = int(base_size * wave_intensity)
-
-        logger.debug(
-            f"[ContentPlanner] Wave calculation for user {user_id} ({content_type}): "
-            f"base_size={base_size}, intensity={wave_intensity:.2f}, "
-            f"saturation={saturation_data['saturation_level']:.2f}, "
-            f"words_learning={saturation_data['words_in_learning']}, "
-            f"words_reinforcing={saturation_data['words_in_reinforcing']}, "
-            f"adjusted_size={wave_adjusted_size}"
+        # Si active_words >= 15 → pausar y dejar que usuario consuma
+        logger.info(
+            f"[ContentPlanner] High active words ({active_words}) - pausing new words"
         )
-
-        return max(0, wave_adjusted_size)
+        return 0
 
     def get_candidate_words(
         self,
@@ -995,6 +1032,119 @@ class ContentPlanner:
                         self.session.add(best_option)
 
         self.session.commit()
+
+        # FALLBACK: Si no pudimos enqueuear nada pero hay gap, buscar ejemplos disponibles
+        # de cualquier palabra (emergency case cuando el path está completamente saturado)
+        if pending_count == 0 and gap > 0:
+            logger.info(
+                f"[ContentPlanner] Fallback: no path items found but gap={gap}. "
+                f"Searching available content from active words (balanced by priority)..."
+            )
+
+            # Obtener palabras del path actual CON sus estadísticas de aprendizaje
+            path_word_ids = set(
+                self.session.exec(
+                    select(LearningPath.word_id)
+                    .where(
+                        LearningPath.user_id == user_id,
+                        LearningPath.type == content_type,
+                    )
+                ).all()
+            )
+
+            # Obtener palabras con su estado de aprendizaje
+            user_words_with_stats = self.session.exec(
+                select(Word, WordStatistics)
+                .join(WordStatistics,
+                      (Word.id == WordStatistics.word_id) &
+                      (WordStatistics.type == content_type))
+                .where(
+                    Word.user_id == user_id,
+                    Word.is_active == True,
+                    Word.id.in_(path_word_ids) if path_word_ids else True,
+                )
+            ).all()
+
+            # Ordenar por prioridad de learning_state
+            # LEARNING > REINFORCING > SPACING > LEARNED > REVIEW
+            priority_order = {
+                LearningState.LEARNING: 0,
+                LearningState.REINFORCING: 1,
+                LearningState.SPACING: 2,
+                LearningState.LEARNED: 3,
+                LearningState.REVIEW: 4,
+                LearningState.NEW: 5,
+            }
+
+            user_words_in_path = sorted(
+                [word for word, _ in user_words_with_stats],
+                key=lambda w: (
+                    priority_order.get(self.get_statistics(w.id, content_type).learning_state, 99),
+                    w.id
+                )
+            )
+
+            found_in_fallback = 0
+            round_num = 0
+
+            # Round-robin: en cada ronda, buscar 1 ejemplo de cada palabra
+            # Esto asegura distribución balanceada
+            while pending_count < gap and round_num < 5:  # máximo 5 rondas
+                round_num += 1
+                enqueued_in_round = 0
+
+                for word in user_words_in_path:
+                    if pending_count >= gap:
+                        break
+
+                    # Buscar UN ejemplo disponible para esta palabra
+                    if content_type == ContentType.EXAMPLE:
+                        content_id = self.example_repository.get_available_content_for_word(word.id)
+                    elif content_type == ContentType.BEST_OPTIONS:
+                        content_id = self.best_option_repository.get_available_content_for_word(word.id)
+                    else:
+                        content_id = None
+
+                    if content_id is None:
+                        continue  # Sin contenido disponible para esta palabra
+
+                    # Encolar si no está ya encolado
+                    if not self.content_queue.is_pending(user_id, content_type, content_id):
+                        self.content_queue.enqueue(user_id, content_type, content_id)
+                        pending_count += 1
+                        found_in_fallback += 1
+                        enqueued_in_round += 1
+
+                        # Marcar como encolado
+                        if content_type == ContentType.EXAMPLE:
+                            example = self.session.get(Example, content_id)
+                            if example:
+                                example.enqueued = True
+                                self.session.add(example)
+                        elif content_type == ContentType.BEST_OPTIONS:
+                            best_option = self.session.get(BestOption, content_id)
+                            if best_option:
+                                best_option.enqueued = True
+                                self.session.add(best_option)
+
+                if enqueued_in_round == 0:
+                    break  # Ninguna palabra tiene más contenido disponible
+
+                logger.debug(
+                    f"[ContentPlanner] Fallback round {round_num}: enqueued {enqueued_in_round} items"
+                )
+
+            if found_in_fallback > 0:
+                logger.info(
+                    f"[ContentPlanner] Fallback: successfully enqueued {found_in_fallback} items "
+                    f"across {round_num} balanced rounds (total: {pending_count})"
+                )
+                self.session.commit()
+            else:
+                logger.warning(
+                    f"[ContentPlanner] Fallback: no available content found for user {user_id} ({content_type})"
+                )
+
         return pending_count
 
     def calculate_content_gap(
@@ -1069,6 +1219,7 @@ class ContentPlanner:
         Planifica generación de best_options para la ventana actual del LearningPath.
         """
         from best_options.best_options_generator import BestOptionGenerator
+        from best_options.best_options_repository import BestOptionRepository
 
         if amount <= 0:
             return
@@ -1081,9 +1232,32 @@ class ContentPlanner:
         if not generation_words:
             return
 
-        word_ids = [w.id for w in generation_words]
+        # Filtrar palabras que realmente necesitan generación
+        best_option_repo = BestOptionRepository(self.session)
+        words_needing_generation = []
 
-        # Solicitar generación de best options
+        for word in generation_words:
+            available_count = best_option_repo.count_available_best_options_for_word(word.id)
+            if available_count < 2:
+                words_needing_generation.append(word)
+            else:
+                logger.debug(
+                    f"[ContentPlanner] Word {word.id} ({word.main}) already has {available_count} available best options, skipping"
+                )
+
+        if not words_needing_generation:
+            logger.info(
+                f"[ContentPlanner] No words need best_options generation (all have >= 2 available)"
+            )
+            return
+
+        word_ids = [w.id for w in words_needing_generation]
+
+        logger.info(
+            f"[ContentPlanner] Requesting best_options generation for {len(word_ids)} words"
+        )
+
+        # Solicitar generación de best options solo para palabras que lo necesitan
         BestOptionGenerator.generate(
             user_id=user_id,
             word_ids=word_ids,
@@ -1187,6 +1361,7 @@ class ContentPlanner:
         La generación de AI debe ejecutarse en background.
         """
         from examples.example_generator import ExampleGenerator
+        from examples.example_repository import ExampleRepository
 
         if amount <= 0:
             return
@@ -1199,7 +1374,27 @@ class ContentPlanner:
         if not generation_words:
             return
 
-        word_count = len(generation_words)
+        # Filtrar palabras que realmente necesitan generación
+        # (descartar aquellas que ya tienen suficientes ejemplos disponibles)
+        example_repo = ExampleRepository(self.session)
+        words_needing_generation = []
+
+        for word in generation_words:
+            available_count = example_repo.count_available_examples_for_word(word.id)
+            if available_count < 3:
+                words_needing_generation.append(word)
+            else:
+                logger.debug(
+                    f"[ContentPlanner] Word {word.id} ({word.main}) already has {available_count} available examples, skipping"
+                )
+
+        if not words_needing_generation:
+            logger.info(
+                f"[ContentPlanner] No words need generation (all have >= 3 available examples)"
+            )
+            return
+
+        word_count = len(words_needing_generation)
 
         # Decidir proporción simple vs mixed según diversidad
         if word_count <= 1:
@@ -1214,9 +1409,12 @@ class ContentPlanner:
         simple_amount = max(1, int(amount * simple_ratio))
         mixed_amount = amount - simple_amount
 
-        # Solicitar generación simple
+        # Solicitar generación simple solo para palabras que lo necesitan
         if simple_amount > 0:
-            word_ids = [w.id for w in generation_words]
+            word_ids = [w.id for w in words_needing_generation]
+            logger.info(
+                f"[ContentPlanner] Requesting generation for {len(word_ids)} words (simple_amount={simple_amount})"
+            )
             ExampleGenerator.generate_simple(
                 user_id=user_id,
                 word_ids=word_ids,

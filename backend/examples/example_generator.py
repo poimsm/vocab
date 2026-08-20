@@ -5,6 +5,7 @@ from celery_app import celery_app
 from sqlalchemy.exc import IntegrityError
 import ai
 from examples.helpers import approximate_text_form
+from examples.example_repository import ExampleRepository
 
 
 @celery_app.task(name="tasks.examples.generate_simple")
@@ -62,8 +63,19 @@ def generate_simple_examples_task(
             successfully_created = 0
 
             # Generar ejemplos para cada palabra
+            example_repo = ExampleRepository(db)
             for word in words:
                 try:
+                    # Verificar cuántos ejemplos disponibles hay para esta palabra
+                    available_count = example_repo.count_available_examples_for_word(word.id)
+
+                    # Si hay suficientes ejemplos disponibles, no generar
+                    if available_count >= 3:
+                        logger.info(
+                            f"[ExampleGenerator] Word {word.id} already has {available_count} available examples, skipping generation"
+                        )
+                        continue
+
                     # Intentar obtener ejemplos pre-generados (del enriquecimiento)
                     is_pre_generated = False
                     if pre_generated_examples and str(word.id) in pre_generated_examples:
@@ -71,7 +83,10 @@ def generate_simple_examples_task(
                         is_pre_generated = True
                         logger.debug(f"[ExampleGenerator] Using pre-generated examples for word {word.id}")
                     else:
-                        # Generar nuevos ejemplos con IA
+                        # Generar nuevos ejemplos con IA solo si hace falta
+                        logger.info(
+                            f"[ExampleGenerator] Word {word.id} has only {available_count} available examples, generating new ones..."
+                        )
                         raw_examples = ai.generate_examples_for_single_word(word, amount, db)
                         logger.debug(f"[ExampleGenerator] Generated new examples for word {word.id}")
 

@@ -55,6 +55,26 @@ class BestOptionRepository:
 
         return best_options
 
+    def count_available_best_options_for_word(self, word_id: int) -> int:
+        """
+        Cuenta cuántos best_options disponibles hay para una palabra.
+
+        Un best_option está disponible si:
+        - Pertenece a la palabra
+        - Está activo (is_active=True)
+        - No ha sido encolado aún (enqueued=False)
+        """
+        count = self.session.exec(
+            select(func.count(BestOption.id))
+            .where(
+                BestOption.word_id == word_id,
+                BestOption.is_active == True,
+                BestOption.enqueued == False
+            )
+        ).first() or 0
+
+        return count
+
     def get_available_content_for_word(self, word_id: int) -> Optional[int]:
         """
         Obtiene el próximo best_option disponible para una palabra específica.

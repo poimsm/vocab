@@ -66,10 +66,18 @@ def get_best_options(
         )
         content_planner.ensure_ready(current_user.id, ContentType.BEST_OPTIONS)
 
+        # Verificar si después de ensure_ready hay contenido pendiente
+        pending_count = queue_mgr.count_pending(current_user.id, ContentType.BEST_OPTIONS)
+        status = "generating" if pending_count > 0 else "ok"
+
+        logger.debug(
+            f"[get_best_options] After ensure_ready: pending_count={pending_count}, status={status}"
+        )
+
         return {
             "items": [],
             "total": 0,
-            "status": "generating",
+            "status": status,
         }
 
     # Obtener los best options asociados con sus palabras

@@ -67,9 +67,17 @@ def get_explore_feed(
         )
         content_planner.ensure_ready(current_user.id, ContentType.EXAMPLE)
 
+        # Verificar si después de ensure_ready hay contenido pendiente
+        pending_count = queue_mgr.count_pending(current_user.id, ContentType.EXAMPLE)
+        status = "generating" if pending_count > 0 else "ok"
+
+        logger.debug(
+            f"[get_explore_feed] After ensure_ready: pending_count={pending_count}, status={status}"
+        )
+
         return {
             "examples": [],
-            "status": "generating",
+            "status": status,
         }
 
     # Obtener los examples asociados
