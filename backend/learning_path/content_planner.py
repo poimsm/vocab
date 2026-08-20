@@ -1221,16 +1221,16 @@ class ContentPlanner:
                 amount=simple_amount,
             )
 
-        # Solicitar generación mixed
-        if mixed_amount > 0:
-            mixed_words = self.get_mixed_candidate_words(user_id=user_id)
-            if mixed_words:
-                word_ids = [w.id for w in mixed_words]
-                ExampleGenerator.generate_mixed(
-                    user_id=user_id,
-                    word_ids=word_ids,
-                    amount=mixed_amount,
-                )
+        # TODO: Mixed examples generation temporarily disabled - focusing on simple examples only
+        # if mixed_amount > 0:
+        #     mixed_words = self.get_mixed_candidate_words(user_id=user_id)
+        #     if mixed_words:
+        #         word_ids = [w.id for w in mixed_words]
+        #         ExampleGenerator.generate_mixed(
+        #             user_id=user_id,
+        #             word_ids=word_ids,
+        #             amount=mixed_amount,
+        #         )
 
     def get_generation_words(
         self,

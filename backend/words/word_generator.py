@@ -51,16 +51,29 @@ def create_single_task(
             logger.warning(f"[WordGenerator] No main word extracted for user {user_id}")
             return
 
-        # Enriquecer la palabra con detalles completos
-        enriched = ai.enrich_word(main_word)
-
-        if not enriched:
-            logger.warning(f"[WordGenerator] Could not enrich word {main_word} for user {user_id}")
-            return
-
         # Crear sesión
         with Session(engine) as db:
             word_repo = WordRepository(db)
+
+            # Verificar si la palabra ya existe
+            existing_word = db.exec(
+                select(Word)
+                .where(
+                    Word.user_id == user_id,
+                    Word.main == main_word
+                )
+            ).first()
+
+            if existing_word:
+                logger.info(f"[WordGenerator] Word '{main_word}' already exists for user {user_id}, skipping")
+                return
+
+            # Enriquecer la palabra con detalles completos
+            enriched = ai.enrich_word(main_word)
+
+            if not enriched:
+                logger.warning(f"[WordGenerator] Could not enrich word {main_word} for user {user_id}")
+                return
 
             # Crear palabra
             word = word_repo.create(user_id, {
@@ -76,6 +89,41 @@ def create_single_task(
 
             logger.debug(f"[WordGenerator] Word {word.id} created for user {user_id}")
 
+            # Crear ejemplos pre-generados directamente en BD (10 ejemplos)
+            if enriched.get("examples"):
+                from models import Example, ExampleWord, ExampleType
+
+                examples_list = enriched["examples"]
+                sequence_counter = 1
+
+                for idx, example_text in enumerate(examples_list):
+                    normalized = example_text.lower().strip()
+
+                    # Primeros 3 son INITIAL, resto EXPLORE
+                    example_type = ExampleType.INITIAL if idx < 3 else ExampleType.EXPLORE
+
+                    # Crear el Example
+                    example = Example(
+                        type=example_type,
+                        text=example_text,
+                        normalized=normalized,
+                        sequence=sequence_counter,
+                        enqueued=False,
+                    )
+                    db.add(example)
+                    db.flush()
+                    sequence_counter += 1
+
+                    # Crear la relación con la palabra
+                    example_word = ExampleWord(
+                        example_id=example.id,
+                        word_id=word.id,
+                        text_form=main_word,
+                    )
+                    db.add(example_word)
+
+                logger.debug(f"[WordGenerator] Created {len(examples_list)} examples for word {word.id}")
+
             # Crear estadísticas iniciales para ambos tipos de contenido
             for content_type in [ContentType.EXAMPLE, ContentType.BEST_OPTIONS]:
                 stats = WordStatistics(
@@ -90,21 +138,8 @@ def create_single_task(
 
             db.commit()
 
-            # Trigger de generación de ejemplos en background
-            from examples.example_generator import ExampleGenerator
+            # Trigger de generación de best options en background
             from best_options.best_options_generator import BestOptionGenerator
-
-            # Pasar ejemplos pre-generados del enriquecimiento (10 ejemplos)
-            pre_generated_examples = {}
-            if enriched.get("examples"):
-                pre_generated_examples[str(word.id)] = enriched["examples"]
-
-            ExampleGenerator.generate_simple(
-                user_id=user_id,
-                word_ids=[word.id],
-                amount=2,  # Fallback si no hay pre-generated
-                pre_generated_examples=pre_generated_examples,
-            )
 
             BestOptionGenerator.generate(
                 user_id=user_id,
@@ -206,7 +241,34 @@ def create_bulk_task(
                         logger.warning(f"[BulkWordGenerator] No valid words extracted in chunk {chunk_num}")
                         continue
 
-                    # Paso 2: Enriquecer palabras del chunk en lote
+                    # Paso 1.5: Verificar cuáles palabras ya existen en BD
+                    main_words_all = [item[2] for item in extracted_items]
+                    existing_words = db.exec(
+                        select(Word.main)
+                        .where(
+                            Word.user_id == user_id,
+                            Word.main.in_(main_words_all)
+                        )
+                    ).all()
+                    existing_words_set = set(existing_words)
+
+                    # Filtrar solo palabras nuevas (que no existen)
+                    new_extracted_items = []
+                    for item in extracted_items:
+                        idx, text, main_word, word_type = item
+                        if main_word in existing_words_set:
+                            logger.info(f"[BulkWordGenerator] Word '{main_word}' already exists for user {user_id} (item {idx}), skipping")
+                            continue
+                        new_extracted_items.append(item)
+
+                    if not new_extracted_items:
+                        logger.info(f"[BulkWordGenerator] All words in chunk {chunk_num} already exist, skipping AI enrichment")
+                        continue
+
+                    extracted_items = new_extracted_items
+                    logger.debug(f"[BulkWordGenerator] {len(extracted_items)} new words to enrich (chunk {chunk_num})")
+
+                    # Paso 2: Enriquecer palabras del chunk en lote (solo las nuevas)
                     main_words = [item[2] for item in extracted_items]
                     enriched_list = ai.enrich_words_bulk(main_words)
 
@@ -251,6 +313,40 @@ def create_bulk_task(
                             # Guardar ejemplos pre-generados del enriquecimiento (10 ejemplos)
                             if enriched.get("examples"):
                                 pre_generated_examples[str(word.id)] = enriched["examples"]
+
+                                # Crear los ejemplos directamente en BD (no pasar por Celery)
+                                from models import Example, ExampleWord, ExampleType
+
+                                examples_list = enriched["examples"]
+                                sequence_counter = 1
+
+                                for idx, example_text in enumerate(examples_list):
+                                    normalized = example_text.lower().strip()
+
+                                    # Primeros 3 son INITIAL, resto EXPLORE
+                                    example_type = ExampleType.INITIAL if idx < 3 else ExampleType.EXPLORE
+
+                                    # Crear el Example
+                                    example = Example(
+                                        type=example_type,
+                                        text=example_text,
+                                        normalized=normalized,
+                                        sequence=sequence_counter,
+                                        enqueued=False,
+                                    )
+                                    db.add(example)
+                                    db.flush()
+                                    sequence_counter += 1
+
+                                    # Crear la relación con la palabra
+                                    example_word = ExampleWord(
+                                        example_id=example.id,
+                                        word_id=word.id,
+                                        text_form=main_word,
+                                    )
+                                    db.add(example_word)
+
+                                logger.debug(f"[BulkWordGenerator] Created {len(examples_list)} examples for word {word.id}")
 
                             # Crear estadísticas iniciales
                             for content_type in [ContentType.EXAMPLE, ContentType.BEST_OPTIONS]:
