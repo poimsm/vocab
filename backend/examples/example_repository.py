@@ -59,12 +59,13 @@ class ExampleRepository:
 
         Un example está disponible si:
         - Contiene la palabra (a través de ExampleWord)
-        - Es de tipo EXPLORER
+        - Es de tipo EXPLORE
         - No ha sido encolado aún (enqueued=False)
         - No está en ContentQueue (PENDING)
 
         Retorna el example con la secuencia más baja (el más antiguo).
         """
+        from logging_client import logger
 
         example_id = self.session.exec(
             select(Example.id)
@@ -76,6 +77,27 @@ class ExampleRepository:
             )
             .order_by(Example.sequence.asc())
         ).first()
+
+        if example_id:
+            logger.debug(
+                f"[ExampleRepository] Found available EXPLORE example {example_id} for word {word_id}"
+            )
+        else:
+            # Debug: Ver qué ejemplos existen para esta palabra
+            all_examples = self.session.exec(
+                select(Example.id, Example.type, Example.enqueued)
+                .join(ExampleWord, Example.id == ExampleWord.example_id)
+                .where(ExampleWord.word_id == word_id)
+                .order_by(Example.sequence.asc())
+            ).all()
+
+            if all_examples:
+                logger.debug(
+                    f"[ExampleRepository] Word {word_id} has {len(all_examples)} examples: "
+                    f"{[(id, type.value if hasattr(type, 'value') else type, enqueued) for id, type, enqueued in all_examples]}"
+                )
+            else:
+                logger.debug(f"[ExampleRepository] Word {word_id} has NO examples at all")
 
         return example_id
 

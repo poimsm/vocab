@@ -2,6 +2,7 @@ from typing import List
 from sqlmodel import Session, select
 from logging_client import logger
 from celery_app import celery_app
+from sqlalchemy.exc import IntegrityError
 import ai
 from examples.helpers import approximate_text_form
 
@@ -58,6 +59,7 @@ def generate_simple_examples_task(
             ).first() or 0
 
             sequence_counter = max_sequence + 1
+            successfully_created = 0
 
             # Generar ejemplos para cada palabra
             for word in words:
@@ -70,7 +72,7 @@ def generate_simple_examples_task(
                         logger.debug(f"[ExampleGenerator] Using pre-generated examples for word {word.id}")
                     else:
                         # Generar nuevos ejemplos con IA
-                        raw_examples = ai.generate_examples_for_single_word(word, amount)
+                        raw_examples = ai.generate_examples_for_single_word(word, amount, db)
                         logger.debug(f"[ExampleGenerator] Generated new examples for word {word.id}")
 
                     if not raw_examples:
@@ -79,51 +81,93 @@ def generate_simple_examples_task(
                         )
                         continue
 
+                    # Deduplicar ejemplos por normalized (evitar IntegrityError)
+                    seen_normalized = set()
+                    filtered_examples = []
+                    for idx, example_text in enumerate(raw_examples):
+                        normalized = example_text.lower().strip()
+                        if normalized and normalized not in seen_normalized:
+                            seen_normalized.add(normalized)
+                            filtered_examples.append((idx, example_text))
+
+                    # Verificar cuáles normalizados ya existen en BD
+                    existing_normalized = set(
+                        db.exec(
+                            select(Example.normalized)
+                            .where(Example.normalized.in_(list(seen_normalized)))
+                        ).all()
+                    )
+
                     # Asignar tipos:
                     # - Si son pre-generados: primeros 3 INITIAL, resto EXPLORE
                     # - Si son generados por IA: todos EXPLORE
-                    for idx, example_text in enumerate(raw_examples):
-                        if is_pre_generated and idx < 3:
-                            example_type = ExampleType.INITIAL
-                        else:
-                            example_type = ExampleType.EXPLORE
+                    word_examples_count = 0
+                    for idx, example_text in filtered_examples:
+                        normalized = example_text.lower().strip()
 
-                        # Crear el Example con sequence
-                        example = Example(
-                            type=example_type,
-                            text=example_text,
-                            normalized=example_text.lower(),
-                            sequence=sequence_counter,
-                            enqueued=False,
-                        )
-                        db.add(example)
-                        db.flush()
+                        # Saltar si ya existe en BD
+                        if normalized in existing_normalized:
+                            logger.debug(
+                                f"[ExampleGenerator] Example already in DB for word {word.id} "
+                                f"(normalized: '{normalized}'), skipping..."
+                            )
+                            continue
 
-                        # Crear relación con la palabra
-                        # Usar el word.main como text_form y aproximar si es necesario
-                        text_form = approximate_text_form(example_text, word.main)
-                        if not text_form:
-                            text_form = word.main
+                        try:
+                            if is_pre_generated and idx < 3:
+                                example_type = ExampleType.INITIAL
+                            else:
+                                example_type = ExampleType.EXPLORE
 
-                        example_word = ExampleWord(
-                            example_id=example.id,
-                            word_id=word.id,
-                            text_form=text_form,
-                        )
-                        db.add(example_word)
+                            # Crear el Example con sequence
+                            example = Example(
+                                type=example_type,
+                                text=example_text,
+                                normalized=normalized,
+                                sequence=sequence_counter,
+                                enqueued=False,
+                            )
+                            db.add(example)
+                            db.flush()
 
-                        sequence_counter += 1
+                            # Crear relación con la palabra
+                            # Usar el word.main como text_form y aproximar si es necesario
+                            text_form = approximate_text_form(example_text, word.main)
+                            if not text_form:
+                                text_form = word.main
+
+                            example_word = ExampleWord(
+                                example_id=example.id,
+                                word_id=word.id,
+                                text_form=text_form,
+                            )
+                            db.add(example_word)
+                            db.commit()
+                            word_examples_count += 1
+                            sequence_counter += 1
+
+                        except Exception as e:
+                            logger.error(
+                                f"[ExampleGenerator] Error creating example for word {word.id}: {e}",
+                                exc_info=True,
+                            )
+                            db.rollback()
+                            continue
+
+                    if word_examples_count > 0:
+                        successfully_created += word_examples_count
+                        logger.debug(f"[ExampleGenerator] Created {word_examples_count} examples for word {word.id}")
 
                 except Exception as e:
                     logger.error(
                         f"[ExampleGenerator] Error generating examples for word {word.id}: {e}",
                         exc_info=True,
                     )
+                    db.rollback()  # Limpiar sesión en error outer también
                     continue
 
-            db.commit()
             logger.info(
-                f"[ExampleGenerator] Successfully created simple examples for user {user_id}"
+                f"[ExampleGenerator] Successfully created {successfully_created} examples for user {user_id}"
             )
 
     except Exception as e:
@@ -131,6 +175,7 @@ def generate_simple_examples_task(
             f"[ExampleGenerator] Error generating simple examples for user {user_id}: {e}",
             exc_info=True,
         )
+        db.rollback()
 
 
 @celery_app.task(name="tasks.examples.generate_mixed")
@@ -193,23 +238,53 @@ def generate_mixed_examples_task(
             ).first() or 0
 
             sequence_counter = max_sequence + 1
+            successfully_created = 0
 
+            # Deduplicar ejemplos por normalized antes de procesar
+            seen_normalized = set()
+            filtered_examples = []
             for example_data in raw_mixed_examples:
-                try:
-                    example_text = example_data.get("text")
-                    words_data = example_data.get("words", [])
+                example_text = example_data.get("text", "").strip()
+                if example_text:
+                    normalized = example_text.lower()
+                    if normalized not in seen_normalized:
+                        seen_normalized.add(normalized)
+                        filtered_examples.append(example_data)
 
-                    if not example_text:
-                        logger.warning(
-                            f"[MixedExampleGenerator] No text in example data"
-                        )
-                        continue
+            # Verificar cuáles normalizados ya existen en BD
+            existing_normalized = set(
+                db.exec(
+                    select(Example.normalized)
+                    .where(Example.normalized.in_(list(seen_normalized)))
+                ).all()
+            )
+
+            for example_data in filtered_examples:
+                example_text = example_data.get("text", "").strip()
+                normalized = example_text.lower()
+
+                if not example_text:
+                    logger.warning(
+                        f"[MixedExampleGenerator] No text in example data"
+                    )
+                    continue
+
+                # Saltar si ya existe en BD
+                if normalized in existing_normalized:
+                    logger.debug(
+                        f"[MixedExampleGenerator] Example already in DB "
+                        f"(normalized: '{normalized}'), skipping..."
+                    )
+                    continue
+
+                try:
+                    words_data = example_data.get("words", [])
 
                     # Crear el Example con sequence
                     example = Example(
                         type=ExampleType.EXPLORE,
                         text=example_text,
-                        normalized=example_text.lower(),
+                        normalized=normalized,
                         sequence=sequence_counter,
                         enqueued=False,
                     )
@@ -239,18 +314,20 @@ def generate_mixed_examples_task(
                             )
                             db.add(example_word)
 
+                    db.commit()
+                    successfully_created += 1
                     sequence_counter += 1
 
                 except Exception as e:
                     logger.error(
-                        f"[MixedExampleGenerator] Error processing example: {e}",
+                        f"[MixedExampleGenerator] Error creating example: {e}",
                         exc_info=True,
                     )
+                    db.rollback()
                     continue
 
-            db.commit()
             logger.info(
-                f"[MixedExampleGenerator] Successfully created mixed examples for user {user_id}"
+                f"[MixedExampleGenerator] Successfully created {successfully_created} mixed examples for user {user_id}"
             )
 
     except Exception as e:

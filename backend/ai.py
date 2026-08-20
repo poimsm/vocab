@@ -230,20 +230,34 @@ Rules:
 
 def generate_examples_for_single_word(
     word: models.Word,
-    amount: int = 1
+    amount: int = 1,
+    db = None
 ):
     logger.info(f"generate_examples_for_single_word")
     payload = {
         "target": word.main,
     }
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        temperature=0.5,
-        messages=[
-            {
-                "role": "system",
-                "content": f"""
+    # Query existing examples if db is provided
+    existing_examples = []
+    if db is not None:
+        from sqlmodel import select
+        from models import Example, ExampleWord
+
+        try:
+            existing_examples = db.exec(
+                select(Example.text)
+                .join(ExampleWord, Example.id == ExampleWord.example_id)
+                .where(ExampleWord.word_id == word.id)
+                .limit(5)
+            ).all()
+            logger.debug(f"[AI] Found {len(existing_examples)} existing examples for word {word.id}")
+        except Exception as e:
+            logger.warning(f"[AI] Error querying existing examples: {e}")
+            existing_examples = []
+
+    # Build system prompt
+    system_prompt = f"""
 Generate {amount} different natural English examples.
 
 Rules:
@@ -263,6 +277,19 @@ Example:
   ...
 ]
 """
+
+    # If existing examples exist, add them to the prompt
+    if existing_examples:
+        existing_text = "\n".join([f"- {ex}" for ex in existing_examples])
+        system_prompt += f"\n\nExisting examples to AVOID generating similar to:\n{existing_text}"
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        temperature=0.5,
+        messages=[
+            {
+                "role": "system",
+                "content": system_prompt
             },
             {
                 "role": "user",
@@ -272,6 +299,7 @@ Example:
     )
 
     content = response.choices[0].message.content.strip()
+    logger.info(f"RESPONSE_AI:::: {content}")
 
     try:
         if content.startswith("```"):

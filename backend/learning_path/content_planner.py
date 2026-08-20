@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
-from sqlmodel import Session, select
+from typing import List, Optional, Tuple, Dict
+from sqlmodel import Session, select, func
+from logging_client import logger
 from models import (
     Word,
     WordStatistics,
@@ -9,9 +10,11 @@ from models import (
     LearningPathCursor,
     ContentType,
     LearningState,
+    ContentQueueStatus,
+    ContentQueue as ContentQueueModel,  # Modelo de BD
 )
 from learning_path.priority_engine import PriorityEngine
-from learning_path.content_queue import ContentQueue
+from learning_path.content_queue import ContentQueue  # Clase de negocio
 
 
 class ContentPlanner:
@@ -124,8 +127,9 @@ class ContentPlanner:
         Si falta:
             crea un nuevo segmento.
 
-        La cantidad de look-ahead puede crecer según
-        la cantidad de palabras disponibles.
+        IMPORTANTE: Este método crea ESTRUCTURA (palabras en path).
+        NO está limitado por wave-check. La wave-check solo aplica
+        a request_generation() (generación de contenido).
         """
 
         # Obtener cursor actual
@@ -175,14 +179,24 @@ class ContentPlanner:
             content_type=content_type,
         )
 
+        # Usar calculate_segment_size() sin wave-check
+        # (la estructura del path NO debe estar limitada por saturación)
         target_look_ahead = self.calculate_segment_size(
             user_id=user_id,
             available_word_count=len(available_words),
         )
 
+        logger.debug(
+            f"[ContentPlanner] ensure_path for user {user_id} ({content_type}): "
+            f"look_ahead={look_ahead_count}, target={target_look_ahead}"
+        )
+
         # Si no hay suficiente look-ahead, crear nuevo segmento
         if look_ahead_count < target_look_ahead:
             missing = target_look_ahead - look_ahead_count
+            logger.info(
+                f"[ContentPlanner] Creating {missing} new path items for user {user_id} ({content_type})"
+            )
 
             self.build_segment(
                 user_id=user_id,
@@ -264,6 +278,8 @@ class ContentPlanner:
 
         Esto evita que un usuario que recién agregó una palabra
         termine con un LearningPath enorme y monótono.
+
+        NOTA: Esta función está deprecada. Usar calculate_segment_size_wave_based() en su lugar.
         """
 
         if available_word_count <= 1:
@@ -282,6 +298,156 @@ class ContentPlanner:
             return 16
 
         return 20
+
+    def calculate_path_saturation(
+        self,
+        user_id: int,
+        content_type: ContentType,
+    ) -> Dict:
+        """
+        Analiza el estado actual del learning path.
+
+        Calcula la "carga activa" basada en:
+        - Palabras en LEARNING (peso 2.0)
+        - Palabras en REINFORCING (peso 1.5)
+        - Palabras en SPACING (peso 0.5)
+
+        Retorna:
+        {
+            'saturation_level': float (0.0 a 1.0),
+            'words_in_learning': int,
+            'words_in_reinforcing': int,
+            'words_in_spacing': int,
+            'words_learned': int,
+            'pending_in_queue': int,
+            'can_accept_wave': bool,
+            'wave_intensity': float (0.0 a 1.0),
+            'active_load': float,
+        }
+        """
+
+        # Contar palabras por estado
+        stats_by_state = self.session.exec(
+            select(
+                WordStatistics.learning_state,
+                func.count(WordStatistics.id).label('count')
+            )
+            .join(Word, Word.id == WordStatistics.word_id)
+            .where(
+                Word.user_id == user_id,
+                WordStatistics.type == content_type,
+                Word.is_active == True,
+            )
+            .group_by(WordStatistics.learning_state)
+        ).all()
+
+        state_counts = {state: count for state, count in stats_by_state}
+
+        words_learning = state_counts.get(LearningState.LEARNING, 0)
+        words_reinforcing = state_counts.get(LearningState.REINFORCING, 0)
+        words_spacing = state_counts.get(LearningState.SPACING, 0)
+        words_learned = state_counts.get(LearningState.LEARNED, 0)
+
+        # Contar pendientes en queue
+        pending_queue = self.session.exec(
+            select(func.count(ContentQueueModel.id))
+            .where(
+                ContentQueueModel.user_id == user_id,
+                ContentQueueModel.type == content_type,
+                ContentQueueModel.status == ContentQueueStatus.PENDING,
+            )
+        ).first() or 0
+
+        # Calcular saturación
+        # Peso: LEARNING (x2) > REINFORCING (x1.5) > SPACING (x0.5)
+        active_load = (
+            (words_learning * 2.0) +
+            (words_reinforcing * 1.5) +
+            (words_spacing * 0.5)
+        )
+
+        # Máxima capacidad recomendada antes de bloquear
+        max_capacity = 50
+
+        saturation = min(1.0, active_load / max_capacity)
+
+        # Lógica de olas
+        can_accept_wave = saturation < 0.7  # Acepta ola si < 70%
+
+        # Intensidad de la ola (inversamente proporcional a saturación)
+        wave_intensity = max(0.0, 1.0 - saturation)
+
+        return {
+            'saturation_level': saturation,
+            'words_in_learning': words_learning,
+            'words_in_reinforcing': words_reinforcing,
+            'words_in_spacing': words_spacing,
+            'words_learned': words_learned,
+            'pending_in_queue': pending_queue,
+            'can_accept_wave': can_accept_wave,
+            'wave_intensity': wave_intensity,
+            'active_load': active_load,
+        }
+
+    def calculate_segment_size_wave_based(
+        self,
+        user_id: int,
+        available_word_count: int,
+        content_type: ContentType,
+    ) -> int:
+        """
+        Calcula tamaño del segmento basado en OLAS (wave-based intake).
+
+        Controla la entrada de palabras nuevas según saturación del path:
+        - Baja saturación (<30%): ola grande
+        - Saturación media (30-70%): ola pequeña
+        - Alta saturación (>70%): pausa (retorna 0)
+
+        Esto simula pulsaciones de entrada vs consumo de contenido.
+        """
+
+        saturation_data = self.calculate_path_saturation(
+            user_id, content_type
+        )
+
+        if not saturation_data['can_accept_wave']:
+            # Saturación alta: pausa la entrada
+            logger.info(
+                f"[ContentPlanner] Path saturado para user {user_id} "
+                f"({content_type}): saturation={saturation_data['saturation_level']:.2f} "
+                f"- bloqueando ola nueva"
+            )
+            return 0
+
+        wave_intensity = saturation_data['wave_intensity']
+
+        # Base según palabras disponibles
+        if available_word_count <= 1:
+            base_size = 3
+        elif available_word_count <= 3:
+            base_size = 5
+        elif available_word_count <= 7:
+            base_size = 8
+        elif available_word_count <= 15:
+            base_size = 12
+        elif available_word_count <= 30:
+            base_size = 16
+        else:
+            base_size = 20
+
+        # Ajustar por intensidad de ola
+        wave_adjusted_size = int(base_size * wave_intensity)
+
+        logger.debug(
+            f"[ContentPlanner] Wave calculation for user {user_id} ({content_type}): "
+            f"base_size={base_size}, intensity={wave_intensity:.2f}, "
+            f"saturation={saturation_data['saturation_level']:.2f}, "
+            f"words_learning={saturation_data['words_in_learning']}, "
+            f"words_reinforcing={saturation_data['words_in_reinforcing']}, "
+            f"adjusted_size={wave_adjusted_size}"
+        )
+
+        return max(0, wave_adjusted_size)
 
     def get_candidate_words(
         self,
@@ -730,16 +896,24 @@ class ContentPlanner:
         ).first()
 
         if not cursor:
+            logger.debug(f"[ContentPlanner] No cursor found for user {user_id} ({content_type})")
             return 0
 
         # Calcular cuánto contenido falta
-        gap = self.calculate_content_gap(
-            user_id=user_id,
-            content_type=content_type,
+        target = self.calculate_queue_target(user_id, content_type)
+        pending = self.content_queue.count_pending(user_id, content_type)
+        gap = self.calculate_content_gap(user_id, content_type)
+
+        logger.info(
+            f"[ContentPlanner] enqueue_existing_content for user {user_id} ({content_type}): "
+            f"target={target}, pending={pending}, gap={gap}"
         )
 
         if gap <= 0:
             # Ya hay suficiente contenido en queue
+            logger.debug(
+                f"[ContentPlanner] Sufficient content in queue (gap={gap}), skipping enqueue"
+            )
             return 0
 
         # Obtener el LearningPath ordenado
@@ -764,11 +938,17 @@ class ContentPlanner:
                 path_items_to_process.append(path_item)
 
         # Iterar el LearningPath en orden, solo hasta llenar el gap
+        logger.debug(
+            f"[ContentPlanner] Processing {len(path_items_to_process)} path items to fill gap={gap}"
+        )
+
         for path_item in path_items_to_process:
             if pending_count >= gap:
+                logger.debug(f"[ContentPlanner] Reached target pending_count={pending_count}, stopping")
                 break
 
             word_id = path_item.word_id
+            logger.debug(f"[ContentPlanner] Looking for content for word_id={word_id}")
 
             # Obtener UN SOLO contenido disponible para esta palabra
             if content_type == ContentType.EXAMPLE:
