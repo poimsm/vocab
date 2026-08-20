@@ -179,11 +179,11 @@ class ContentPlanner:
             content_type=content_type,
         )
 
-        # Usar calculate_segment_size() sin wave-check
-        # (la estructura del path NO debe estar limitada por saturación)
-        target_look_ahead = self.calculate_segment_size(
+        # Usar wave-based sizing para controlar la saturación
+        target_look_ahead = self.calculate_segment_size_wave_based(
             user_id=user_id,
             available_word_count=len(available_words),
+            content_type=content_type,
         )
 
         logger.debug(
@@ -367,7 +367,9 @@ class ContentPlanner:
         )
 
         # Máxima capacidad recomendada antes de bloquear
-        max_capacity = 50
+        # Con LEARNING (peso 2.0) + REINFORCING (peso 1.5) + SPACING (peso 0.5)
+        # Para ~15 LEARNING + 5 REINFORCING = (15*2.0) + (5*1.5) = 37.5
+        max_capacity = 35
 
         saturation = min(1.0, active_load / max_capacity)
 
@@ -716,22 +718,22 @@ class ContentPlanner:
         Lógica:
         - Si hay pocas nuevas: reservar menos slots
         - Si hay muchas nuevas: reservar más slots
-        - Máximo: 40% del segmento (para mantener equilibrio)
+        - Máximo: 25% del segmento (más conservador, enfoque en refuerzo)
         """
 
         if new_word_count == 0:
             return 0
 
         if new_word_count <= 2:
-            return max(1, int(size * 0.15))
+            return max(1, int(size * 0.10))
 
         if new_word_count <= 5:
-            return max(2, int(size * 0.25))
+            return max(2, int(size * 0.15))
 
         if new_word_count <= 10:
-            return max(3, int(size * 0.35))
+            return max(3, int(size * 0.20))
 
-        return max(4, int(size * 0.40))
+        return max(4, int(size * 0.25))
 
     def select_word_for_slot(
         self,
