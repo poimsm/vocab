@@ -6,6 +6,7 @@ import ai
 from datetime import datetime, timezone
 import time
 from sqlalchemy.exc import IntegrityError
+from examples.helpers import approximate_text_form
 
 
 @celery_app.task(name="tasks.words.create_single")
@@ -338,11 +339,15 @@ def create_bulk_task(
                                     db.flush()
                                     sequence_counter += 1
 
+                                    text_form = approximate_text_form(example_text, main_word)
+                                    if not text_form:
+                                        text_form = main_word
+
                                     # Crear la relación con la palabra
                                     example_word = ExampleWord(
                                         example_id=example.id,
                                         word_id=word.id,
-                                        text_form=main_word,
+                                        text_form=text_form,
                                     )
                                     db.add(example_word)
 
