@@ -568,6 +568,18 @@ class ContentPlanner:
 
         now = datetime.now(timezone.utc)
 
+        # Contar palabras en estado SPACING para ajuste dinámico de prioridad
+        spacing_words_count = self.session.exec(
+            select(func.count(WordStatistics.id))
+            .join(Word, Word.id == WordStatistics.word_id)
+            .where(
+                Word.user_id == user_id,
+                WordStatistics.type == content_type,
+                WordStatistics.learning_state == LearningState.SPACING,
+                Word.is_active == True,
+            )
+        ).first() or 0
+
         for word in words:
             statistics = self.get_statistics(
                 word_id=word.id,
@@ -585,6 +597,7 @@ class ContentPlanner:
                 statistics=statistics,
                 now=now,
                 expected_exposure=expected_exposure,
+                spacing_words_count=spacing_words_count,
             )
 
             result.append(

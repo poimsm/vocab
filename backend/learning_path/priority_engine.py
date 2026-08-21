@@ -50,6 +50,7 @@ class PriorityEngine:
         statistics: WordStatistics,
         now: Optional[datetime] = None,
         expected_exposure: float = 0.0,
+        spacing_words_count: int = 0,
     ) -> float:
         """
         Calcula la prioridad final de la palabra.
@@ -68,6 +69,9 @@ class PriorityEngine:
         expected_exposure representa contenido que ya se espera
         que contribuya a la exposición futura de la palabra.
 
+        spacing_words_count: total de palabras en estado SPACING.
+        Si > 6, aumenta la prioridad de palabras SPACING para que se consuman más rápido.
+
         Importante:
         no significa que la palabra esté aprendida o no.
         Sólo representa qué tan conveniente es volver a planificarla.
@@ -75,7 +79,10 @@ class PriorityEngine:
 
         now = now or datetime.now(timezone.utc)
 
-        learning_need = self.calculate_learning_need(statistics)
+        learning_need = self.calculate_learning_need(
+            statistics,
+            spacing_words_count=spacing_words_count,
+        )
         review_urgency = self.calculate_review_urgency(
             statistics,
             now,
@@ -107,6 +114,7 @@ class PriorityEngine:
     def calculate_learning_need(
         self,
         statistics: WordStatistics,
+        spacing_words_count: int = 0,
     ) -> float:
         """
         Determina la necesidad base según el estado de aprendizaje.
@@ -125,6 +133,9 @@ class PriorityEngine:
             prioridad muy baja (fase de espaciamiento prolongado).
             Se muestra muy raramente para simular olvido natural.
 
+            AJUSTE DINÁMICO: Si hay más de 6 palabras en SPACING,
+            aumenta la prioridad para evitar acumulación.
+
         LEARNED:
             prioridad baja.
 
@@ -142,10 +153,22 @@ class PriorityEngine:
             LearningState.REVIEW: 0.80,
         }
 
-        return values.get(
+        priority = values.get(
             statistics.learning_state,
             0.50,
         )
+
+        if (statistics.learning_state == LearningState.SPACING and
+            spacing_words_count > 3):
+
+            if spacing_words_count <= 5:
+                priority += 0.40
+            elif spacing_words_count <= 8:
+                priority += 0.60
+            else:
+                priority += 0.90
+
+        return priority
 
     def calculate_review_urgency(
         self,

@@ -168,10 +168,10 @@ class LearningTracker:
 
         Flujo de estados:
         - NEW (0 veces): Palabra recién creada
-        - LEARNING (1-2 veces): Fijación inicial en memoria
-        - REINFORCING (3-4 veces): Refuerzo moderado
-        - SPACING (5-6 veces): Fase de espaciamiento prolongado (baja urgencia)
-        - LEARNED (7+ veces): Aprendida, listo para revisión ocasional
+        - LEARNING (1 vez): Fijación inicial en memoria
+        - REINFORCING (2-3 veces): Refuerzo moderado
+        - SPACING (4-5 veces): Fase de espaciamiento prolongado (baja urgencia)
+        - LEARNED (6+ veces): Aprendida, listo para revisión ocasional
         - REVIEW: Estado sticky, se mantiene indefinidamente
         """
 
@@ -181,13 +181,13 @@ class LearningTracker:
         if statistics.learning_state == LearningState.REVIEW:
             return LearningState.REVIEW
 
-        if statistics.times_seen < 3:
+        if statistics.times_seen < 2:
             return LearningState.LEARNING
 
-        if statistics.times_seen < 5:
+        if statistics.times_seen < 4:
             return LearningState.REINFORCING
 
-        if statistics.times_seen < 7:
+        if statistics.times_seen < 6:
             return LearningState.SPACING
 
         return LearningState.LEARNED
