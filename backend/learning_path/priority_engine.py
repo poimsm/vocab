@@ -149,7 +149,8 @@ class PriorityEngine:
             LearningState.LEARNING: 0.85,
             LearningState.REINFORCING: 0.65,
             LearningState.SPACING: 0.20,
-            LearningState.LEARNED: 0.05,
+            LearningState.ALMOST_LEARNED: 0.05,
+            LearningState.LEARNED: 0.00,             
             LearningState.REVIEW: 0.80,
         }
 
