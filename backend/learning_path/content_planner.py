@@ -586,6 +586,10 @@ class ContentPlanner:
                 content_type=content_type,
             )
 
+            # Excluir palabras en estado LEARNED - nunca deben aparecer en el path
+            if statistics.learning_state == LearningState.LEARNED:
+                continue
+
             expected_exposure = self.get_expected_exposure(
                 user_id=user_id,
                 word_id=word.id,
