@@ -5,7 +5,7 @@ from sqlalchemy.orm import joinedload
 from db import get_db
 from logging_client import logger
 from auth.repository import get_current_user
-from models import User, ContentType, ContentQueue, BestOption, Word
+from models import User, ContentType, ContentQueue, BestOption, Word, LearningState, WordStatistics
 from decorators import log_endpoint
 from best_options.best_options_schemas import BestOptionResponse
 from best_options.best_options_repository import BestOptionRepository
@@ -94,6 +94,19 @@ def get_best_options(
     # Construir respuesta con información completa de palabras
     items_response = []
     for queue_item, best_option in zip(queue_items, best_options):
+        # Filtrar best options de palabras LEARNED
+        word_stats = db.exec(
+            select(WordStatistics)
+            .where(
+                WordStatistics.word_id == best_option.word.id,
+                WordStatistics.type == ContentType.BEST_OPTIONS,
+            )
+        ).first()
+
+        if word_stats and word_stats.learning_state == LearningState.LEARNED:
+            logger.debug(f"[get_best_options] Skipping best option {best_option.id}: word is LEARNED")
+            continue
+
         word_data = {
             "id": best_option.word.id,
             "main": best_option.word.main,
@@ -114,10 +127,13 @@ def get_best_options(
             "correct_option": best_option.correct_option,
         })
 
+    # Si no hay best options después de filtrar LEARNED, retornar no_words
+    status = "ok" if items_response else "no_words"
+
     return {
         "items": items_response,
-        "total": len(best_options),
-        "status": "ok",
+        "total": len(items_response),
+        "status": status,
     }
 
 
