@@ -184,10 +184,10 @@ class LearningTracker:
         if statistics.times_seen < 2:
             return LearningState.LEARNING
 
-        if statistics.times_seen < 4:
+        if statistics.times_seen <= 4:
             return LearningState.REINFORCING
 
-        if statistics.times_seen < 6:
+        if statistics.times_seen <= 5:
             return LearningState.SPACING
 
         return LearningState.LEARNED
