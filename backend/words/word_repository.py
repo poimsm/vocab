@@ -17,6 +17,7 @@ from models import (
     ExampleWord,
     Example,
     WordLevel,
+    LearningState,
 )
 
 
@@ -32,17 +33,50 @@ class WordRepository:
         sort: str = "newest",
         page: int = 1,
         limit: int = 15,
+        learning_state: str = None,
     ) -> Dict[str, Any]:
         """
         Obtiene palabras del usuario con paginación.
 
         Retorna palabras junto con conteo de ejemplos EXPLORE.
+
+        learning_state: Filter by learning state category
+          - new: Only NEW words
+          - learning: LEARNING + REINFORCING + SPACING + ALMOST_LEARNED
+          - mastered: LEARNED + REVIEW
         """
         # Obtener palabras del usuario
         statement = (
             select(Word)
             .where(Word.user_id == user_id, Word.is_active == True)
         )
+
+        # Filtrar por learning_state si se proporciona
+        if learning_state:
+            # Map user-friendly categories to internal states
+            state_map = {
+                'new': LearningState.NEW,
+                'learning': [LearningState.LEARNING, LearningState.REINFORCING, LearningState.SPACING, LearningState.ALMOST_LEARNED],
+                'mastered': [LearningState.LEARNED, LearningState.REVIEW],
+            }
+
+            states = state_map.get(learning_state)
+            if states:
+                if not isinstance(states, list):
+                    states = [states]
+                # Use subquery to get distinct word IDs to avoid duplicates from multiple WordStatistics rows
+                # Filter by EXAMPLE type to be consistent with what users see in examples feed
+                subquery = (
+                    select(func.distinct(Word.id))
+                    .join(WordStatistics)
+                    .where(
+                        Word.user_id == user_id,
+                        Word.is_active == True,
+                        WordStatistics.type == ContentType.EXAMPLE,
+                        WordStatistics.learning_state.in_(states)
+                    )
+                )
+                statement = statement.where(Word.id.in_(subquery))
 
         # Aplicar ordenamiento
         if sort == "newest":
@@ -52,12 +86,38 @@ class WordRepository:
         elif sort == "alphabetical":
             statement = statement.order_by(Word.main.asc())
 
-        # Obtener total de palabras
-        total_count = self.session.exec(
+        # Obtener total de palabras (con filtro si aplica)
+        count_statement = (
             select(func.count()).select_from(Word).where(
                 Word.user_id == user_id, Word.is_active == True
             )
-        ).one()
+        )
+
+        if learning_state:
+            # Map user-friendly categories to internal states
+            state_map = {
+                'new': LearningState.NEW,
+                'learning': [LearningState.LEARNING, LearningState.REINFORCING, LearningState.SPACING, LearningState.ALMOST_LEARNED],
+                'mastered': [LearningState.LEARNED, LearningState.REVIEW],
+            }
+
+            states = state_map.get(learning_state)
+            if states:
+                if not isinstance(states, list):
+                    states = [states]
+                count_statement = (
+                    select(func.count(func.distinct(Word.id)))
+                    .select_from(Word)
+                    .join(WordStatistics)
+                    .where(
+                        Word.user_id == user_id,
+                        Word.is_active == True,
+                        WordStatistics.type == ContentType.EXAMPLE,
+                        WordStatistics.learning_state.in_(states)
+                    )
+                )
+
+        total_count = self.session.exec(count_statement).one()
 
         # Aplicar paginación
         offset = (page - 1) * limit
@@ -193,4 +253,20 @@ class WordRepository:
         self.session.add(word)
         self.session.commit()
 
+        return True
+
+    def mark_as_learned(self, word_id: int) -> bool:
+        """Marca todas las estadísticas de una palabra como LEARNED"""
+        statistics = self.session.exec(
+            select(WordStatistics).where(WordStatistics.word_id == word_id)
+        ).all()
+
+        if not statistics:
+            return False
+
+        for stat in statistics:
+            stat.learning_state = LearningState.LEARNED
+            self.session.add(stat)
+
+        self.session.commit()
         return True

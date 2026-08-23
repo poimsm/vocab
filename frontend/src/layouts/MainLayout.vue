@@ -21,7 +21,7 @@ function handleLogout() {
 
 // Mapeamos los módulos a las propiedades "to" usando el "name" de tus rutas
 const modules = [
-  { id: 'words', label: 'My Words ⭐️', icon: 'solar:book-bookmark-linear', to: { name: 'my-words' } },
+  { id: 'words', label: 'My Words', icon: 'solar:book-bookmark-linear', to: { name: 'my-words' } },
   { id: 'examples', label: 'Examples', icon: 'solar:chat-round-line-linear', to: { name: 'examples' } },
   { id: 'best-options', label: 'Best Options', icon: 'mynaui:question', to: { name: 'best-options' } },
   // { id: 'search', label: 'Search', icon: 'iconamoon:search-light', to: { name: 'home' } },

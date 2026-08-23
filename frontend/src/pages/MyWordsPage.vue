@@ -7,6 +7,7 @@ import api from '@/utils/api'
 type WordLevel = 'Beginner' | 'Intermediate' | 'Advanced'
 type WordFrequency = 'rare' | 'uncommon' | 'common'
 type FilterMode = 'all' | 'favorites'
+type LearningStateFilter = 'all' | 'new' | 'learning' | 'mastered'
 
 interface Word {
   id: number
@@ -32,6 +33,7 @@ const error = ref<string | null>(null)
 
 const searchQuery = ref('')
 const filterMode = ref<FilterMode>('all')
+const learningStateFilter = ref<LearningStateFilter>('all')
 const selectedWord = ref<Word | null>(null)
 const showMobileDetail = ref(false)
 
@@ -117,12 +119,16 @@ async function fetchWords(reset = false) {
   error.value = null
 
   try {
-    const response = await api.get('/words/words', {
-  params: {
-    page: currentPage.value,
-    limit: 20
-  }
-})
+    const params: any = {
+      page: currentPage.value,
+      limit: 20
+    }
+
+    if (learningStateFilter.value !== 'all') {
+      params.learning_state = learningStateFilter.value
+    }
+
+    const response = await api.get('/words/words', { params })
 const data = response.data
 
     const newItems = (data.items || []).map((item: any) => ({
@@ -209,7 +215,7 @@ const data = response.data
 
 async function toggleFavoriteApi(word: Word) {
   try {
-    const response = await api.patch(`/words/${word.id}/toggle-fav`)
+    const response = await api.patch(`words/words/${word.id}/favorite`)
 const data = response.data
     word.isFavorite = data.is_favorite ?? !word.isFavorite
     if (selectedWord.value?.id === word.id) {
@@ -323,6 +329,13 @@ function handleAddKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') closeAdd()
 }
 
+// ─── Watchers ───
+import { watch } from 'vue'
+
+watch([filterMode, learningStateFilter], () => {
+  fetchWords(true)
+})
+
 onMounted(() => {
   fetchWords()
   window.addEventListener('scroll', onWindowScroll)
@@ -382,6 +395,38 @@ onUnmounted(() => {
           <span v-if="favoriteCount > 0" class="fav-count">{{ favoriteCount }}</span>
         </button>
       </div>
+    </div>
+
+    <!-- Learning State Filter -->
+    <div class="learning-state-filter">
+      <button
+        class="state-tab"
+        :class="{ active: learningStateFilter === 'all' }"
+        @click="learningStateFilter = 'all'"
+      >
+        All
+      </button>
+      <button
+        class="state-tab"
+        :class="{ active: learningStateFilter === 'new' }"
+        @click="learningStateFilter = 'new'"
+      >
+        New
+      </button>
+      <button
+        class="state-tab"
+        :class="{ active: learningStateFilter === 'learning' }"
+        @click="learningStateFilter = 'learning'"
+      >
+        In Progress
+      </button>
+      <button
+        class="state-tab"
+        :class="{ active: learningStateFilter === 'mastered' }"
+        @click="learningStateFilter = 'mastered'"
+      >
+        Mastered
+      </button>
     </div>
 
     <!-- Loading -->
@@ -894,6 +939,38 @@ onUnmounted(() => {
   color: #f472b6;
   font-size: 10px;
   font-weight: 700;
+}
+
+/* ─── Learning State Filter ─── */
+.learning-state-filter {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.state-tab {
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #9c99ab;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.state-tab:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #e2e0e8;
+}
+
+.state-tab.active {
+  background: rgba(124, 58, 237, 0.2);
+  border-color: rgba(124, 58, 237, 0.4);
+  color: #a78bfa;
 }
 
 /* ─── Loading / Error ─── */

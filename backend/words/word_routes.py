@@ -26,6 +26,7 @@ def get_words(
     sort: str = "newest",
     page: int = Query(1, ge=1),
     limit: int = Query(15, ge=1, le=100),
+    learning_state: str = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -33,15 +34,17 @@ def get_words(
     Obtiene las palabras del usuario con paginación y ordenamiento.
 
     sort: newest, oldest, alphabetical
+    learning_state: None (all), new, learning (in progress), mastered (learned)
     """
-    logger.info(f"[get_words] User {current_user.id}: Fetching words (sort={sort}, page={page}, limit={limit})")
+    logger.info(f"[get_words] User {current_user.id}: Fetching words (sort={sort}, page={page}, limit={limit}, learning_state={learning_state})")
 
     word_repo = WordRepository(db)
     paginated_data = word_repo.get_words(
         user_id=current_user.id,
         sort=sort,
         page=page,
-        limit=limit
+        limit=limit,
+        learning_state=learning_state
     )
 
     logger.debug(f"[get_words] Retrieved {len(paginated_data['items'])} words")
@@ -292,6 +295,38 @@ def toggle_favorite(
     return {
         "id": updated_word.id,
         "is_favorite": updated_word.is_favorite
+    }
+
+
+@router.patch("/words/{word_id}/learned")
+@log_endpoint
+def mark_word_as_learned(
+    word_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Marca una palabra como aprendida"""
+    logger.info(f"[mark_word_as_learned] User {current_user.id}: Marking word {word_id} as learned")
+
+    word_repo = WordRepository(db)
+    word = word_repo.get(db, word_id)
+
+    if not word or word.user_id != current_user.id:
+        logger.warning(f"[mark_word_as_learned] Word {word_id} not found")
+        raise HTTPException(status_code=404, detail="Palabra no encontrada")
+
+    success = word_repo.mark_as_learned(word_id)
+
+    if not success:
+        logger.warning(f"[mark_word_as_learned] No statistics found for word {word_id}")
+        return {"status": "warning", "message": "No statistics to update"}
+
+    logger.debug(f"[mark_word_as_learned] Word {word_id} marked as learned")
+
+    return {
+        "status": "ok",
+        "message": "Palabra marcada como aprendida",
+        "word_id": word_id
     }
 
 

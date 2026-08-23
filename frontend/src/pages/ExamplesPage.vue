@@ -14,6 +14,7 @@ interface TargetWord {
   level?: number
   is_boosted: boolean
   batch_id?: number
+  is_favorite?: boolean
 }
 
 interface TextSegment {
@@ -29,6 +30,7 @@ interface ExampleItem {
 }
 
 interface WordDetail {
+  id: number
   word: string
   definition: string
   level: string | number
@@ -36,6 +38,7 @@ interface WordDetail {
   frequency: 'rare' | 'uncommon' | 'common'
   examples: string[]
   synonyms: string[]
+  is_favorite?: boolean
 }
 
 // ─── State ───
@@ -232,13 +235,15 @@ async function fetchWordDetail(wordId: number) {
     const data = response.data
 
     selectedWord.value = {
+      id: data.id,
       word: data.main,
       definition: data.meaning,
       level: data.level,
       context: data.context || data.type || 'General',
       frequency: data.frequency,
       examples: data.examples || [],
-      synonyms: data.synonyms || []
+      synonyms: data.synonyms || [],
+      is_favorite: data.is_favorite || false
     }
   } catch (e) {
     alert('Could not load word detail')
@@ -255,6 +260,31 @@ async function toggleExampleFav() {
     })
 
   } catch (e) {
+    alert('Failed to toggle favorite')
+  }
+}
+
+async function handleToggleKnown() {
+  if (!selectedWord.value) return
+
+  try {
+    await api.patch(`/words/words/${selectedWord.value.id}/learned`)
+    closeMobileDetail()
+    fetchExamples()
+  } catch (e: any) {
+    alert('Failed to mark word as learned')
+  }
+}
+
+async function handleToggleFavorite() {
+  if (!selectedWord.value) return
+
+  try {
+    await api.patch(`words/words/${selectedWord.value.id}/favorite`)
+    if (selectedWord.value) {
+      selectedWord.value.is_favorite = !selectedWord.value.is_favorite
+    }
+  } catch (e: any) {
     alert('Failed to toggle favorite')
   }
 }
@@ -414,8 +444,9 @@ onUnmounted(() => {
             <button class="sound-btn" @click="speakWord" title="Play pronunciation">
               <Icon icon="solar:volume-loud-linear" width="20" />
             </button>
-            <button class="bookmark-btn" title="Bookmark">
-              <Icon icon="solar:bookmark-linear" width="20" />
+            <button class="heart-btn" @click="handleToggleFavorite" title="Add to favorites">
+              <Icon v-if="selectedWord?.is_favorite" icon="solar:heart-bold" width="20" />
+              <Icon v-else icon="solar:heart-linear" width="20" />
             </button>
           </div>
         </div>
@@ -483,8 +514,9 @@ onUnmounted(() => {
             <button class="mobile-sound-btn" @click="speakWord" title="Play pronunciation">
               <Icon icon="solar:volume-loud-linear" width="22" />
             </button>
-            <button class="mobile-bookmark-btn" title="Bookmark">
-              <Icon icon="solar:bookmark-linear" width="22" />
+            <button class="mobile-heart-btn" @click="handleToggleFavorite" title="Add to favorites">
+              <Icon v-if="selectedWord?.is_favorite" icon="solar:heart-bold" width="22" />
+              <Icon v-else icon="solar:heart-linear" width="22" />
             </button>
           </div>
         </div>
@@ -524,7 +556,7 @@ onUnmounted(() => {
           <div class="known-toggle">
             <span>Already know this word?</span>
             <label class="toggle-switch">
-              <input type="checkbox" />
+              <input type="checkbox" @change="handleToggleKnown" />
               <span class="toggle-slider"></span>
             </label>
           </div>
@@ -678,7 +710,7 @@ onUnmounted(() => {
   color: #e2e0e8;
 }
 
-.bookmark-btn,
+.heart-btn,
 .sound-btn {
   width: 36px;
   height: 36px;
@@ -693,10 +725,14 @@ onUnmounted(() => {
   transition: all 0.2s ease;
 }
 
-.bookmark-btn:hover,
+.heart-btn:hover,
 .sound-btn:hover {
   background: rgba(255, 255, 255, 0.06);
   color: #e2e0e8;
+}
+
+.heart-btn {
+  color: #f472b6;
 }
 
 .sound-btn {
@@ -931,14 +967,14 @@ onUnmounted(() => {
   gap: 8px;
 }
 
-.mobile-bookmark-btn,
+.mobile-heart-btn,
 .mobile-sound-btn {
   width: 40px;
   height: 40px;
   border-radius: 10px;
   border: none;
   background: transparent;
-  color: #9c99ab;
+  color: #f472b6;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -952,6 +988,10 @@ onUnmounted(() => {
 .mobile-sound-btn:hover {
   background: rgba(167, 139, 250, 0.1);
   color: #c4b5fd;
+}
+
+.mobile-heart-btn:hover {
+  background: rgba(244, 114, 182, 0.1);
 }
 
 .mobile-detail-content {
