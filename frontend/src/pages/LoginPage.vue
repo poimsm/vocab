@@ -78,6 +78,12 @@ async function handleLogin() {
     font-size: 0.9em;
 }
 
+@media (max-width: 768px) {
+    .error {
+        font-size: 1.15em;
+    }
+}
+
 button {
     padding: 10px;
     cursor: pointer;

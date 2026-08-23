@@ -818,10 +818,22 @@ onUnmounted(() => {
   letter-spacing: -0.5px;
 }
 
+@media (max-width: 768px) {
+  .words-title {
+    font-size: 32px;
+  }
+}
+
 .words-subtitle {
   font-size: 14px;
   color: #9c99ab;
   margin: 0;
+}
+
+@media (max-width: 768px) {
+  .words-subtitle {
+    font-size: 17px;
+  }
 }
 
 .add-btn {
@@ -838,6 +850,12 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .add-btn {
+    font-size: 17px;
+  }
 }
 
 .add-btn:hover:not(:disabled) {
@@ -885,6 +903,12 @@ onUnmounted(() => {
   transition: all 0.2s ease;
 }
 
+@media (max-width: 768px) {
+  .search-input {
+    font-size: 17px;
+  }
+}
+
 .search-input::placeholder {
   color: #9c99ab;
 }
@@ -918,6 +942,12 @@ onUnmounted(() => {
   transition: all 0.2s ease;
 }
 
+@media (max-width: 768px) {
+  .filter-tab {
+    font-size: 16px;
+  }
+}
+
 .filter-tab:hover {
   color: #e2e0e8;
 }
@@ -941,6 +971,12 @@ onUnmounted(() => {
   font-weight: 700;
 }
 
+@media (max-width: 768px) {
+  .fav-count {
+    font-size: 14px;
+  }
+}
+
 /* ─── Learning State Filter ─── */
 .learning-state-filter {
   display: flex;
@@ -960,6 +996,12 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .state-tab {
+    font-size: 15px;
+  }
 }
 
 .state-tab:hover {
@@ -1002,6 +1044,12 @@ onUnmounted(() => {
   margin: 0;
 }
 
+@media (max-width: 768px) {
+  .loading-state p {
+    font-size: 17px;
+  }
+}
+
 .error-state {
   display: flex;
   flex-direction: column;
@@ -1018,6 +1066,12 @@ onUnmounted(() => {
   margin: 0;
 }
 
+@media (max-width: 768px) {
+  .error-state p {
+    font-size: 17px;
+  }
+}
+
 .retry-btn {
   padding: 10px 20px;
   border-radius: 10px;
@@ -1028,6 +1082,12 @@ onUnmounted(() => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+@media (max-width: 768px) {
+  .retry-btn {
+    font-size: 17px;
+  }
 }
 
 .retry-btn:hover {
@@ -1070,6 +1130,12 @@ onUnmounted(() => {
   padding: 24px;
   color: #9c99ab;
   font-size: 13px;
+}
+
+@media (max-width: 768px) {
+  .loading-more {
+    font-size: 16px;
+  }
 }
 
 .spinner-small {
@@ -1128,6 +1194,12 @@ onUnmounted(() => {
   margin: 0;
 }
 
+@media (max-width: 768px) {
+  .word-name {
+    font-size: 19px;
+  }
+}
+
 .word-fav-indicator {
   color: #f472b6;
   display: flex;
@@ -1143,6 +1215,12 @@ onUnmounted(() => {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .word-definition {
+    font-size: 16px;
+  }
 }
 
 .fav-btn {
@@ -1180,6 +1258,12 @@ onUnmounted(() => {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.5px;
+}
+
+@media (max-width: 768px) {
+  .meta-tag {
+    font-size: 14px;
+  }
 }
 
 .meta-tag.level {
@@ -1283,6 +1367,12 @@ onUnmounted(() => {
   letter-spacing: -0.5px;
 }
 
+@media (max-width: 768px) {
+  .detail-word {
+    font-size: 36px;
+  }
+}
+
 .detail-speak-btn {
   width: 36px;
   height: 36px;
@@ -1333,6 +1423,12 @@ onUnmounted(() => {
   margin-bottom: 28px;
 }
 
+@media (max-width: 768px) {
+  .detail-definition {
+    font-size: 18px;
+  }
+}
+
 /* ─── Synonyms ─── */
 .detail-synonyms {
   margin-bottom: 28px;
@@ -1345,6 +1441,12 @@ onUnmounted(() => {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin: 0 0 12px 0;
+}
+
+@media (max-width: 768px) {
+  .synonyms-title {
+    font-size: 16px;
+  }
 }
 
 .synonyms-list {
@@ -1362,6 +1464,12 @@ onUnmounted(() => {
   font-weight: 600;
   border: 1px solid rgba(124, 58, 237, 0.2);
   transition: all 0.2s ease;
+}
+
+@media (max-width: 768px) {
+  .synonym-tag {
+    font-size: 16px;
+  }
 }
 
 .synonym-tag:hover {
@@ -1393,10 +1501,22 @@ onUnmounted(() => {
   text-transform: uppercase;
 }
 
+@media (max-width: 768px) {
+  .meta-label {
+    font-size: 14px;
+  }
+}
+
 .meta-value {
   font-size: 14px;
   font-weight: 600;
   color: #e2e0e8;
+}
+
+@media (max-width: 768px) {
+  .meta-value {
+    font-size: 17px;
+  }
 }
 
 .detail-examples {
@@ -1410,6 +1530,12 @@ onUnmounted(() => {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin: 0 0 12px 0;
+}
+
+@media (max-width: 768px) {
+  .examples-title {
+    font-size: 16px;
+  }
 }
 
 .examples-list {
@@ -1430,6 +1556,12 @@ onUnmounted(() => {
   line-height: 1.5;
 }
 
+@media (max-width: 768px) {
+  .examples-list li {
+    font-size: 17px;
+  }
+}
+
 .detail-actions {
   display: flex;
   gap: 10px;
@@ -1448,6 +1580,12 @@ onUnmounted(() => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+@media (max-width: 768px) {
+  .detail-action-btn {
+    font-size: 17px;
+  }
 }
 
 .detail-action-btn.danger {
@@ -1481,6 +1619,12 @@ onUnmounted(() => {
   margin: 0 0 16px 0;
 }
 
+@media (max-width: 768px) {
+  .empty-text {
+    font-size: 19px;
+  }
+}
+
 .empty-add-btn {
   padding: 12px 24px;
   border-radius: 12px;
@@ -1491,6 +1635,12 @@ onUnmounted(() => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+@media (max-width: 768px) {
+  .empty-add-btn {
+    font-size: 17px;
+  }
 }
 
 .empty-add-btn:hover {
@@ -1534,6 +1684,12 @@ onUnmounted(() => {
   margin: 0;
 }
 
+@media (max-width: 768px) {
+  .modal-title {
+    font-size: 21px;
+  }
+}
+
 .modal-close {
   width: 32px;
   height: 32px;
@@ -1567,6 +1723,12 @@ onUnmounted(() => {
   margin: 0;
 }
 
+@media (max-width: 768px) {
+  .modal-hint {
+    font-size: 16px;
+  }
+}
+
 .form-group {
   display: flex;
   flex-direction: column;
@@ -1581,6 +1743,12 @@ onUnmounted(() => {
   letter-spacing: 0.5px;
 }
 
+@media (max-width: 768px) {
+  .form-label {
+    font-size: 15px;
+  }
+}
+
 .form-input {
   padding: 14px 16px;
   border-radius: 12px;
@@ -1591,6 +1759,12 @@ onUnmounted(() => {
   outline: none;
   transition: all 0.2s ease;
   font-family: inherit;
+}
+
+@media (max-width: 768px) {
+  .form-input {
+    font-size: 18px;
+  }
 }
 
 .form-input:focus {
@@ -1617,6 +1791,12 @@ onUnmounted(() => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+@media (max-width: 768px) {
+  .modal-btn {
+    font-size: 17px;
+  }
 }
 
 .modal-btn.secondary {
@@ -1700,11 +1880,23 @@ onUnmounted(() => {
   margin: 0;
 }
 
+@media (max-width: 768px) {
+  .mobile-add-title {
+    font-size: 23px;
+  }
+}
+
 .mobile-add-hint {
   font-size: 13px;
   color: #9c99ab;
   line-height: 1.5;
   margin: 0;
+}
+
+@media (max-width: 768px) {
+  .mobile-add-hint {
+    font-size: 16px;
+  }
 }
 
 .mobile-add-input {
@@ -1719,6 +1911,12 @@ onUnmounted(() => {
   transition: all 0.2s ease;
   font-family: inherit;
   box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .mobile-add-input {
+    font-size: 19px;
+  }
 }
 
 .mobile-add-input:focus {
@@ -1745,6 +1943,12 @@ onUnmounted(() => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+@media (max-width: 768px) {
+  .mobile-add-btn {
+    font-size: 18px;
+  }
 }
 
 .mobile-add-btn.secondary {
@@ -1813,6 +2017,12 @@ onUnmounted(() => {
   text-align: center;
 }
 
+@media (max-width: 768px) {
+  .mobile-detail-title {
+    font-size: 19px;
+  }
+}
+
 .mobile-fav-btn {
   width: 40px;
   height: 40px;
@@ -1851,6 +2061,12 @@ onUnmounted(() => {
   letter-spacing: -0.5px;
 }
 
+@media (max-width: 768px) {
+  .mobile-word {
+    font-size: 36px;
+  }
+}
+
 .mobile-speak-btn {
   width: 36px;
   height: 36px;
@@ -1878,6 +2094,12 @@ onUnmounted(() => {
   margin: 0 0 28px 0;
 }
 
+@media (max-width: 768px) {
+  .mobile-definition {
+    font-size: 18px;
+  }
+}
+
 /* Mobile Synonyms */
 .mobile-synonyms {
   margin-bottom: 28px;
@@ -1903,10 +2125,22 @@ onUnmounted(() => {
   color: #9c99ab;
 }
 
+@media (max-width: 768px) {
+  .mobile-meta-label {
+    font-size: 16px;
+  }
+}
+
 .mobile-meta-value {
   font-size: 14px;
   font-weight: 600;
   color: #e2e0e8;
+}
+
+@media (max-width: 768px) {
+  .mobile-meta-value {
+    font-size: 17px;
+  }
 }
 
 .mobile-examples {
@@ -1928,6 +2162,12 @@ onUnmounted(() => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+@media (max-width: 768px) {
+  .mobile-delete-btn {
+    font-size: 18px;
+  }
 }
 
 .mobile-delete-btn:hover {

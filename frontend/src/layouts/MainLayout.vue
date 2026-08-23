@@ -270,11 +270,17 @@ const modules = [
   border-radius: 10px;
   cursor: pointer;
   color: #9c99ab;
-  font-size: 14px;
+  font-size: 16px;
   transition: background 0.15s ease, color 0.15s ease;
   white-space: nowrap;
   position: relative;
   text-decoration: none;
+}
+
+@media (max-width: 768px) {
+  .nav-item, .logout-btn {
+    font-size: 15px;
+  }
 }
 
 .nav-item:hover, .logout-btn:hover {
@@ -389,7 +395,7 @@ const modules = [
     border-radius: 999px;
     cursor: pointer;
     color: #9c99ab;
-    font-size: 13px;
+    font-size: 15px;
     transition: all 0.2s ease;
     text-decoration: none;
   }

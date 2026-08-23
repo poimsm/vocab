@@ -42,4 +42,10 @@ defineProps<{
   font-size: 14px;
   margin: 0;
 }
+
+@media (max-width: 768px) {
+  .message {
+    font-size: 17px;
+  }
+}
 </style>

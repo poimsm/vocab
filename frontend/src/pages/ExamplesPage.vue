@@ -1,4 +1,3 @@
-<!-- ExamplesView.vue (conectado a API) -->
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
@@ -524,14 +523,14 @@ onUnmounted(() => {
         <div class="mobile-detail-content">
           <div class="mobile-word-header">
             <h2 class="mobile-word">{{ selectedWord?.word }}</h2>
-            <button class="mobile-sound-inline" @click="speakWord" title="Play pronunciation">
+            <!-- <button class="mobile-sound-inline" @click="speakWord" title="Play pronunciation">
               <Icon icon="solar:volume-loud-linear" width="18" />
-            </button>
+            </button> -->
           </div>
-          <p class="mobile-meta">{{ selectedWord?.level }} Level · {{ selectedWord?.context }} Context</p>
+          <!-- <p class="mobile-meta">{{ selectedWord?.level }} Level · {{ selectedWord?.context }} Context</p> -->
 
           <div class="mobile-section">
-            <h3 class="mobile-section-title">Definition</h3>
+            <!-- <h3 class="mobile-section-title">Definition</h3> -->
             <p class="mobile-definition">{{ selectedWord?.definition }}</p>
           </div>
 
@@ -600,6 +599,12 @@ onUnmounted(() => {
   line-height: 1.5;
   font-weight: 400;
   color: #b8b5c8;
+}
+
+@media (max-width: 768px) {
+  .sentence-text {
+    font-size: 32px;
+  }
 }
 
 .word-highlight {
@@ -752,11 +757,23 @@ onUnmounted(() => {
   letter-spacing: -0.5px;
 }
 
+@media (max-width: 768px) {
+  .panel-word {
+    font-size: 36px;
+  }
+}
+
 .panel-definition {
   font-size: 15px;
   line-height: 1.6;
   color: #b8b5c8;
   margin-bottom: 28px;
+}
+
+@media (max-width: 768px) {
+  .panel-definition {
+    font-size: 18px;
+  }
 }
 
 .panel-section {
@@ -769,6 +786,12 @@ onUnmounted(() => {
   letter-spacing: 1.5px;
   color: #9c99ab;
   margin-bottom: 12px;
+}
+
+@media (max-width: 768px) {
+  .section-title {
+    font-size: 15px;
+  }
 }
 
 .examples-list {
@@ -784,6 +807,12 @@ onUnmounted(() => {
   font-size: 14px;
   line-height: 1.5;
   color: #b8b5c8;
+}
+
+@media (max-width: 768px) {
+  .examples-list li {
+    font-size: 17px;
+  }
 }
 
 .examples-list li::before {
@@ -812,6 +841,12 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   user-select: none;
+}
+
+@media (max-width: 768px) {
+  .synonym-tag {
+    font-size: 16px;
+  }
 }
 
 .synonym-tag:hover {
@@ -843,9 +878,21 @@ onUnmounted(() => {
   color: #e2e0e8;
 }
 
+@media (max-width: 768px) {
+  .badge-label {
+    font-size: 18px;
+  }
+}
+
 .badge-sublabel {
   font-size: 12px;
   color: #9c99ab;
+}
+
+@media (max-width: 768px) {
+  .badge-sublabel {
+    font-size: 15px;
+  }
 }
 
 .badge-divider {
@@ -866,6 +913,12 @@ onUnmounted(() => {
   color: #9c99ab;
   margin-bottom: 10px;
   display: block;
+}
+
+@media (max-width: 768px) {
+  .frequency-label {
+    font-size: 14px;
+  }
 }
 
 .frequency-bar {
@@ -901,6 +954,12 @@ onUnmounted(() => {
   font-weight: 600;
   letter-spacing: 1px;
   color: #9c99ab;
+}
+
+@media (max-width: 768px) {
+  .frequency-labels {
+    font-size: 14px;
+  }
 }
 
 /* ─── Transitions ─── */
@@ -1014,6 +1073,12 @@ onUnmounted(() => {
   margin: 0;
 }
 
+@media (max-width: 768px) {
+  .mobile-word {
+    font-size: 32px;
+  }
+}
+
 .mobile-sound-inline {
   width: 32px;
   height: 32px;
@@ -1051,11 +1116,23 @@ onUnmounted(() => {
   text-transform: uppercase;
 }
 
+@media (max-width: 768px) {
+  .mobile-section-title {
+    font-size: 16px;
+  }
+}
+
 .mobile-definition {
   font-size: 15px;
   line-height: 1.6;
   color: #b8b5c8;
   margin: 0;
+}
+
+@media (max-width: 768px) {
+  .mobile-definition {
+    font-size: 18px;
+  }
 }
 
 .mobile-examples-list {
@@ -1068,9 +1145,15 @@ onUnmounted(() => {
   position: relative;
   padding-left: 16px;
   margin-bottom: 10px;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.5;
   color: #b8b5c8;
+}
+
+@media (max-width: 768px) {
+  .mobile-examples-list li {
+    font-size: 18px;
+  }
 }
 
 .mobile-examples-list li::before {
@@ -1098,6 +1181,12 @@ onUnmounted(() => {
   margin-top: 8px;
   font-size: 14px;
   color: #b8b5c8;
+}
+
+@media (max-width: 768px) {
+  .known-toggle {
+    font-size: 17px;
+  }
 }
 
 .toggle-switch {
@@ -1227,6 +1316,13 @@ onUnmounted(() => {
   margin: 0;
 }
 
+@media (max-width: 768px) {
+  .loading-state p,
+  .empty-state p {
+    font-size: 17px;
+  }
+}
+
 .error-state p {
   color: #f87171;
   font-size: 14px;
@@ -1243,6 +1339,12 @@ onUnmounted(() => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+@media (max-width: 768px) {
+  .retry-btn {
+    font-size: 17px;
+  }
 }
 
 .retry-btn:hover {
@@ -1304,6 +1406,12 @@ onUnmounted(() => {
   font-size: 12px;
   color: #9c99ab;
   font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .counter {
+    font-size: 15px;
+  }
 }
 
 /* ─── Action Button Disabled ─── */

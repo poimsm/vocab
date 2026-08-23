@@ -132,6 +132,12 @@ import { Icon } from '@iconify/vue';
   letter-spacing: 2px;
 }
 
+@media (max-width: 768px) {
+  .logo-text {
+    font-size: 24px;
+  }
+}
+
 .nav-right {
   display: flex;
   align-items: center;
@@ -155,6 +161,12 @@ import { Icon } from '@iconify/vue';
   transition: color 0.2s ease;
 }
 
+@media (max-width: 768px) {
+  .nav-link {
+    font-size: 16px;
+  }
+}
+
 .nav-link:hover {
   color: #c4b5fd;
 }
@@ -171,6 +183,12 @@ import { Icon } from '@iconify/vue';
   font-family: 'Nunito', sans-serif;
   font-size: 13px;
   cursor: text;
+}
+
+@media (max-width: 768px) {
+  .search-box {
+    font-size: 16px;
+  }
 }
 
 .search-icon {
@@ -248,6 +266,12 @@ import { Icon } from '@iconify/vue';
   transition: all 0.3s ease;
 }
 
+@media (max-width: 768px) {
+  .btn-primary {
+    font-size: 17px;
+  }
+}
+
 .btn-primary:hover {
   transform: translateY(-2px);
 }
@@ -261,6 +285,12 @@ import { Icon } from '@iconify/vue';
   letter-spacing: 1px;
   transition: color 0.2s ease;
   padding: 4px 0;
+}
+
+@media (max-width: 768px) {
+  .btn-text {
+    font-size: 17px;
+  }
 }
 
 .btn-text:hover {
@@ -316,6 +346,12 @@ import { Icon } from '@iconify/vue';
   font-weight: 500;
   color: #8b8799;
   white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .feature-text {
+    font-size: 16px;
+  }
 }
 
 /* Responsive */
