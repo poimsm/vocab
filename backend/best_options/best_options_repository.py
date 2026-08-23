@@ -11,6 +11,7 @@ from models import (
     WordStatistics,
     ContentType,
     Word,
+    LearningState,
 )
 
 import random
@@ -82,10 +83,25 @@ class BestOptionRepository:
         Un best_option está disponible si:
         - Pertenece a la palabra
         - No ha sido encolado aún (enqueued=False)
-        - No está en ContentQueue (PENDING)
+        - La palabra NO está en estado LEARNED
 
         Retorna el best_option con la secuencia más baja (el más antiguo).
         """
+        # Verificar si la palabra está en estado LEARNED
+        word_stats = self.session.exec(
+            select(WordStatistics)
+            .where(
+                WordStatistics.word_id == word_id,
+                WordStatistics.type == ContentType.BEST_OPTIONS
+            )
+        ).first()
+
+        if word_stats and word_stats.learning_state == LearningState.LEARNED:
+            logger.debug(
+                f"[BestOptionRepository] Word {word_id} is LEARNED, skipping best_option"
+            )
+            return None
+
         best_option_id = self.session.exec(
             select(BestOption.id)
             .where(

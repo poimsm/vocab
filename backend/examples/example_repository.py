@@ -13,6 +13,7 @@ from models import (
     ContentType,
     ExampleType,
     Word,
+    LearningState,
 )
 
 
@@ -82,13 +83,14 @@ class ExampleRepository:
         - Contiene la palabra (a través de ExampleWord)
         - Es de tipo EXPLORE
         - No ha sido encolado aún (enqueued=False)
-        - No está en ContentQueue (PENDING)
+        - No contiene SOLO palabras en estado LEARNED
 
         Retorna el example con la secuencia más baja (el más antiguo).
         """
         from logging_client import logger
 
-        example_id = self.session.exec(
+        # Obtener ejemplos candidatos ordenados
+        candidate_ids = self.session.exec(
             select(Example.id)
             .join(ExampleWord, Example.id == ExampleWord.example_id)
             .where(
@@ -97,30 +99,38 @@ class ExampleRepository:
                 Example.enqueued == False
             )
             .order_by(Example.sequence.asc())
-        ).first()
+        ).all()
 
-        if example_id:
-            logger.debug(
-                f"[ExampleRepository] Found available EXPLORE example {example_id} for word {word_id}"
-            )
-        else:
-            # Debug: Ver qué ejemplos existen para esta palabra
-            all_examples = self.session.exec(
-                select(Example.id, Example.type, Example.enqueued)
-                .join(ExampleWord, Example.id == ExampleWord.example_id)
-                .where(ExampleWord.word_id == word_id)
-                .order_by(Example.sequence.asc())
-            ).all()
+        # Filtrar: excluir ejemplos donde TODAS las palabras son LEARNED
+        for example_id in candidate_ids:
+            example_word_ids = self.get_word_ids(example_id)
+            learned_count = 0
 
-            if all_examples:
+            for wid in example_word_ids:
+                stats = self.session.exec(
+                    select(WordStatistics)
+                    .where(
+                        WordStatistics.word_id == wid,
+                        WordStatistics.type == ContentType.EXAMPLE
+                    )
+                ).first()
+                if stats and stats.learning_state == LearningState.LEARNED:
+                    learned_count += 1
+
+            # Si NO todas las palabras son LEARNED, este ejemplo es válido
+            if learned_count < len(example_word_ids):
                 logger.debug(
-                    f"[ExampleRepository] Word {word_id} has {len(all_examples)} examples: "
-                    f"{[(id, type.value if hasattr(type, 'value') else type, enqueued) for id, type, enqueued in all_examples]}"
+                    f"[ExampleRepository] Found available EXPLORE example {example_id} for word {word_id} "
+                    f"({learned_count}/{len(example_word_ids)} words are LEARNED)"
                 )
-            else:
-                logger.debug(f"[ExampleRepository] Word {word_id} has NO examples at all")
+                return example_id
 
-        return example_id
+        # No se encontró ningún ejemplo válido
+        logger.debug(
+            f"[ExampleRepository] No valid EXPLORE examples found for word {word_id} "
+            f"(all candidates have only LEARNED words)"
+        )
+        return None
 
     def get_word_ids(self, example_id: int) -> List[int]:
         """
