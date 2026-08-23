@@ -603,7 +603,7 @@ onUnmounted(() => {
 
 @media (max-width: 768px) {
   .sentence-text {
-    font-size: 32px;
+    font-size: 28px !important;
   }
 }
 
