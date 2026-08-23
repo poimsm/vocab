@@ -102,6 +102,8 @@ class ExampleRepository:
         ).all()
 
         # Filtrar: excluir ejemplos donde TODAS las palabras son LEARNED
+        logger.debug(f"[ExampleRepository] Checking {len(candidate_ids)} candidate examples for word {word_id}")
+
         for example_id in candidate_ids:
             example_word_ids = self.get_word_ids(example_id)
             learned_count = 0
@@ -124,6 +126,10 @@ class ExampleRepository:
                     f"({learned_count}/{len(example_word_ids)} words are LEARNED)"
                 )
                 return example_id
+            else:
+                logger.debug(
+                    f"[ExampleRepository] Skipping example {example_id}: all {len(example_word_ids)} words are LEARNED"
+                )
 
         # No se encontró ningún ejemplo válido
         logger.debug(

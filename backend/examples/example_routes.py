@@ -5,7 +5,7 @@ from sqlmodel import Session, select
 from db import get_db
 from logging_client import logger
 from auth.repository import get_current_user
-from models import User, ContentType, ContentQueue, Example, LearningState
+from models import User, ContentType, ContentQueue, Example
 from decorators import log_endpoint
 from examples.example_schemas import ExploreResponse, ExploreExample
 from learning_path.content_queue import ContentQueue as ContentQueueManager
@@ -42,12 +42,14 @@ def get_explore_feed(
 
     queue_mgr = ContentQueueManager(db)
 
-    # Obtener items pendientes
+    # Obtener items pendientes (con filtrado de LEARNED items)
     queue_items = queue_mgr.next_many(
         user_id=current_user.id,
         content_type=ContentType.EXAMPLE,
         amount=limit,
     )
+
+    logger.debug(f"[get_explore_feed] next_many returned {len(queue_items)} valid items (filtered out LEARNED examples)")
 
     if not queue_items:
         logger.debug(f"[get_explore_feed] No pending examples for user {current_user.id}")
@@ -69,10 +71,17 @@ def get_explore_feed(
 
         # Verificar si después de ensure_ready hay contenido pendiente
         pending_count = queue_mgr.count_pending(current_user.id, ContentType.EXAMPLE)
-        status = "generating" if pending_count > 0 else "ok"
+
+        # Determinar status
+        if pending_count > 0:
+            status = "generating"
+        else:
+            # Si no hay contenido pendiente, chequear si hay palabras candidatas
+            candidates = content_planner.get_candidate_words(current_user.id, ContentType.EXAMPLE)
+            status = "generating" if candidates else "no_words"
 
         logger.debug(
-            f"[get_explore_feed] After ensure_ready: pending_count={pending_count}, status={status}"
+            f"[get_explore_feed] After ensure_ready: pending_count={pending_count}, candidates={len(candidates) if pending_count == 0 else 'N/A'}, status={status}"
         )
 
         return {
@@ -96,28 +105,6 @@ def get_explore_feed(
     example_to_queue = {item.content_id: item.id for item in queue_items}
 
     for ex in examples:
-        # Filtrar ejemplos que solo contengan palabras LEARNED
-        word_ids = example_repo.get_word_ids(ex.id)
-
-        # Obtener estadísticas de las palabras
-        from models import WordStatistics
-        learned_count = 0
-        for word_id in word_ids:
-            stats = db.exec(
-                select(WordStatistics)
-                .where(
-                    WordStatistics.word_id == word_id,
-                    WordStatistics.type == ContentType.EXAMPLE,
-                )
-            ).first()
-            if stats and stats.learning_state == LearningState.LEARNED:
-                learned_count += 1
-
-        # Si todas las palabras están LEARNED, saltar este ejemplo
-        if learned_count == len(word_ids) and len(word_ids) > 0:
-            logger.debug(f"[get_explore_feed] Skipping example {ex.id}: all words are LEARNED")
-            continue
-
         text_segments = example_repo.segment_example_text(ex)
         examples_response.append(
             {
@@ -127,8 +114,8 @@ def get_explore_feed(
             }
         )
 
-    # Si no hay ejemplos después de filtrar LEARNED, retornar no_words
-    status = "ok" if examples_response else "no_words"
+    # Status: ok si hay ejemplos, generating si se activó ensure_ready, no_words si nada disponible
+    status = "ok" if examples_response else "generating"
 
     return {
         "examples": examples_response,

@@ -132,7 +132,12 @@ class ContentQueue:
         """
         Obtiene los próximos contenidos pendientes para el usuario,
         respetando el orden en que fueron planificados.
+
+        Filtra items donde TODAS las palabras están en estado LEARNED.
         """
+        from logging_client import logger
+        from models import WordStatistics, LearningState, Example, BestOption, ExampleWord
+
         statement = (
             select(ContentQueueModel)
             .where(
@@ -144,10 +149,50 @@ class ContentQueue:
                 ContentQueueModel.priority.desc(),
                 ContentQueueModel.created_at.asc(),
             )
-            .limit(amount)
+            .limit(amount * 2)  # Obtener más para compensar filtrados
         )
 
-        return self.session.exec(statement).all()
+        all_items = self.session.exec(statement).all()
+        result = []
+
+        for item in all_items:
+            # Obtener las palabras asociadas al contenido
+            if content_type == ContentType.EXAMPLE:
+                word_ids = self.session.exec(
+                    select(ExampleWord.word_id)
+                    .where(ExampleWord.example_id == item.content_id)
+                ).all()
+            elif content_type == ContentType.BEST_OPTIONS:
+                best_option = self.session.get(BestOption, item.content_id)
+                word_ids = [best_option.word_id] if best_option else []
+            else:
+                word_ids = []
+
+            # Contar palabras en estado LEARNED
+            learned_count = 0
+            for word_id in word_ids:
+                stats = self.session.exec(
+                    select(WordStatistics)
+                    .where(
+                        WordStatistics.word_id == word_id,
+                        WordStatistics.type == content_type
+                    )
+                ).first()
+                if stats and stats.learning_state == LearningState.LEARNED:
+                    learned_count += 1
+
+            # Incluir solo si NO todas las palabras son LEARNED
+            if learned_count < len(word_ids):
+                result.append(item)
+                if len(result) >= amount:
+                    break
+            else:
+                logger.debug(
+                    f"[ContentQueue] Filtering out {content_type} item {item.content_id}: "
+                    f"all {len(word_ids)} words are LEARNED"
+                )
+
+        return result
 
     def peek(
         self,

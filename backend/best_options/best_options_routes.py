@@ -5,7 +5,7 @@ from sqlalchemy.orm import joinedload
 from db import get_db
 from logging_client import logger
 from auth.repository import get_current_user
-from models import User, ContentType, ContentQueue, BestOption, Word, LearningState, WordStatistics
+from models import User, ContentType, ContentQueue, BestOption, Word
 from decorators import log_endpoint
 from best_options.best_options_schemas import BestOptionResponse
 from best_options.best_options_repository import BestOptionRepository
@@ -68,10 +68,17 @@ def get_best_options(
 
         # Verificar si después de ensure_ready hay contenido pendiente
         pending_count = queue_mgr.count_pending(current_user.id, ContentType.BEST_OPTIONS)
-        status = "generating" if pending_count > 0 else "ok"
+
+        # Determinar status
+        if pending_count > 0:
+            status = "generating"
+        else:
+            # Si no hay contenido pendiente, chequear si hay palabras candidatas
+            candidates = content_planner.get_candidate_words(current_user.id, ContentType.BEST_OPTIONS)
+            status = "generating" if candidates else "no_words"
 
         logger.debug(
-            f"[get_best_options] After ensure_ready: pending_count={pending_count}, status={status}"
+            f"[get_best_options] After ensure_ready: pending_count={pending_count}, candidates={len(candidates) if pending_count == 0 else 'N/A'}, status={status}"
         )
 
         return {
@@ -94,19 +101,6 @@ def get_best_options(
     # Construir respuesta con información completa de palabras
     items_response = []
     for queue_item, best_option in zip(queue_items, best_options):
-        # Filtrar best options de palabras LEARNED
-        word_stats = db.exec(
-            select(WordStatistics)
-            .where(
-                WordStatistics.word_id == best_option.word.id,
-                WordStatistics.type == ContentType.BEST_OPTIONS,
-            )
-        ).first()
-
-        if word_stats and word_stats.learning_state == LearningState.LEARNED:
-            logger.debug(f"[get_best_options] Skipping best option {best_option.id}: word is LEARNED")
-            continue
-
         word_data = {
             "id": best_option.word.id,
             "main": best_option.word.main,
@@ -127,8 +121,7 @@ def get_best_options(
             "correct_option": best_option.correct_option,
         })
 
-    # Si no hay best options después de filtrar LEARNED, retornar no_words
-    status = "ok" if items_response else "no_words"
+    status = "ok" if items_response else "generating"
 
     return {
         "items": items_response,
