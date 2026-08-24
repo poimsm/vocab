@@ -497,13 +497,21 @@ function copyExample() {
   if (!ex) return
   const fullText = ex.text.map(segment => segment.text).join('')
 
+  const isMobile = window.innerWidth <= 768
+
   // Intentar con clipboard API
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(fullText).then(() => {
-      showToast()
-    }).catch(() => {
-      copyFallback(fullText)
-    })
+    navigator.clipboard.writeText(fullText)
+      .then(() => {
+        // En mobile, el SO muestra su propio toast
+        // En desktop, mostrar nuestro toast
+        if (!isMobile) {
+          showToast()
+        }
+      })
+      .catch(() => {
+        copyFallback(fullText)
+      })
   } else {
     // Fallback para navegadores que no soportan clipboard API
     copyFallback(fullText)
@@ -873,7 +881,7 @@ onUnmounted(() => {
   <!-- Copy Toast Notification -->
   <transition name="fade">
     <div v-if="showCopiedToast" class="copy-toast">
-      Copied!
+      Copied
     </div>
   </transition>
 </template>
