@@ -558,7 +558,7 @@ onUnmounted(() => {
     <div class="favorites-header">
       <h2>Favorite Examples</h2>
       <button class="close-favorites-btn" @click="closeFavoritesModal" title="Close">
-        <Icon icon="solar:close-circle-linear" width="28" />
+        <Icon icon="solar:close-linear" width="28" />
       </button>
     </div>
 
@@ -580,7 +580,7 @@ onUnmounted(() => {
               </template>
             </div>
             <button class="remove-favorite-btn" @click="removeFavorite(example.id)" title="Remove from favorites">
-              <Icon icon="solar:trash-bin-minimalistic-2-linear" width="20" />
+              <Icon icon="solar:trash-bin-minimalistic-2-linear" width="22" />
             </button>
           </div>
         </div>
@@ -670,7 +670,7 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <div class="example-meta">
+      <div class="example-meta" style="display:none">
         <span class="counter">{{ currentIndex + 1 }} / {{ examples.length }}</span>
       </div>
     </div>
@@ -786,7 +786,7 @@ onUnmounted(() => {
         <div class="action-sheet-header">
           <h3>Add words from this example</h3>
           <button class="action-sheet-close" @click="closeExtractedWordsModal">
-            <Icon icon="solar:close-circle-linear" width="24" />
+            <Icon icon="solar:close-linear" width="24" />
           </button>
         </div>
 
@@ -801,9 +801,9 @@ onUnmounted(() => {
               :disabled="addedWords.has(word) || addingWord === word"
             >
               <span class="action-sheet-word-text">{{ word }}</span>
-              <Icon v-if="!addedWords.has(word) && addingWord !== word" icon="solar:add-circle-linear" width="22" />
-              <Icon v-else-if="addedWords.has(word)" icon="solar:check-circle-bold" width="22" class="check-icon" />
-              <Icon v-else icon="solar:refresh-circle-linear" width="22" class="spinning" />
+              <Icon v-if="!addedWords.has(word) && addingWord !== word" icon="solar:add-circle-linear" width="26" />
+              <Icon v-else-if="addedWords.has(word)" icon="solar:check-circle-bold" width="26" class="check-icon" />
+              <Icon v-else icon="solar:refresh-circle-linear" width="26" class="spinning" />
             </button>
           </div>
           <div v-else class="action-sheet-empty">
@@ -1983,6 +1983,8 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 18px;
+  text-transform: capitalize;
 }
 
 .action-sheet-word-item:hover:not(:disabled) {
@@ -2114,8 +2116,8 @@ onUnmounted(() => {
 
 .remove-favorite-btn {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: auto;
+  height: auto;
   border: none;
   background: transparent;
   color: #9c99ab;
@@ -2240,7 +2242,7 @@ onUnmounted(() => {
   }
 
   .favorite-card {
-    padding: 16px;
+    padding: 16px 0;
   }
 
   .favorite-card-text {
