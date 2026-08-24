@@ -205,7 +205,6 @@ function loadExamples(data: any) {
     examples.value = newExamples
     currentIndex.value = 0
     addedWords.value.clear() // Limpiar palabras agregadas al cargar nuevo batch
-    fireAndForgetResolve(newExamples[0].queue_item_id)
   }
 }
 
@@ -434,21 +433,26 @@ async function removeFavorite(exampleId: number) {
 }
 
 function refreshExample() {
-  // Side effect: marcar el siguiente ejemplo como visto (si existe)
-  const nextExample = examples.value[currentIndex.value + 1]
-  if (nextExample) {
-    fireAndForgetResolve(nextExample.queue_item_id)
-  }
-
   // Si hay más ejemplos en el batch, avanzar al siguiente
   if (canGoNext.value) {
+    // Marcar el ejemplo actual como consumido antes de avanzar
+    const currentEx = currentExample.value
+    if (currentEx) {
+      fireAndForgetResolve(currentEx.queue_item_id)
+    }
+
     currentIndex.value++
     selectedWord.value = null
     isMobileDetailOpen.value = false
     return
   }
 
-  // Si se acabaron, generar 3 nuevos
+  // Si se acabaron, marcar el actual como visto y generar nuevos
+  const currentEx = currentExample.value
+  if (currentEx) {
+    fireAndForgetResolve(currentEx.queue_item_id)
+  }
+
   fetchExamples()
   selectedWord.value = null
   isMobileDetailOpen.value = false
@@ -464,6 +468,12 @@ function prevExample() {
 
 function nextExample() {
   if (canGoNext.value) {
+    // Marcar el ejemplo actual como consumido antes de avanzar
+    const currentEx = currentExample.value
+    if (currentEx) {
+      fireAndForgetResolve(currentEx.queue_item_id)
+    }
+
     currentIndex.value++
     selectedWord.value = null
     isMobileDetailOpen.value = false
@@ -569,7 +579,7 @@ onUnmounted(() => {
         <button class="top-bar-btn favorites-btn" title="Favorite examples" style="border:0;" @click="openFavoritesModal">
           <Icon icon="ph:list-heart-thin" width="32" />
         </button>
-        <button class="top-bar-btn add-words-btn" title="Add words" style="border:0;">
+        <button class="top-bar-btn add-words-btn" title="Add words" style="border:0;" @click="openExtractedWordsModal">
           <Icon icon="solar:add-linear" width="24" />
         </button>
       </div>
@@ -690,7 +700,7 @@ onUnmounted(() => {
 
     <!-- Extracted Words Modal (Desktop) -->
     <transition name="fade">
-      <div v-if="showExtractedWordsModal && !isMobileDetailOpen" class="modal-overlay" @click="closeExtractedWordsModal">
+      <div v-if="showExtractedWordsModal" class="modal-overlay extracted-words-overlay" @click="closeExtractedWordsModal">
         <div class="modal-content" @click.stop>
           <div class="modal-header">
             <h3>Add words from this example</h3>
@@ -718,6 +728,39 @@ onUnmounted(() => {
             <div v-else class="empty-words">
               <p>No words to add</p>
             </div>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Extracted Words Action Sheet (Mobile) - Full screen -->
+    <transition name="slide-up">
+      <div v-if="showExtractedWordsModal" class="mobile-extracted-words-sheet">
+        <div class="action-sheet-header">
+          <h3>Add words from this example</h3>
+          <button class="action-sheet-close" @click="closeExtractedWordsModal">
+            <Icon icon="solar:close-circle-linear" width="24" />
+          </button>
+        </div>
+
+        <div class="action-sheet-content">
+          <div v-if="currentExample?.extracted_words && currentExample.extracted_words.length > 0" class="action-sheet-words">
+            <button
+              v-for="word in currentExample.extracted_words"
+              :key="word"
+              class="action-sheet-word-item"
+              :class="{ added: addedWords.has(word), loading: addingWord === word }"
+              @click="addWordToList(word)"
+              :disabled="addedWords.has(word) || addingWord === word"
+            >
+              <span class="action-sheet-word-text">{{ word }}</span>
+              <Icon v-if="!addedWords.has(word) && addingWord !== word" icon="solar:add-circle-linear" width="22" />
+              <Icon v-else-if="addedWords.has(word)" icon="solar:check-circle-bold" width="22" class="check-icon" />
+              <Icon v-else icon="solar:refresh-circle-linear" width="22" class="spinning" />
+            </button>
+          </div>
+          <div v-else class="action-sheet-empty">
+            <p>No words to add</p>
           </div>
         </div>
       </div>
@@ -785,38 +828,6 @@ onUnmounted(() => {
     </transition>
 
 
-    <!-- Mobile Extracted Words Action Sheet -->
-    <transition name="slide-up">
-      <div v-if="showExtractedWordsModal && isMobileDetailOpen" class="mobile-action-sheet">
-        <div class="action-sheet-header">
-          <h3>Add words from this example</h3>
-          <button class="action-sheet-close" @click="closeExtractedWordsModal">
-            <Icon icon="solar:close-circle-linear" width="24" />
-          </button>
-        </div>
-
-        <div class="action-sheet-content">
-          <div v-if="currentExample?.extracted_words && currentExample.extracted_words.length > 0" class="action-sheet-words">
-            <button
-              v-for="word in currentExample.extracted_words"
-              :key="word"
-              class="action-sheet-word-item"
-              :class="{ added: addedWords.has(word), loading: addingWord === word }"
-              @click="addWordToList(word)"
-              :disabled="addedWords.has(word) || addingWord === word"
-            >
-              <span class="action-sheet-word-text">{{ word }}</span>
-              <Icon v-if="!addedWords.has(word) && addingWord !== word" icon="solar:add-circle-linear" width="22" />
-              <Icon v-else-if="addedWords.has(word)" icon="solar:check-circle-bold" width="22" class="check-icon" />
-              <Icon v-else icon="solar:refresh-circle-linear" width="22" class="spinning" />
-            </button>
-          </div>
-          <div v-else class="action-sheet-empty">
-            <p>No words to add</p>
-          </div>
-        </div>
-      </div>
-    </transition>
 
   </div>
 </template>
@@ -1806,31 +1817,31 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
-  border-radius: 999px;
-  border: 1.5px solid rgba(167, 139, 250, 0.3);
-  background: rgba(124, 58, 237, 0.1);
-  color: #a78bfa;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: #b8b5c8;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .word-chip:hover:not(:disabled) {
-  border-color: rgba(167, 139, 250, 0.6);
-  background: rgba(124, 58, 237, 0.2);
-  color: #c4b5fd;
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e0e8;
 }
 
 .word-chip.added {
-  border-color: rgba(74, 222, 128, 0.5);
-  background: rgba(74, 222, 128, 0.1);
+  border-color: rgba(74, 222, 128, 0.3);
+  background: rgba(74, 222, 128, 0.05);
   color: #4ade80;
 }
 
 .word-chip:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
@@ -1912,7 +1923,7 @@ onUnmounted(() => {
   padding: 16px 24px;
   border: none;
   background: transparent;
-  color: #a78bfa;
+  color: #b8b5c8;
   font-size: 16px;
   font-weight: 500;
   cursor: pointer;
@@ -1921,8 +1932,8 @@ onUnmounted(() => {
 }
 
 .action-sheet-word-item:hover:not(:disabled) {
-  background: rgba(124, 58, 237, 0.1);
-  color: #c4b5fd;
+  background: rgba(255, 255, 255, 0.04);
+  color: #e2e0e8;
 }
 
 .action-sheet-word-item.added {
@@ -1930,7 +1941,7 @@ onUnmounted(() => {
 }
 
 .action-sheet-word-item:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
@@ -2105,10 +2116,44 @@ onUnmounted(() => {
   opacity: 0;
 }
 
+/* ─── Mobile Extracted Words Sheet (Full screen) ─── */
+.mobile-extracted-words-sheet {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #2d2a3e;
+  z-index: 1000;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mobile-extracted-words-sheet .action-sheet-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.mobile-extracted-words-sheet .action-sheet-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 0;
+}
+
 /* ─── Hide Modal on Mobile ─── */
 @media (max-width: 768px) {
-  .modal-overlay {
+  .modal-overlay:not(.extracted-words-overlay) {
     display: none;
+  }
+
+  .extracted-words-overlay {
+    display: none;
+  }
+
+  .mobile-extracted-words-sheet {
+    display: flex;
   }
 
   .favorites-header {
