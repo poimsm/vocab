@@ -26,6 +26,7 @@ interface ExampleItem {
   queue_item_id: number
   example_id: number
   text: TextSegment[]
+  extracted_words: string[]
 }
 
 interface WordDetail {
@@ -52,6 +53,9 @@ const pollTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 
 const selectedWord = ref<WordDetail | null>(null)
 const isMobileDetailOpen = ref(false)
+const showExtractedWordsModal = ref(false)
+const addedWords = ref<Set<string>>(new Set()) // Track palabras ya agregadas
+const addingWord = ref<string | null>(null) // Track palabra en proceso
 
 const BATCH_SIZE = 4
 const POLL_INTERVAL = 3000
@@ -184,12 +188,14 @@ function loadExamples(data: any) {
   const newExamples: ExampleItem[] = rawExamples.map((item: any) => ({
     queue_item_id: item.queue_item_id,
     example_id: item.example_id,
-    text: item.text || []
+    text: item.text || [],
+    extracted_words: item.extracted_words || []
   }))
 
   if (newExamples.length > 0 && newExamples[0]) {
     examples.value = newExamples
     currentIndex.value = 0
+    addedWords.value.clear() // Limpiar palabras agregadas al cargar nuevo batch
     fireAndForgetResolve(newExamples[0].queue_item_id)
   }
 }
@@ -260,6 +266,43 @@ async function toggleExampleFav() {
 
   } catch (e) {
     alert('Failed to toggle favorite')
+  }
+}
+
+function openExtractedWordsModal() {
+  const ex = currentExample.value
+  if (!ex || !ex.extracted_words || ex.extracted_words.length === 0) {
+    alert('No words to add from this example')
+    return
+  }
+  showExtractedWordsModal.value = true
+}
+
+function closeExtractedWordsModal() {
+  showExtractedWordsModal.value = false
+}
+
+async function addWordToList(word: string) {
+  if (addedWords.value.has(word)) {
+    return // Ya fue agregada
+  }
+
+  addingWord.value = word
+
+  try {
+    const response = await api.post('/words/single', {
+      text: word
+    })
+
+    if (response.status === 202 || response.data.status === 'queued') {
+      addedWords.value.add(word)
+    } else {
+      alert('Failed to add word')
+    }
+  } catch (e: any) {
+    alert('Failed to add word: ' + (e.response?.data?.message || e.message))
+  } finally {
+    addingWord.value = null
   }
 }
 
@@ -341,16 +384,15 @@ function nextExample() {
   }
 }
 
-function shareExample() {
+function copyExample() {
   const ex = currentExample.value
   if (!ex) return
   const fullText = ex.text.map(segment => segment.text).join('')
-  if (navigator.share) {
-    navigator.share({ text: fullText })
-  } else {
-    navigator.clipboard.writeText(fullText)
+  navigator.clipboard.writeText(fullText).then(() => {
     alert('Copied to clipboard!')
-  }
+  }).catch(() => {
+    alert('Failed to copy')
+  })
 }
 
 onMounted(() => {
@@ -389,6 +431,16 @@ onUnmounted(() => {
 
     <!-- Center: Example Sentence -->
     <div v-else class="sentence-area" :class="{ 'panel-open': selectedWord && !isMobileDetailOpen }">
+      <!-- Top Bar -->
+      <div class="sentence-top-bar">
+        <button class="top-bar-btn favorites-btn" title="Favorite examples" style="border:0;">
+          <Icon icon="ph:list-heart-thin" width="32" />
+        </button>
+        <button class="top-bar-btn add-words-btn" title="Add words" style="border:0;">
+          <Icon icon="solar:add-linear" width="24" />
+        </button>
+      </div>
+
       <div class="sentence-wrapper">
         <p class="sentence-text">
           <template v-for="(segment, idx) in textSegments" :key="idx">
@@ -420,10 +472,10 @@ onUnmounted(() => {
         </button>
         <button class="action-btn" @click="refreshExample" :disabled="generating" title="Next / New">
           <Icon v-if="generating" icon="solar:refresh-circle-linear" width="22" class="spinning" />
-          <Icon v-else icon="solar:refresh-linear" width="22" />
+          <Icon v-else icon="solar:arrow-right-linear" width="22" />
         </button>
-        <button class="action-btn" @click="shareExample" title="Share">
-          <Icon icon="solar:link-linear" width="22" />
+        <button class="action-btn" @click="copyExample" title="Copy">
+          <Icon icon="solar:copy-linear" width="22" />
         </button>
       </div>
 
@@ -502,6 +554,41 @@ onUnmounted(() => {
       </aside>
     </transition>
 
+    <!-- Extracted Words Modal (Desktop) -->
+    <transition name="fade">
+      <div v-if="showExtractedWordsModal && !isMobileDetailOpen" class="modal-overlay" @click="closeExtractedWordsModal">
+        <div class="modal-content" @click.stop>
+          <div class="modal-header">
+            <h3>Add words from this example</h3>
+            <button class="modal-close-btn" @click="closeExtractedWordsModal">
+              <Icon icon="solar:close-circle-linear" width="24" />
+            </button>
+          </div>
+
+          <div class="modal-body">
+            <div v-if="currentExample?.extracted_words && currentExample.extracted_words.length > 0" class="words-grid">
+              <button
+                v-for="word in currentExample.extracted_words"
+                :key="word"
+                class="word-chip"
+                :class="{ added: addedWords.has(word), loading: addingWord === word }"
+                @click="addWordToList(word)"
+                :disabled="addedWords.has(word) || addingWord === word"
+              >
+                <span class="word-text">{{ word }}</span>
+                <Icon v-if="!addedWords.has(word) && addingWord !== word" icon="solar:add-circle-linear" width="18" />
+                <Icon v-else-if="addedWords.has(word)" icon="solar:check-circle-bold" width="18" class="check-icon" />
+                <Icon v-else icon="solar:refresh-circle-linear" width="18" class="spinning" />
+              </button>
+            </div>
+            <div v-else class="empty-words">
+              <p>No words to add</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
+
     <!-- Mobile Detail Overlay -->
     <transition name="slide-up">
       <div v-if="isMobileDetailOpen" class="mobile-detail-overlay">
@@ -562,6 +649,39 @@ onUnmounted(() => {
         </div>
       </div>
     </transition>
+
+    <!-- Mobile Extracted Words Action Sheet -->
+    <transition name="slide-up">
+      <div v-if="showExtractedWordsModal && isMobileDetailOpen" class="mobile-action-sheet">
+        <div class="action-sheet-header">
+          <h3>Add words from this example</h3>
+          <button class="action-sheet-close" @click="closeExtractedWordsModal">
+            <Icon icon="solar:close-circle-linear" width="24" />
+          </button>
+        </div>
+
+        <div class="action-sheet-content">
+          <div v-if="currentExample?.extracted_words && currentExample.extracted_words.length > 0" class="action-sheet-words">
+            <button
+              v-for="word in currentExample.extracted_words"
+              :key="word"
+              class="action-sheet-word-item"
+              :class="{ added: addedWords.has(word), loading: addingWord === word }"
+              @click="addWordToList(word)"
+              :disabled="addedWords.has(word) || addingWord === word"
+            >
+              <span class="action-sheet-word-text">{{ word }}</span>
+              <Icon v-if="!addedWords.has(word) && addingWord !== word" icon="solar:add-circle-linear" width="22" />
+              <Icon v-else-if="addedWords.has(word)" icon="solar:check-circle-bold" width="22" class="check-icon" />
+              <Icon v-else icon="solar:refresh-circle-linear" width="22" class="spinning" />
+            </button>
+          </div>
+          <div v-else class="action-sheet-empty">
+            <p>No words to add</p>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -581,7 +701,40 @@ onUnmounted(() => {
   justify-content: center;
   padding: 40px;
   transition: flex 0.3s ease;
+  position: relative;
 }
+
+/* ─── Top Bar (Static) ─── */
+.sentence-top-bar {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  z-index: 10;
+}
+
+.top-bar-btn {
+  width: auto;
+  height: auto;
+  border: none;
+  background: transparent;
+  color: #9c99ab;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 10px;
+}
+
+.top-bar-btn:hover {
+  color: #e2e0e8;
+}
+
 
 .sentence-area.panel-open {
   flex: 0 0 55%;
@@ -1242,11 +1395,19 @@ onUnmounted(() => {
 
   .sentence-area {
     padding: 24px 20px;
+    padding-top: 80px;
     min-height: 50vh;
   }
 
   .sentence-area.panel-open {
     flex: 1;
+  }
+
+  .sentence-top-bar {
+    top: 16px;
+    left: 16px;
+    right: 16px;
+    justify-content: space-between;
   }
 
   .sentence-text {
@@ -1424,5 +1585,244 @@ onUnmounted(() => {
   border-color: rgba(255, 255, 255, 0.15);
   background: transparent;
   color: #9c99ab;
+}
+
+/* ─── Modal (Desktop) ─── */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-content {
+  background: #36324a;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #e2e0e8;
+}
+
+.modal-close-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: #9c99ab;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.modal-close-btn:hover {
+  color: #e2e0e8;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+}
+
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.words-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.word-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(167, 139, 250, 0.3);
+  background: rgba(124, 58, 237, 0.1);
+  color: #a78bfa;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.word-chip:hover:not(:disabled) {
+  border-color: rgba(167, 139, 250, 0.6);
+  background: rgba(124, 58, 237, 0.2);
+  color: #c4b5fd;
+}
+
+.word-chip.added {
+  border-color: rgba(74, 222, 128, 0.5);
+  background: rgba(74, 222, 128, 0.1);
+  color: #4ade80;
+}
+
+.word-chip:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.word-chip .check-icon {
+  color: #4ade80;
+}
+
+.empty-words {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: #9c99ab;
+  font-size: 14px;
+}
+
+.empty-words p {
+  margin: 0;
+}
+
+/* ─── Action Sheet (Mobile) ─── */
+.mobile-action-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #36324a;
+  border-radius: 20px 20px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  z-index: 1100;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.action-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.action-sheet-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #e2e0e8;
+}
+
+.action-sheet-close {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: #9c99ab;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-sheet-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 0;
+}
+
+.action-sheet-words {
+  display: flex;
+  flex-direction: column;
+}
+
+.action-sheet-word-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border: none;
+  background: transparent;
+  color: #a78bfa;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.action-sheet-word-item:hover:not(:disabled) {
+  background: rgba(124, 58, 237, 0.1);
+  color: #c4b5fd;
+}
+
+.action-sheet-word-item.added {
+  color: #4ade80;
+}
+
+.action-sheet-word-item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.action-sheet-word-text {
+  flex: 1;
+  text-align: left;
+}
+
+.action-sheet-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: #9c99ab;
+  font-size: 14px;
+}
+
+.action-sheet-empty p {
+  margin: 0;
+}
+
+/* ─── Transitions ─── */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* ─── Hide Modal on Mobile ─── */
+@media (max-width: 768px) {
+  .modal-overlay {
+    display: none;
+  }
 }
 </style>

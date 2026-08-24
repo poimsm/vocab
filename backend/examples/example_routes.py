@@ -1,6 +1,8 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
+import re
+from pathlib import Path
 
 from db import get_db
 from logging_client import logger
@@ -15,6 +17,49 @@ from best_options.best_options_repository import BestOptionRepository
 
 
 router = APIRouter()
+
+
+def _load_common_words():
+    """Carga el set de palabras comunes desde most_common.txt"""
+    common_words_path = Path(__file__).parent.parent / "most_common.txt"
+    if not common_words_path.exists():
+        return set()
+
+    with open(common_words_path, 'r', encoding='utf-8') as f:
+        return {word.strip().lower() for word in f.readlines() if word.strip()}
+
+
+def _extract_words_from_example(text_segments, target_word_ids, common_words):
+    """
+    Extrae palabras del ejemplo, excluyendo:
+    - Palabras comunes (de most_common.txt)
+    - Palabras que son target words
+
+    Args:
+        text_segments: Lista de TextSegment del ejemplo
+        target_word_ids: Set de IDs de palabras que son target words en este ejemplo
+        common_words: Set de palabras comunes (lowercased)
+
+    Returns:
+        Lista de palabras extraídas únicas
+    """
+    # Construir el texto completo del ejemplo
+    full_text = ''.join(segment['text'] for segment in text_segments)
+
+    # Extraer palabras (lowercase, sin puntuación)
+    words = re.findall(r'\b[a-z]+\b', full_text.lower())
+
+    extracted = set()
+    for word in words:
+        # Excluir palabras comunes
+        if word in common_words:
+            continue
+
+        # Excluir palabras que estén resaltadas (target words)
+        # Esto se filtra por los datos en text_segments
+        extracted.add(word)
+
+    return sorted(list(extracted))
 
 
 @router.get("/explore", response_model=ExploreResponse)
@@ -104,13 +149,28 @@ def get_explore_feed(
     # Crear un mapa de example_id -> queue_item_id
     example_to_queue = {item.content_id: item.id for item in queue_items}
 
+    # Cargar palabras comunes una sola vez
+    common_words = _load_common_words()
+
     for ex in examples:
         text_segments = example_repo.segment_example_text(ex)
+
+        # Obtener los IDs de palabras que son target words en este ejemplo
+        target_word_ids = {seg['target_word']['id'] for seg in text_segments if seg.get('target_word')}
+        # También obtener los strings de palabras target para excluir
+        target_word_strings = {seg['target_word']['main'].lower() for seg in text_segments if seg.get('target_word')}
+
+        # Extraer palabras del ejemplo
+        extracted_words = _extract_words_from_example(text_segments, target_word_ids, common_words)
+        # Filtrar palabras que sean target words
+        extracted_words = [w for w in extracted_words if w not in target_word_strings]
+
         examples_response.append(
             {
                 "queue_item_id": example_to_queue[ex.id],
                 "example_id": ex.id,
                 "text": text_segments,
+                "extracted_words": extracted_words,
             }
         )
 

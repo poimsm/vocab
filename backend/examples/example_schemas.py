@@ -24,6 +24,7 @@ class ExploreExample(BaseModel):
     queue_item_id: int
     example_id: int
     text: List[TextSegment]
+    extracted_words: List[str]
 
 
 class ExploreResponse(BaseModel):
