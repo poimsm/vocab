@@ -228,3 +228,76 @@ def resolve_queue_item(
 
     return {"status": "ok"}
 
+
+@router.patch("/{example_id}/toggle-favorite")
+@log_endpoint
+def toggle_example_favorite(
+    example_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Alterna el estado de favorito de un ejemplo.
+
+    Retorna el nuevo estado de is_favorite.
+    """
+    logger.info(f"[toggle_example_favorite] User {current_user.id}: Toggling favorite for example {example_id}")
+
+    example_repo = ExampleRepository(db)
+    is_favorite = example_repo.toggle_favorite(example_id)
+
+    logger.debug(f"[toggle_example_favorite] Example {example_id} is_favorite: {is_favorite}")
+
+    return {
+        "example_id": example_id,
+        "is_favorite": is_favorite
+    }
+
+
+@router.get("/favorites", response_model=dict)
+@log_endpoint
+def get_favorite_examples(
+    page: int = 1,
+    limit: int = 15,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Obtiene ejemplos marcados como favoritos con paginación.
+
+    Retorna:
+    - items: Lista de ejemplos favoritos con texto segmentado
+    - total: Total de ejemplos favoritos
+    - page: Página actual
+    - limit: Items por página
+    - pages: Total de páginas
+    - status: "ok"
+    """
+    logger.info(f"[get_favorite_examples] User {current_user.id}: Fetching favorite examples (page={page}, limit={limit})")
+
+    example_repo = ExampleRepository(db)
+    paginated_data = example_repo.get_examples(page=page, limit=limit)
+
+    # Segmentar el texto de cada ejemplo
+    examples_response = []
+    for example in paginated_data["items"]:
+        text_segments = example_repo.segment_example_text(example)
+        extracted_words = []  # Por ahora vacío, se puede implementar después
+        examples_response.append({
+            "id": example.id,
+            "text": text_segments,
+            "extracted_words": extracted_words,
+            "is_favorite": example.is_favorite
+        })
+
+    logger.debug(f"[get_favorite_examples] Retrieved {len(examples_response)} favorite examples")
+
+    return {
+        "items": examples_response,
+        "total": paginated_data["total"],
+        "page": paginated_data["page"],
+        "limit": paginated_data["limit"],
+        "pages": paginated_data["pages"],
+        "status": "ok"
+    }
+

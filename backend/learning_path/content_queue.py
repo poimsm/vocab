@@ -245,8 +245,13 @@ class ContentQueue:
         content_type: Optional[ContentType] = None,
     ) -> int:
         """
-        Cuenta cuántos contenidos preparados existen actualmente.
+        Cuenta cuántos contenidos VÁLIDOS (no LEARNED) existen actualmente.
+
+        Usa el mismo filtro que next_many() para asegurar que count_pending
+        solo cuenta items que pueden ser devueltos. Evita que items con
+        palabras LEARNED se cuenten en el gap.
         """
+        from models import WordStatistics, LearningState, Example, BestOption, ExampleWord
 
         statement = (
             select(ContentQueueModel)
@@ -261,7 +266,40 @@ class ContentQueue:
                 ContentQueueModel.type == content_type
             )
 
-        return len(self.session.exec(statement).all())
+        all_items = self.session.exec(statement).all()
+        valid_count = 0
+
+        for item in all_items:
+            # Obtener las palabras asociadas al contenido
+            if item.type == ContentType.EXAMPLE:
+                word_ids = self.session.exec(
+                    select(ExampleWord.word_id)
+                    .where(ExampleWord.example_id == item.content_id)
+                ).all()
+            elif item.type == ContentType.BEST_OPTIONS:
+                best_option = self.session.get(BestOption, item.content_id)
+                word_ids = [best_option.word_id] if best_option else []
+            else:
+                word_ids = []
+
+            # Contar palabras en estado LEARNED
+            learned_count = 0
+            for word_id in word_ids:
+                stats = self.session.exec(
+                    select(WordStatistics)
+                    .where(
+                        WordStatistics.word_id == word_id,
+                        WordStatistics.type == item.type
+                    )
+                ).first()
+                if stats and stats.learning_state == LearningState.LEARNED:
+                    learned_count += 1
+
+            # Contar solo si NO todas las palabras son LEARNED
+            if learned_count < len(word_ids):
+                valid_count += 1
+
+        return valid_count
 
     def is_pending(
         self,

@@ -27,6 +27,7 @@ interface ExampleItem {
   example_id: number
   text: TextSegment[]
   extracted_words: string[]
+  is_favorite?: boolean
 }
 
 interface WordDetail {
@@ -57,8 +58,15 @@ const showExtractedWordsModal = ref(false)
 const addedWords = ref<Set<string>>(new Set()) // Track palabras ya agregadas
 const addingWord = ref<string | null>(null) // Track palabra en proceso
 
+const showFavoritesModal = ref(false)
+const favoriteExamples = ref<any[]>([])
+const favoritesLoading = ref(false)
+const favoritesPage = ref(1)
+const favoritesTotalPages = ref(1)
+
 const BATCH_SIZE = 4
 const POLL_INTERVAL = 3000
+const FAVORITES_LIMIT = 10
 
 // ─── Computed ───
 const currentExample = computed(() => {
@@ -189,7 +197,8 @@ function loadExamples(data: any) {
     queue_item_id: item.queue_item_id,
     example_id: item.example_id,
     text: item.text || [],
-    extracted_words: item.extracted_words || []
+    extracted_words: item.extracted_words || [],
+    is_favorite: item.is_favorite || false
   }))
 
   if (newExamples.length > 0 && newExamples[0]) {
@@ -260,10 +269,11 @@ async function toggleExampleFav() {
   if (!ex) return
 
   try {
-    await api.patch('/examples/toggle-fav', {
-      example_id: ex.example_id
-    })
+    const response = await api.patch(`/examples/${ex.example_id}/toggle-favorite`)
 
+    if (response.data && response.data.is_favorite !== undefined) {
+      ex.is_favorite = response.data.is_favorite
+    }
   } catch (e) {
     alert('Failed to toggle favorite')
   }
@@ -344,6 +354,85 @@ function closeMobileDetail() {
   selectedWord.value = null
 }
 
+async function openFavoritesModal() {
+  showFavoritesModal.value = true
+  favoritesPage.value = 1
+  await fetchFavorites()
+}
+
+function closeFavoritesModal() {
+  showFavoritesModal.value = false
+  favoriteExamples.value = []
+}
+
+async function fetchFavorites() {
+  if (favoritesLoading.value) return
+
+  favoritesLoading.value = true
+
+  try {
+    const response = await api.get('/examples/favorites', {
+      params: {
+        page: favoritesPage.value,
+        limit: FAVORITES_LIMIT
+      }
+    })
+
+    if (response.data && response.data.status === 'ok') {
+      // Si es la primera página, reemplazar. Si no, agregar a la lista
+      if (favoritesPage.value === 1) {
+        favoriteExamples.value = response.data.items || []
+      } else {
+        favoriteExamples.value.push(...(response.data.items || []))
+      }
+      favoritesTotalPages.value = response.data.pages || 1
+    }
+  } catch (e: any) {
+    alert('Failed to load favorite examples: ' + (e.response?.data?.message || e.message))
+  } finally {
+    favoritesLoading.value = false
+  }
+}
+
+function nextFavoritesPage() {
+  if (favoritesPage.value < favoritesTotalPages.value) {
+    favoritesPage.value++
+    fetchFavorites()
+  }
+}
+
+function prevFavoritesPage() {
+  if (favoritesPage.value > 1) {
+    favoritesPage.value--
+    fetchFavorites()
+  }
+}
+
+function handleFavoritesScroll(event: Event) {
+  const target = event.target as HTMLElement
+  const scrollTop = target.scrollTop
+  const clientHeight = target.clientHeight
+  const scrollHeight = target.scrollHeight
+
+  // Si está a menos de 200px del final, cargar más
+  if (scrollHeight - (scrollTop + clientHeight) < 200) {
+    if (favoritesPage.value < favoritesTotalPages.value && !favoritesLoading.value) {
+      nextFavoritesPage()
+    }
+  }
+}
+
+async function removeFavorite(exampleId: number) {
+  try {
+    await api.patch(`/examples/${exampleId}/toggle-favorite`)
+
+    // Remover el ejemplo de la lista
+    favoriteExamples.value = favoriteExamples.value.filter(ex => ex.id !== exampleId)
+  } catch (e: any) {
+    alert('Failed to remove from favorites: ' + (e.response?.data?.message || e.message))
+  }
+}
+
 function refreshExample() {
   // Side effect: marcar el siguiente ejemplo como visto (si existe)
   const nextExample = examples.value[currentIndex.value + 1]
@@ -407,7 +496,51 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="examples-view">
+  <!-- Favorites View (Fullscreen) -->
+  <div v-if="showFavoritesModal" class="favorites-view">
+    <div class="favorites-header">
+      <h2>Favorite Examples</h2>
+      <button class="close-favorites-btn" @click="closeFavoritesModal" title="Close">
+        <Icon icon="solar:close-circle-linear" width="28" />
+      </button>
+    </div>
+
+    <div class="favorites-content" @scroll="handleFavoritesScroll">
+      <div v-if="favoritesLoading && favoriteExamples.length === 0" class="loading-state">
+        <div class="spinner"></div>
+        <p>Loading favorites...</p>
+      </div>
+
+      <div v-else-if="favoriteExamples.length > 0" class="favorites-items">
+        <div v-for="example in favoriteExamples" :key="example.id" class="favorite-card">
+          <div class="favorite-card-wrapper">
+            <div class="favorite-card-text">
+              <template v-for="(segment, idx) in example.text" :key="idx">
+                <span v-if="segment.is_highlighted" class="word-highlight">
+                  {{ segment.text }}
+                </span>
+                <span v-else>{{ segment.text }}</span>
+              </template>
+            </div>
+            <button class="remove-favorite-btn" @click="removeFavorite(example.id)" title="Remove from favorites">
+              <Icon icon="solar:trash-bin-minimalistic-2-linear" width="20" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="empty-favorites">
+        <p>No favorite examples yet</p>
+      </div>
+
+      <div v-if="favoritesLoading && favoriteExamples.length > 0" class="loading-more">
+        <div class="spinner-small"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Examples View -->
+  <div v-else class="examples-view">
     <!-- Loading / Generating State -->
     <LoadingCard v-if="generating && examples.length === 0" message="Generating..." />
 
@@ -433,7 +566,7 @@ onUnmounted(() => {
     <div v-else class="sentence-area" :class="{ 'panel-open': selectedWord && !isMobileDetailOpen }">
       <!-- Top Bar -->
       <div class="sentence-top-bar">
-        <button class="top-bar-btn favorites-btn" title="Favorite examples" style="border:0;">
+        <button class="top-bar-btn favorites-btn" title="Favorite examples" style="border:0;" @click="openFavoritesModal">
           <Icon icon="ph:list-heart-thin" width="32" />
         </button>
         <button class="top-bar-btn add-words-btn" title="Add words" style="border:0;">
@@ -464,8 +597,9 @@ onUnmounted(() => {
       </div>
 
       <div class="action-buttons">
-        <button class="action-btn" @click="toggleExampleFav" title="Favorite">
-          <Icon icon="solar:heart-linear" width="22" />
+        <button class="action-btn" @click="toggleExampleFav" title="Favorite" :class="{ favorited: currentExample?.is_favorite }">
+          <Icon v-if="currentExample?.is_favorite" icon="solar:heart-bold" width="22" />
+          <Icon v-else icon="solar:heart-linear" width="22" />
         </button>
         <button class="action-btn" @click="prevExample" :disabled="!canGoPrev" title="Previous">
           <Icon icon="solar:arrow-left-linear" width="22" />
@@ -650,6 +784,7 @@ onUnmounted(() => {
       </div>
     </transition>
 
+
     <!-- Mobile Extracted Words Action Sheet -->
     <transition name="slide-up">
       <div v-if="showExtractedWordsModal && isMobileDetailOpen" class="mobile-action-sheet">
@@ -682,6 +817,7 @@ onUnmounted(() => {
         </div>
       </div>
     </transition>
+
   </div>
 </template>
 
@@ -1587,6 +1723,14 @@ onUnmounted(() => {
   color: #9c99ab;
 }
 
+.action-btn.favorited {
+  color: #f472b6;
+}
+
+.action-btn.favorited:hover {
+  color: #f472b6;
+}
+
 /* ─── Modal (Desktop) ─── */
 .modal-overlay {
   position: fixed;
@@ -1808,6 +1952,148 @@ onUnmounted(() => {
   margin: 0;
 }
 
+/* ─── Favorites View (Fullscreen) ─── */
+.favorites-view {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  background: #2d2a3e;
+  color: #e2e0e8;
+  overflow: hidden;
+}
+
+.favorites-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.favorites-header h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.close-favorites-btn {
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: transparent;
+  color: #9c99ab;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.close-favorites-btn:hover {
+  color: #e2e0e8;
+}
+
+.favorites-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  /* Esconder scrollbar pero mantener scroll */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.favorites-content::-webkit-scrollbar {
+  display: none;
+}
+
+.favorites-items {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.favorite-card {
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.2s ease;
+}
+
+.favorite-card:last-child {
+  border-bottom: none;
+}
+
+.favorite-card-wrapper {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.favorite-card-text {
+  flex: 1;
+  font-size: 17px;
+  line-height: 1.8;
+  color: #b8b5c8;
+  word-break: break-word;
+}
+
+.favorite-card-text .word-highlight {
+  color: #c4b5fd;
+  font-weight: 500;
+}
+
+.remove-favorite-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: #9c99ab;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.remove-favorite-btn:hover {
+  color: #f87171;
+}
+
+.empty-favorites {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  color: #9c99ab;
+  font-size: 16px;
+}
+
+.empty-favorites p {
+  margin: 0;
+}
+
+.loading-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.spinner-small {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(124, 58, 237, 0.2);
+  border-top-color: #7c3aed;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
 /* ─── Transitions ─── */
 .fade-enter-active,
 .fade-leave-active {
@@ -1823,6 +2109,26 @@ onUnmounted(() => {
 @media (max-width: 768px) {
   .modal-overlay {
     display: none;
+  }
+
+  .favorites-header {
+    padding: 16px;
+  }
+
+  .favorites-header h2 {
+    font-size: 20px;
+  }
+
+  .favorites-content {
+    padding: 16px;
+  }
+
+  .favorite-card {
+    padding: 16px;
+  }
+
+  .favorite-card-text {
+    font-size: 17px;
   }
 }
 </style>

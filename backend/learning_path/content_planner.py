@@ -73,8 +73,9 @@ class ContentPlanner:
             2. Buscar contenido ya generado.
             3. Encolarlo.
             4. Actualizar cursor basándose en contenido encolado.
-            5. Medir cuánto contenido falta.
-            6. Si falta, solicitar generación background.
+            5. Limpiar items inservibles (fallback para inconsistencias).
+            6. Medir cuánto contenido falta.
+            7. Si falta, solicitar generación background.
 
         Esto permite que el usuario reciba contenido inmediatamente
         siempre que exista suficiente contenido preparado.
@@ -92,6 +93,13 @@ class ContentPlanner:
 
         # Actualizar cursor basándose en qué contenido fue encolado
         self.update_cursor_by_enqueued_content(
+            user_id=user_id,
+            content_type=content_type,
+        )
+
+        # FALLBACK: Limpiar items PENDING que no pueden ser devueltos
+        # (previene deadlock cuando hay inconsistencias de datos)
+        self.cleanup_unserviceable_queue_items(
             user_id=user_id,
             content_type=content_type,
         )
@@ -1711,3 +1719,85 @@ class ContentPlanner:
             user_id=user_id,
             content_type=content_type,
         )
+
+    def cleanup_unserviceable_queue_items(
+        self,
+        user_id: int,
+        content_type: ContentType,
+    ) -> None:
+        """
+        FALLBACK RESILIENTE: Limpia items PENDING que no pueden ser devueltos.
+
+        Problema: A veces hay inconsistencias en BD donde items PENDING tienen
+        palabras en estado LEARNED. Estos items nunca van a ser devueltos por
+        next_many(), pero cuentan en el gap, causando un deadlock.
+
+        Solución: Detecta y marca como CONSUMED estos items inservibles.
+        Esto permite que enqueue_existing_content() encole contenido válido.
+
+        Se ejecuta entre update_cursor() y calculate_gap() en ensure_ready().
+        """
+        from models import ContentQueue, ContentQueueStatus, WordStatistics, LearningState, Example, BestOption, ExampleWord
+
+        # Obtener todos los items PENDING
+        all_pending = self.session.exec(
+            select(ContentQueue)
+            .where(
+                ContentQueue.user_id == user_id,
+                ContentQueue.type == content_type,
+                ContentQueue.status == ContentQueueStatus.PENDING,
+            )
+        ).all()
+
+        if not all_pending:
+            return
+
+        logger.debug(
+            f"[ContentPlanner] Cleanup check: {len(all_pending)} PENDING items for user {user_id} ({content_type})"
+        )
+
+        consumed_count = 0
+
+        for item in all_pending:
+            # Obtener palabras del contenido
+            if content_type == ContentType.EXAMPLE:
+                word_ids = self.session.exec(
+                    select(ExampleWord.word_id)
+                    .where(ExampleWord.example_id == item.content_id)
+                ).all()
+            elif content_type == ContentType.BEST_OPTIONS:
+                best_option = self.session.get(BestOption, item.content_id)
+                word_ids = [best_option.word_id] if best_option else []
+            else:
+                word_ids = []
+
+            # Contar palabras en estado LEARNED
+            learned_count = 0
+            for word_id in word_ids:
+                stats = self.session.exec(
+                    select(WordStatistics)
+                    .where(
+                        WordStatistics.word_id == word_id,
+                        WordStatistics.type == content_type
+                    )
+                ).first()
+                if stats and stats.learning_state == LearningState.LEARNED:
+                    learned_count += 1
+
+            # Si TODAS las palabras son LEARNED, este item es inservible
+            if learned_count == len(word_ids) and len(word_ids) > 0:
+                # Marcar como CONSUMED para limpiar la cola
+                item.status = ContentQueueStatus.CONSUMED
+                self.session.add(item)
+                consumed_count += 1
+                logger.debug(
+                    f"[ContentPlanner] Cleaned up unserviceable item {item.id} "
+                    f"({learned_count}/{len(word_ids)} words LEARNED)"
+                )
+
+        if consumed_count > 0:
+            self.session.commit()
+            logger.info(
+                f"[ContentPlanner] Cleanup: marked {consumed_count} unserviceable items as CONSUMED "
+                f"for user {user_id} ({content_type})"
+            )

@@ -265,3 +265,62 @@ class ExampleRepository:
 
         return segments
 
+    def toggle_favorite(self, example_id: int) -> bool:
+        """
+        Alterna el estado de favorito de un ejemplo.
+
+        Retorna el nuevo estado de is_favorite.
+        """
+        example = self.session.get(Example, example_id)
+
+        if not example:
+            logger.warning(f"[ExampleRepository] Example {example_id} not found")
+            return False
+
+        example.is_favorite = not example.is_favorite
+        self.session.add(example)
+        self.session.commit()
+        self.session.refresh(example)
+
+        logger.debug(f"[ExampleRepository] Example {example_id} is_favorite toggled to {example.is_favorite}")
+        return example.is_favorite
+
+    def get_examples(self, page: int = 1, limit: int = 15) -> dict:
+        """
+        Obtiene ejemplos favoritos con paginación.
+
+        Retorna un diccionario con:
+        - items: List de ejemplos
+        - total: Total de ejemplos favoritos
+        - page: Página actual
+        - limit: Items por página
+        - pages: Total de páginas
+        """
+        # Contar total de ejemplos favoritos
+        total = self.session.exec(
+            select(func.count(Example.id))
+            .where(Example.is_favorite == True)
+        ).first() or 0
+
+        # Calcular paginación
+        offset = (page - 1) * limit
+        pages = (total + limit - 1) // limit if total > 0 else 1
+
+        # Obtener ejemplos
+        examples = self.session.exec(
+            select(Example)
+            .where(Example.is_favorite == True)
+            .order_by(Example.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        ).all()
+
+        logger.debug(f"[ExampleRepository] Retrieved {len(examples)} favorite examples (page {page}, total {total})")
+
+        return {
+            "items": examples,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "pages": pages
+        }

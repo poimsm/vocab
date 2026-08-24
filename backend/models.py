@@ -135,6 +135,7 @@ class Example(SQLModel, table=True):
     times_seen: int = Field(default=0)
     sequence: int = Field(default=0, index=True)
     enqueued: bool = Field(default=False, index=True)
+    is_favorite: bool = Field(default=False)
 
     example_words: List["ExampleWord"] = Relationship(back_populates="example")
 
