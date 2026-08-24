@@ -64,6 +64,8 @@ const favoritesLoading = ref(false)
 const favoritesPage = ref(1)
 const favoritesTotalPages = ref(1)
 
+const showCopiedToast = ref(false)
+
 const BATCH_SIZE = 4
 const POLL_INTERVAL = 3000
 const FAVORITES_LIMIT = 10
@@ -483,12 +485,19 @@ function nextExample() {
   }
 }
 
+function showToast() {
+  showCopiedToast.value = true
+  setTimeout(() => {
+    showCopiedToast.value = false
+  }, 2000)
+}
+
 function copyExample() {
   const ex = currentExample.value
   if (!ex) return
   const fullText = ex.text.map(segment => segment.text).join('')
   navigator.clipboard.writeText(fullText).then(() => {
-    alert('Copied to clipboard!')
+    showToast()
   }).catch(() => {
     alert('Failed to copy')
   })
@@ -830,6 +839,13 @@ onUnmounted(() => {
 
 
   </div>
+
+  <!-- Copy Toast Notification -->
+  <transition name="fade">
+    <div v-if="showCopiedToast" class="copy-toast">
+      Copied!
+    </div>
+  </transition>
 </template>
 
 <style scoped>
@@ -2116,6 +2132,23 @@ onUnmounted(() => {
   opacity: 0;
 }
 
+/* ─── Copy Toast Notification ─── */
+.copy-toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #36324a;
+  color: #4ade80;
+  padding: 12px 24px;
+  border-radius: 8px;
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 3000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
 /* ─── Mobile Extracted Words Sheet (Full screen) ─── */
 .mobile-extracted-words-sheet {
   position: fixed;
@@ -2173,7 +2206,7 @@ onUnmounted(() => {
   }
 
   .favorite-card-text {
-    font-size: 17px;
+    font-size: 18px !important;
   }
 }
 </style>
