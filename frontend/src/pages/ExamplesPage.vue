@@ -496,11 +496,41 @@ function copyExample() {
   const ex = currentExample.value
   if (!ex) return
   const fullText = ex.text.map(segment => segment.text).join('')
-  navigator.clipboard.writeText(fullText).then(() => {
-    showToast()
-  }).catch(() => {
+
+  // Intentar con clipboard API
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(fullText).then(() => {
+      showToast()
+    }).catch(() => {
+      copyFallback(fullText)
+    })
+  } else {
+    // Fallback para navegadores que no soportan clipboard API
+    copyFallback(fullText)
+  }
+}
+
+function copyFallback(text: string) {
+  // Crear un textarea temporal
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  document.body.appendChild(textarea)
+
+  try {
+    textarea.select()
+    const successful = document.execCommand('copy')
+    if (successful) {
+      showToast()
+    } else {
+      alert('Failed to copy')
+    }
+  } catch (e) {
     alert('Failed to copy')
-  })
+  } finally {
+    document.body.removeChild(textarea)
+  }
 }
 
 onMounted(() => {
