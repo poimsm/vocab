@@ -46,17 +46,18 @@ def _extract_words_from_example(text_segments, target_word_ids, common_words):
     # Construir el texto completo del ejemplo
     full_text = ''.join(segment['text'] for segment in text_segments)
 
-    # Extraer palabras (lowercase, sin puntuación)
-    words = re.findall(r'\b[a-z]+\b', full_text.lower())
+    # Extraer palabras (lowercase, sin puntuación, incluyendo posesivos)
+    # Pattern: palabras con letras, opcionalmente seguidas de apóstrofo+s o solo apóstrofo
+    words = re.findall(r"[a-z]+(?:'s)?(?:')?", full_text.lower())
 
     extracted = set()
     for word in words:
+        if not word:  # Ignorar strings vacíos
+            continue
         # Excluir palabras comunes
         if word in common_words:
             continue
 
-        # Excluir palabras que estén resaltadas (target words)
-        # Esto se filtra por los datos en text_segments
         extracted.add(word)
 
     return sorted(list(extracted))
@@ -98,7 +99,8 @@ def get_explore_feed(
 
     if not queue_items:
         logger.debug(f"[get_explore_feed] No pending examples for user {current_user.id}")
-        # Si no hay contenido, asegurar que hay suficiente
+
+        # Inicializar componentes
         priority_engine = PriorityEngine()
         word_repo = WordRepository(db)
         best_option_repo = BestOptionRepository(db)
@@ -112,21 +114,30 @@ def get_explore_feed(
             example_repository=example_repo,
             best_option_repository=best_option_repo,
         )
+
+        # Chequear si hay palabras NO LEARNED
+        has_words = content_planner.has_non_learned_words(current_user.id, ContentType.EXAMPLE)
+
+        if not has_words:
+            logger.info(
+                f"[get_explore_feed] ❌ NO_WORDS: User {current_user.id} has no non-LEARNED words"
+            )
+            return {
+                "examples": [],
+                "status": "no_words",
+            }
+
+        # Si hay palabras, intentar generar contenido
         content_planner.ensure_ready(current_user.id, ContentType.EXAMPLE)
 
         # Verificar si después de ensure_ready hay contenido pendiente
         pending_count = queue_mgr.count_pending(current_user.id, ContentType.EXAMPLE)
 
         # Determinar status
-        if pending_count > 0:
-            status = "generating"
-        else:
-            # Si no hay contenido pendiente, chequear si hay palabras candidatas
-            candidates = content_planner.get_candidate_words(current_user.id, ContentType.EXAMPLE)
-            status = "generating" if candidates else "no_words"
+        status = "generating" if pending_count >= 0 else "generating"
 
         logger.debug(
-            f"[get_explore_feed] After ensure_ready: pending_count={pending_count}, candidates={len(candidates) if pending_count == 0 else 'N/A'}, status={status}"
+            f"[get_explore_feed] After ensure_ready: pending_count={pending_count}, status={status}"
         )
 
         return {
@@ -201,7 +212,7 @@ def resolve_queue_item(
     3. Marcar item como CONSUMED
     """
 
-    logger.info(f"[resolve_queue_item] User {current_user.id}: Resolving queue item {queue_item_id}")
+    logger.info(f"[resolve_queue_item] ⏳ STARTED: User {current_user.id}, queue_item_id={queue_item_id}")
 
     # Obtener item
     queue_item = db.get(ContentQueue, queue_item_id)
@@ -225,7 +236,7 @@ def resolve_queue_item(
     queue_mgr = ContentQueueManager(db)
     queue_mgr.consume(queue_item_id)
 
-    logger.debug(f"[resolve_queue_item] Queue item {queue_item_id} resolved")
+    logger.info(f"[resolve_queue_item] ✅ COMPLETED: queue_item_id={queue_item_id} successfully consumed")
 
     return {"status": "ok"}
 

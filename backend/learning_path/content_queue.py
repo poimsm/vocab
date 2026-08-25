@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import List, Optional
 from sqlmodel import Session, select
+from logging_client import logger
 from models import ContentQueue as ContentQueueModel, ContentQueueStatus, ContentType
 
 
@@ -217,11 +218,14 @@ class ContentQueue:
         """
         Marca un elemento como CONSUMED.
 
-        No actualiza WordStatistics.
+        Actualiza:
+        - ContentQueue.status = CONSUMED
+        - Example/BestOption.is_consumed = True (para nunca volver a encolar)
 
         El LearningTracker se encarga de registrar
         las exposiciones de las palabras.
         """
+        from models import Example, BestOption
 
         item = self.session.get(
             ContentQueueModel,
@@ -232,6 +236,26 @@ class ContentQueue:
             return None
 
         item.status = ContentQueueStatus.CONSUMED
+
+        # Marcar el contenido como consumido para evitar que vuelva a aparecer
+        if item.type == ContentType.EXAMPLE:
+            example = self.session.get(Example, item.content_id)
+            if example:
+                example.is_consumed = True
+                self.session.add(example)
+                logger.info(
+                    f"[ContentQueue] CONSUMED: queue_item_id={queue_id}, "
+                    f"example_id={item.content_id}, is_consumed set to True"
+                )
+        elif item.type == ContentType.BEST_OPTIONS:
+            best_option = self.session.get(BestOption, item.content_id)
+            if best_option:
+                best_option.is_consumed = True
+                self.session.add(best_option)
+                logger.info(
+                    f"[ContentQueue] CONSUMED: queue_item_id={queue_id}, "
+                    f"best_option_id={item.content_id}, is_consumed set to True"
+                )
 
         self.session.add(item)
         self.session.commit()

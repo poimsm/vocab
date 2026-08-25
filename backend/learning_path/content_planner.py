@@ -496,6 +496,34 @@ class ContentPlanner:
         )
         return 0
 
+    def has_non_learned_words(
+        self,
+        user_id: int,
+        content_type: ContentType,
+    ) -> bool:
+        """
+        Chequea si el usuario tiene palabras NO LEARNED para el tipo de contenido especificado.
+
+        Retorna True si hay al menos una palabra en estado diferente a LEARNED.
+        Retorna False si todas las palabras están en estado LEARNED.
+        """
+        non_learned_count = self.session.exec(
+            select(func.count(WordStatistics.id))
+            .where(
+                WordStatistics.type == content_type,
+                WordStatistics.learning_state != LearningState.LEARNED
+            )
+        ).first() or 0
+
+        has_words = non_learned_count > 0
+
+        logger.debug(
+            f"[ContentPlanner] has_non_learned_words for {content_type}: "
+            f"count={non_learned_count}, has_words={has_words}"
+        )
+
+        return has_words
+
     def get_candidate_words(
         self,
         user_id: int,

@@ -70,7 +70,8 @@ class BestOptionRepository:
             .where(
                 BestOption.word_id == word_id,
                 BestOption.is_active == True,
-                BestOption.enqueued == False
+                BestOption.enqueued == False,
+                BestOption.is_consumed == False
             )
         ).first() or 0
 
@@ -107,7 +108,8 @@ class BestOptionRepository:
             .where(
                 BestOption.word_id == word_id,
                 BestOption.is_active == True,
-                BestOption.enqueued == False
+                BestOption.enqueued == False,
+                BestOption.is_consumed == False
             )
             .order_by(BestOption.sequence.asc())
         ).first()

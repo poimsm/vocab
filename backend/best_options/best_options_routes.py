@@ -48,7 +48,8 @@ def get_best_options(
 
     if not queue_items:
         logger.debug(f"[get_best_options] No pending best options for user {current_user.id}")
-        # Si no hay contenido, asegurar que hay suficiente
+
+        # Inicializar componentes
         from words.word_repository import WordRepository
 
         priority_engine = PriorityEngine()
@@ -64,21 +65,31 @@ def get_best_options(
             example_repository=example_repo,
             best_option_repository=best_option_repo,
         )
+
+        # Chequear si hay palabras NO LEARNED
+        has_words = content_planner.has_non_learned_words(current_user.id, ContentType.BEST_OPTIONS)
+
+        if not has_words:
+            logger.info(
+                f"[get_best_options] ❌ NO_WORDS: User {current_user.id} has no non-LEARNED words"
+            )
+            return {
+                "items": [],
+                "total": 0,
+                "status": "no_words",
+            }
+
+        # Si hay palabras, intentar generar contenido
         content_planner.ensure_ready(current_user.id, ContentType.BEST_OPTIONS)
 
         # Verificar si después de ensure_ready hay contenido pendiente
         pending_count = queue_mgr.count_pending(current_user.id, ContentType.BEST_OPTIONS)
 
         # Determinar status
-        if pending_count > 0:
-            status = "generating"
-        else:
-            # Si no hay contenido pendiente, chequear si hay palabras candidatas
-            candidates = content_planner.get_candidate_words(current_user.id, ContentType.BEST_OPTIONS)
-            status = "generating" if candidates else "no_words"
+        status = "generating"
 
         logger.debug(
-            f"[get_best_options] After ensure_ready: pending_count={pending_count}, candidates={len(candidates) if pending_count == 0 else 'N/A'}, status={status}"
+            f"[get_best_options] After ensure_ready: pending_count={pending_count}, status={status}"
         )
 
         return {

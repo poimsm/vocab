@@ -84,20 +84,22 @@ class ExampleRepository:
         - Contiene la palabra (a través de ExampleWord)
         - Es de tipo EXPLORE
         - No ha sido encolado aún (enqueued=False)
+        - NUNCA fue consumido antes (excluye examples con CONSUMED items)
         - No contiene SOLO palabras en estado LEARNED
 
         Retorna el example con la secuencia más baja (el más antiguo).
         """
         from logging_client import logger
 
-        # Obtener ejemplos candidatos ordenados
+        # Obtener ejemplos candidatos ordenados (excluyendo los ya consumidos)
         candidate_ids = self.session.exec(
             select(Example.id)
             .join(ExampleWord, Example.id == ExampleWord.example_id)
             .where(
                 ExampleWord.word_id == word_id,
                 Example.type == ExampleType.EXPLORE,
-                Example.enqueued == False
+                Example.enqueued == False,
+                Example.is_consumed == False
             )
             .order_by(Example.sequence.asc())
         ).all()
@@ -196,6 +198,7 @@ class ExampleRepository:
                 "meaning": word.meaning,
                 "level": word.level,
                 "is_boosted": word.is_boosted,
+                "text_form": text_form,  # Guardar text_form original para referencia
             }
 
         # Buscar todas las ocurrencias de palabras en el texto
@@ -205,29 +208,71 @@ class ExampleRepository:
 
         # Encontrar todas las palabras en orden de aparición
         words_found = []
-        for word_form in word_map.keys():
-            # Buscar todas las ocurrencias de esta palabra (case-insensitive)
-            start_pos = 0
-            while True:
-                pos = text.lower().find(word_form, start_pos)
-                if pos == -1:
-                    break
-                words_found.append(
-                    {
-                        "start": pos,
-                        "end": pos + len(word_form),
-                        "word_form": word_form,
-                        "actual_text": text[pos : pos + len(word_form)],
-                    }
-                )
-                start_pos = pos + 1
+        import re
+        from examples.helpers import getAllInflections
+
+        for word_form_key, word_data in word_map.items():
+            # Generar todas las posibles inflexiones del word_form
+            possible_forms = {word_form_key}  # Incluir la forma original
+
+            try:
+                # Intentar generar inflexiones
+                inflections = getAllInflections(word_form_key)
+                if inflections:
+                    for form_list in inflections.values():
+                        possible_forms.update([f.lower() for f in form_list if f])
+            except Exception:
+                pass
+
+            # Para cada forma, también agregar variantes con apóstrofo (posesivo)
+            forms_with_variants = set()
+            for form in possible_forms:
+                forms_with_variants.add(form)
+                forms_with_variants.add(form + "'s")  # singular posesivo: crocodile's
+                # Para plurales: crocodiles'
+                if form.endswith('s'):
+                    forms_with_variants.add(form + "'")
+                else:
+                    forms_with_variants.add(form + "s'")  # crocodiles'
+
+            # Buscar cada una de las formas posibles en el texto
+            for form in forms_with_variants:
+                if not form:
+                    continue
+                # Patrón flexible: límite de palabra al inicio, pero flexible al final
+                # Permite encontrar: "Crocodiles", "crocodile's", "crocodiles'"
+                # No encuentra: "crocodile" en "cocrocodileal"
+                pattern = r'(?:^|\W)(' + re.escape(form) + r')(?:\W|$)'
+                for match in re.finditer(pattern, text.lower()):
+                    # match.group(1) es la palabra sin los límites
+                    pos = match.start(1)
+                    actual_text = text[pos : match.end(1)]
+                    words_found.append(
+                        {
+                            "start": pos,
+                            "end": match.end(1),
+                            "word_form": word_form_key,
+                            "actual_text": actual_text,
+                        }
+                    )
+
+        # Resolver overlaps: mantener solo la palabra más larga en cada posición
+        words_found.sort(key=lambda x: (x["start"], -(x["end"] - x["start"])))
+
+        merged_words = []
+        for word in words_found:
+            # Si no hay overlaps con palabras ya seleccionadas, agregar
+            if not any(m["start"] <= word["start"] < m["end"] or
+                      m["start"] < word["end"] <= m["end"]
+                      for m in merged_words):
+                merged_words.append(word)
 
         # Ordenar por posición de inicio
-        words_found.sort(key=lambda x: x["start"])
+        merged_words.sort(key=lambda x: x["start"])
 
         # Segmentar el texto
         current_pos = 0
-        for word_found in words_found:
+        for word_found in merged_words:
             start = word_found["start"]
             end = word_found["end"]
             word_form = word_found["word_form"]

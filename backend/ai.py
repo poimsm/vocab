@@ -31,6 +31,7 @@ Rules:
 3. Clean translations, explanations, equal signs, and punctuation from the "main" field.
 4. Preserve multi-word expressions exactly (e.g. "spring out", "come across", "a lead weight"). Never merge words (e.g. "springout").
 5. Classify verb + particle expressions as "phrasal_verb".
+6. Normalize the vocabulary item before returning it: correct obvious spelling mistakes and typos in English words.
 
 Examples:
 "dupe = deceive" -> "dupe"
@@ -76,7 +77,9 @@ Return a JSON array of objects matching this exact structure:
             }
         ]
     )
+
     content = response.choices[0].message.content.strip()
+    logger.info(f"extract_learning_intent:::: {content}")
 
     try:
         # Limpieza de markdown si el modelo responde con ```json ... ```
@@ -146,7 +149,9 @@ Return ONLY JSON.
         ]
     )
 
-    return json.loads(response.choices[0].message.content)
+    content = json.loads(response.choices[0].message.content)
+    logger.info(f"enrich_word:::: {content}")
+    return content
 
 # backend/ai.py
 
@@ -208,6 +213,7 @@ Rules:
     )
 
     content = response.choices[0].message.content.strip()
+    logger.info(f"enrich_words_bulk:::: {content}")
 
     try:
         # Sanitizar markdown si viene con triple comilla invertida
@@ -299,7 +305,7 @@ Example:
     )
 
     content = response.choices[0].message.content.strip()
-    logger.info(f"RESPONSE_AI:::: {content}")
+    logger.info(f"generate_examples_for_single_word:::: {content}")
 
     try:
         if content.startswith("```"):
@@ -370,6 +376,7 @@ def generate_examples_from_words(words: list[models.Word]):
     )
 
     content = response.choices[0].message.content.strip()
+    logger.info(f"generate_examples_from_words:::: {content}")
 
     try:
         if content.startswith("```"):
@@ -440,6 +447,7 @@ def generate_mixed_examples_from_words(words: list[models.Word]):
     )
 
     content = response.choices[0].message.content.strip()
+    logger.info(f"generate_mixed_examples_from_words:::: {content}")
 
     try:
         if content.startswith("```"):
@@ -592,6 +600,7 @@ WORDS:
     )
 
     content = response.choices[0].message.content.strip()
+    logger.info(f"generate_best_options_from_words:::: {content}")
 
     try:
         if content.startswith("```"):
