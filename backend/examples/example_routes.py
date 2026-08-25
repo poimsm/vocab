@@ -1,6 +1,8 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
+from typing import Optional, List
+from pydantic import BaseModel
 import re
 from pathlib import Path
 
@@ -16,8 +18,152 @@ from examples.example_repository import ExampleRepository
 from best_options.best_options_repository import BestOptionRepository
 
 
+class ExploreRequest(BaseModel):
+    """Request para el endpoint de explore con acciones encadenables."""
+    actions: List[str] = ["next"]  # Acciones a ejecutar: ["resolve", "next"], ["next"], etc.
+    resolve_queue_item_id: Optional[int] = None  # Requerido si actions incluye "resolve"
+    limit: int = 5  # Para la acción "next"
+
+
 router = APIRouter()
 
+
+# ==================== Acciones Auxiliares ====================
+
+def _action_resolve(
+    db: Session,
+    queue_item_id: int,
+    current_user: User,
+) -> bool:
+    """
+    Acción: Resolver un item (registrar exposición + marcar CONSUMED).
+
+    Retorna True si fue exitoso, False si el item no existe.
+    """
+    logger.debug(f"[_action_resolve] Resolving queue_item_id={queue_item_id}")
+
+    # Obtener con FOR UPDATE para bloquear la fila
+    queue_item = db.exec(
+        select(ContentQueue)
+        .where(ContentQueue.id == queue_item_id)
+        .with_for_update()
+    ).first()
+
+    if not queue_item or queue_item.user_id != current_user.id:
+        logger.warning(f"[_action_resolve] Queue item {queue_item_id} not found or unauthorized")
+        return False
+
+    # Registrar exposición
+    example_repo = ExampleRepository(db)
+    best_option_repo = BestOptionRepository(db)
+    tracker = LearningTracker(db, example_repo, best_option_repo)
+
+    tracker.record_exposure(
+        user_id=current_user.id,
+        content_type=queue_item.type,
+        content_id=queue_item.content_id,
+    )
+
+    # Marcar como consumido
+    queue_mgr = ContentQueueManager(db)
+    queue_mgr.consume(queue_item_id)
+
+    logger.debug(f"[_action_resolve] Successfully resolved queue_item_id={queue_item_id}")
+    return True
+
+
+def _action_next(
+    db: Session,
+    current_user: User,
+    limit: int,
+) -> tuple[list, str]:
+    """
+    Acción: Obtener los siguientes items de la cola.
+
+    Retorna (ejemplos_segmentados, status).
+    Status puede ser: "ok", "generating", "no_words"
+    """
+    logger.debug(f"[_action_next] Fetching next {limit} examples")
+
+    queue_mgr = ContentQueueManager(db)
+
+    # Obtener items pendientes
+    queue_items = queue_mgr.next_many(
+        user_id=current_user.id,
+        content_type=ContentType.EXAMPLE,
+        amount=limit,
+    )
+
+    logger.debug(f"[_action_next] Got {len(queue_items)} items from queue")
+
+    if not queue_items:
+        logger.debug(f"[_action_next] No pending items, checking if content generation is needed")
+
+        # Inicializar componentes para planificación
+        from learning_path.content_planner import ContentPlanner
+        from learning_path.priority_engine import PriorityEngine
+        from words.word_repository import WordRepository
+
+        priority_engine = PriorityEngine()
+        word_repo = WordRepository(db)
+        best_option_repo = BestOptionRepository(db)
+        example_repo = ExampleRepository(db)
+
+        content_planner = ContentPlanner(
+            session=db,
+            priority_engine=priority_engine,
+            content_queue=queue_mgr,
+            word_repository=word_repo,
+            example_repository=example_repo,
+            best_option_repository=best_option_repo,
+        )
+
+        # Chequear si hay palabras NO LEARNED
+        has_words = content_planner.has_non_learned_words(current_user.id, ContentType.EXAMPLE)
+
+        if not has_words:
+            logger.info(f"[_action_next] User {current_user.id} has no non-LEARNED words")
+            return [], "no_words"
+
+        # Trigger generation
+        content_planner.ensure_ready(current_user.id, ContentType.EXAMPLE)
+        logger.debug(f"[_action_next] Content generation triggered")
+
+        return [], "generating"
+
+    # Segmentar ejemplos
+    example_ids = [item.content_id for item in queue_items]
+    examples = db.exec(
+        select(Example).where(Example.id.in_(example_ids))
+    ).all()
+
+    logger.debug(f"[_action_next] Retrieved {len(examples)} example records")
+
+    example_repo = ExampleRepository(db)
+    examples_response = []
+    example_to_queue = {item.content_id: item.id for item in queue_items}
+    common_words = _load_common_words()
+
+    for ex in examples:
+        text_segments = example_repo.segment_example_text(ex)
+        target_word_ids = {seg['target_word']['id'] for seg in text_segments if seg.get('target_word')}
+        target_word_strings = {seg['target_word']['main'].lower() for seg in text_segments if seg.get('target_word')}
+
+        extracted_words = _extract_words_from_example(text_segments, target_word_ids, common_words)
+        extracted_words = [w for w in extracted_words if w not in target_word_strings]
+
+        examples_response.append({
+            "queue_item_id": example_to_queue[ex.id],
+            "example_id": ex.id,
+            "text": text_segments,
+            "extracted_words": extracted_words,
+            "is_favorite": ex.is_favorite,
+        })
+
+    return examples_response, "ok"
+
+
+# ==================== Funciones Auxiliares ====================
 
 def _load_common_words():
     """Carga el set de palabras comunes desde most_common.txt"""
@@ -63,182 +209,78 @@ def _extract_words_from_example(text_segments, target_word_ids, common_words):
     return sorted(list(extracted))
 
 
-@router.get("/explore", response_model=ExploreResponse)
+@router.post("/explore", response_model=ExploreResponse)
 @log_endpoint
-def get_explore_feed(
-    limit: int = 5,
+def explore_examples(
+    request: ExploreRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Obtiene los siguientes examples de la ContentQueue.
+    Endpoint unificado con acciones encadenables.
 
-    Flujo:
-    1. Obtener items PENDING de ContentQueue
-    2. Si no hay, trigger ensure_ready() y retornar status "generating"
-    3. Si hay, segmentar el texto en chunks con target words resaltados
-    4. Retornar con estructura de texto segmentado y status "ok"
+    Body:
+    {
+      "actions": ["resolve", "next"],  // Acciones a ejecutar en orden
+      "resolve_queue_item_id": 47,      // Requerido si actions contiene "resolve"
+      "limit": 5                        // Para acción "next"
+    }
+
+    Ejemplos:
+    - {"actions": ["next"], "limit": 5}
+      → Solo obtener 5 ejemplos
+
+    - {"actions": ["resolve", "next"], "resolve_queue_item_id": 47, "limit": 4}
+      → Resolver item 47, luego obtener 4 ejemplos
+
+    - {"actions": ["resolve"], "resolve_queue_item_id": 47}
+      → Solo resolver item 47, no obtener nuevos
+
+    TODO ATÓMICO - una sola transacción.
     """
-    from learning_path.content_planner import ContentPlanner
-    from learning_path.priority_engine import PriorityEngine
-    from words.word_repository import WordRepository
-    from best_options.best_options_repository import BestOptionRepository
-
-    logger.info(f"[get_explore_feed] User {current_user.id}: Fetching examples (limit={limit})")
-
-    queue_mgr = ContentQueueManager(db)
-
-    # Obtener items pendientes (con filtrado de LEARNED items)
-    queue_items = queue_mgr.next_many(
-        user_id=current_user.id,
-        content_type=ContentType.EXAMPLE,
-        amount=limit,
+    logger.info(
+        f"[explore_examples] User {current_user.id}: actions={request.actions}, "
+        f"resolve_id={request.resolve_queue_item_id}, limit={request.limit}"
     )
 
-    logger.debug(f"[get_explore_feed] next_many returned {len(queue_items)} valid items (filtered out LEARNED examples)")
+    examples = []
+    status = "ok"
 
-    if not queue_items:
-        logger.debug(f"[get_explore_feed] No pending examples for user {current_user.id}")
+    # Ejecutar acciones en orden
+    for action in request.actions:
+        if action == "resolve":
+            if request.resolve_queue_item_id is None:
+                logger.warning(f"[explore_examples] Action 'resolve' requires resolve_queue_item_id")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Action 'resolve' requires resolve_queue_item_id parameter"
+                )
 
-        # Inicializar componentes
-        priority_engine = PriorityEngine()
-        word_repo = WordRepository(db)
-        best_option_repo = BestOptionRepository(db)
-        example_repo = ExampleRepository(db)
+            success = _action_resolve(db, request.resolve_queue_item_id, current_user)
+            if not success:
+                logger.warning(f"[explore_examples] Action 'resolve' failed for item {request.resolve_queue_item_id}")
+                raise HTTPException(
+                    status_code=404,
+                    detail="Item to resolve not found"
+                )
 
-        content_planner = ContentPlanner(
-            session=db,
-            priority_engine=priority_engine,
-            content_queue=queue_mgr,
-            word_repository=word_repo,
-            example_repository=example_repo,
-            best_option_repository=best_option_repo,
-        )
+        elif action == "next":
+            examples, status = _action_next(db, current_user, request.limit)
 
-        # Chequear si hay palabras NO LEARNED
-        has_words = content_planner.has_non_learned_words(current_user.id, ContentType.EXAMPLE)
-
-        if not has_words:
-            logger.info(
-                f"[get_explore_feed] ❌ NO_WORDS: User {current_user.id} has no non-LEARNED words"
+        else:
+            logger.warning(f"[explore_examples] Unknown action: {action}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown action: {action}. Valid actions: 'resolve', 'next'"
             )
-            return {
-                "examples": [],
-                "status": "no_words",
-            }
 
-        # Si hay palabras, intentar generar contenido
-        content_planner.ensure_ready(current_user.id, ContentType.EXAMPLE)
-
-        # Verificar si después de ensure_ready hay contenido pendiente
-        pending_count = queue_mgr.count_pending(current_user.id, ContentType.EXAMPLE)
-
-        # Determinar status
-        status = "generating" if pending_count >= 0 else "generating"
-
-        logger.debug(
-            f"[get_explore_feed] After ensure_ready: pending_count={pending_count}, status={status}"
-        )
-
-        return {
-            "examples": [],
-            "status": status,
-        }
-
-    # Obtener los examples asociados
-    example_ids = [item.content_id for item in queue_items]
-    examples = db.exec(
-        select(Example).where(Example.id.in_(example_ids))
-    ).all()
-
-    logger.debug(f"[get_explore_feed] Retrieved {len(examples)} examples")
-
-    # Segmentar el texto de cada ejemplo
-    example_repo = ExampleRepository(db)
-    examples_response = []
-
-    # Crear un mapa de example_id -> queue_item_id
-    example_to_queue = {item.content_id: item.id for item in queue_items}
-
-    # Cargar palabras comunes una sola vez
-    common_words = _load_common_words()
-
-    for ex in examples:
-        text_segments = example_repo.segment_example_text(ex)
-
-        # Obtener los IDs de palabras que son target words en este ejemplo
-        target_word_ids = {seg['target_word']['id'] for seg in text_segments if seg.get('target_word')}
-        # También obtener los strings de palabras target para excluir
-        target_word_strings = {seg['target_word']['main'].lower() for seg in text_segments if seg.get('target_word')}
-
-        # Extraer palabras del ejemplo
-        extracted_words = _extract_words_from_example(text_segments, target_word_ids, common_words)
-        # Filtrar palabras que sean target words
-        extracted_words = [w for w in extracted_words if w not in target_word_strings]
-
-        examples_response.append(
-            {
-                "queue_item_id": example_to_queue[ex.id],
-                "example_id": ex.id,
-                "text": text_segments,
-                "extracted_words": extracted_words,
-                "is_favorite": ex.is_favorite,
-            }
-        )
-
-    # Status: ok si hay ejemplos, generating si se activó ensure_ready, no_words si nada disponible
-    status = "ok" if examples_response else "generating"
+    logger.info(f"[explore_examples] Completed with status={status}, returned {len(examples)} examples")
 
     return {
-        "examples": examples_response,
+        "examples": examples,
         "status": status,
     }
 
-
-
-@router.patch("/{queue_item_id}/resolve")
-@log_endpoint
-def resolve_queue_item(
-    queue_item_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Marca un example como consumido y registra la exposición.
-
-    Flujo:
-    1. Obtener item de ContentQueue
-    2. Llamar a LearningTracker.record_exposure()
-    3. Marcar item como CONSUMED
-    """
-
-    logger.info(f"[resolve_queue_item] ⏳ STARTED: User {current_user.id}, queue_item_id={queue_item_id}")
-
-    # Obtener item
-    queue_item = db.get(ContentQueue, queue_item_id)
-
-    if not queue_item or queue_item.user_id != current_user.id:
-        logger.warning(f"[resolve_queue_item] Queue item {queue_item_id} not found")
-        raise HTTPException(status_code=404, detail="Item no encontrado")
-
-    # Registrar exposición
-    example_repo = ExampleRepository(db)
-    best_option_repo = BestOptionRepository(db)
-    tracker = LearningTracker(db, example_repo, best_option_repo)
-
-    tracker.record_exposure(
-        user_id=current_user.id,
-        content_type=queue_item.type,
-        content_id=queue_item.content_id,
-    )
-
-    # Marcar como consumido
-    queue_mgr = ContentQueueManager(db)
-    queue_mgr.consume(queue_item_id)
-
-    logger.info(f"[resolve_queue_item] ✅ COMPLETED: queue_item_id={queue_item_id} successfully consumed")
-
-    return {"status": "ok"}
 
 
 @router.patch("/{example_id}/toggle-favorite")

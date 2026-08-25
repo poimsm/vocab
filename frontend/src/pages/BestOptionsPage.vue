@@ -74,9 +74,51 @@ const frequencySegments = computed(() => {
   ]
 })
 
-// ─── Side Effects ───
-function fireAndForgetResolve(queueItemId: number) {
-  api.patch(`/best-options/${queueItemId}/resolve`).catch(() => {})
+// ─── API Calls with new Unified Endpoint ───
+
+/**
+ * Resuelve un item SIN obtener nuevas preguntas.
+ * Usado cuando el usuario avanza pero hay más preguntas en el lote.
+ */
+function resolveOnly(queueItemId: number) {
+  api.post('/best-options/explore', {
+    actions: ['resolve'],
+    resolve_queue_item_id: queueItemId
+  }).catch(() => { })
+}
+
+/**
+ * Resuelve un item Y obtiene nuevas preguntas.
+ * Usado cuando el usuario llegó a la última pregunta del lote.
+ */
+async function resolveAndFetchNext(queueItemId: number) {
+  generating.value = true
+  error.value = null
+
+  try {
+    const { data } = await api.post('/best-options/explore', {
+      actions: ['resolve', 'next'],
+      resolve_queue_item_id: queueItemId,
+      limit: BATCH_SIZE
+    })
+
+    if (data.status === 'generating') {
+      startPolling()
+      return
+    }
+
+    if (data.status === 'no_words') {
+      generating.value = false
+      noWords.value = true
+      return
+    }
+
+    generating.value = false
+    loadItems(data.items || [])
+  } catch (e: any) {
+    generating.value = false
+    error.value = e.response?.data?.message || e.message || 'Failed to fetch items'
+  }
 }
 
 // ─── Polling ───
@@ -88,7 +130,10 @@ function startPolling() {
   const poll = () => {
     pollTimer.value = setTimeout(async () => {
       try {
-        const { data } = await api.get('/best-options/explore', { params: { limit: BATCH_SIZE } })
+        const { data } = await api.post('/best-options/explore', {
+          actions: ['next'],
+          limit: BATCH_SIZE
+        })
         if (data.status === 'generating') {
           poll()
           return
@@ -172,7 +217,10 @@ async function fetchItems() {
   noWords.value = false
   error.value = null
   try {
-    const { data } = await api.get('/best-options/explore', { params: { limit: BATCH_SIZE } })
+    const { data } = await api.post('/best-options/explore', {
+      actions: ['next'],
+      limit: BATCH_SIZE
+    })
     if (data.status === 'generating') {
       startPolling()
       return
@@ -206,16 +254,21 @@ function optionClass(index: number): string {
   return 'dimmed'
 }
 
-function next() {
+async function next() {
   const cur = currentItem.value
-  if (cur) fireAndForgetResolve(cur.queue_item_id)
+  if (!cur) return
 
+  // Si hay más preguntas en el lote, resolver y avanzar
   if (canGoNext.value) {
+    resolveOnly(cur.queue_item_id)
     currentIndex.value++
     resetState()
     return
   }
-  fetchItems()
+
+  // Si es la última, resolver Y obtener nuevas preguntas (atómico)
+  await resolveAndFetchNext(cur.queue_item_id)
+  resetState()
 }
 
 function prev() {

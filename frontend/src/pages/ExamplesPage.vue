@@ -101,10 +101,53 @@ const canGoPrev = computed(() => {
   return currentIndex.value > 0
 })
 
-// ─── Side Effects ───
-function fireAndForgetResolve(queueItemId: number) {
-  api.patch(`/examples/${queueItemId}/resolve`)
-    .catch(() => { }) // Silencioso, no nos importa si falla
+// ─── API Calls with new Unified Endpoint ───
+
+/**
+ * Resuelve un item SIN obtener nuevos ejemplos.
+ * Usado cuando el usuario avanza pero hay más ejemplos en el lote.
+ */
+function resolveOnly(queueItemId: number) {
+  api.post('/examples/explore', {
+    actions: ['resolve'],
+    resolve_queue_item_id: queueItemId
+  }).catch(() => { }) // Silencioso, no nos importa si falla
+}
+
+/**
+ * Resuelve un item Y obtiene nuevos ejemplos.
+ * Usado cuando el usuario llegó al último ejemplo del lote.
+ */
+async function resolveAndFetchNext(queueItemId: number) {
+  generating.value = true
+  error.value = null
+
+  try {
+    const response = await api.post('/examples/explore', {
+      actions: ['resolve', 'next'],
+      resolve_queue_item_id: queueItemId,
+      limit: BATCH_SIZE
+    })
+
+    const data = response.data
+
+    if (data.status === 'generating') {
+      startPolling()
+      return
+    }
+
+    if (data.status === 'no_words') {
+      generating.value = false
+      noWords.value = true
+      return
+    }
+
+    generating.value = false
+    loadExamples(data)
+  } catch (e: any) {
+    generating.value = false
+    error.value = e.response?.data?.message || e.message || 'Failed to fetch examples'
+  }
 }
 
 // ─── Text-to-Speech ───
@@ -156,8 +199,9 @@ function startPolling() {
   const poll = () => {
     pollTimer.value = setTimeout(async () => {
       try {
-        const response = await api.get('/examples/explore', {
-          params: { limit: BATCH_SIZE }
+        const response = await api.post('/examples/explore', {
+          actions: ['next'],
+          limit: BATCH_SIZE
         })
 
         if (response.data.status === 'generating') {
@@ -217,10 +261,9 @@ async function fetchExamples() {
   error.value = null
 
   try {
-    const response = await api.get('/examples/explore', {
-      params: {
-        limit: BATCH_SIZE
-      }
+    const response = await api.post('/examples/explore', {
+      actions: ['next'],
+      limit: BATCH_SIZE
     })
 
     const data = response.data
@@ -434,28 +477,21 @@ async function removeFavorite(exampleId: number) {
   }
 }
 
-function refreshExample() {
-  // Si hay más ejemplos en el batch, avanzar al siguiente
-  if (canGoNext.value) {
-    // Marcar el ejemplo actual como consumido antes de avanzar
-    const currentEx = currentExample.value
-    if (currentEx) {
-      fireAndForgetResolve(currentEx.queue_item_id)
-    }
+async function refreshExample() {
+  const currentEx = currentExample.value
+  if (!currentEx) return
 
+  // Si hay más ejemplos en el batch, resolver y avanzar
+  if (canGoNext.value) {
+    resolveOnly(currentEx.queue_item_id)
     currentIndex.value++
     selectedWord.value = null
     isMobileDetailOpen.value = false
     return
   }
 
-  // Si se acabaron, marcar el actual como visto y generar nuevos
-  const currentEx = currentExample.value
-  if (currentEx) {
-    fireAndForgetResolve(currentEx.queue_item_id)
-  }
-
-  fetchExamples()
+  // Si es el último, resolver Y obtener nuevos ejemplos (atómico)
+  await resolveAndFetchNext(currentEx.queue_item_id)
   selectedWord.value = null
   isMobileDetailOpen.value = false
 }
@@ -468,20 +504,19 @@ function prevExample() {
   }
 }
 
-function nextExample() {
+async function nextExample() {
   if (canGoNext.value) {
-    // Marcar el ejemplo actual como consumido antes de avanzar
     const currentEx = currentExample.value
     if (currentEx) {
-      fireAndForgetResolve(currentEx.queue_item_id)
+      resolveOnly(currentEx.queue_item_id)
     }
 
     currentIndex.value++
     selectedWord.value = null
     isMobileDetailOpen.value = false
   } else {
-    // Si no hay más, generar nuevos
-    refreshExample()
+    // Si no hay más, resolver y obtener nuevos
+    await refreshExample()
   }
 }
 

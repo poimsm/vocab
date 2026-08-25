@@ -3,11 +3,8 @@ from logging_client import logger
 
 from fastapi.middleware.cors import CORSMiddleware
 
-from sqlmodel import SQLModel
 from db import engine
 import models
-
-from db import engine
 
 from examples import example_routes as examples
 from words import word_routes as words
@@ -38,5 +35,4 @@ app.include_router(learning_path.router, prefix="/learning-path", tags=["learnin
 
 @app.on_event("startup")
 def startup():
-    SQLModel.metadata.create_all(engine)
     logger.info("Vocab backend started successfully!")
