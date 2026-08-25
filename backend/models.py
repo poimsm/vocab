@@ -131,6 +131,7 @@ class Example(SQLModel, table=True):
     type: ExampleType = Field(index=True)
     text: str = Field(nullable=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    favorited_at: Optional[datetime] = Field(default=None, index=True)
     normalized: Optional[str] = Field(default=None, max_length=255, unique=True, index=True)
     times_seen: int = Field(default=0)
     sequence: int = Field(default=0, index=True)

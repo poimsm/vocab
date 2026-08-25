@@ -9,7 +9,7 @@ from logging_client import logger
 from auth.repository import get_current_user
 from models import User, ContentType, ContentQueue, Example
 from decorators import log_endpoint
-from examples.example_schemas import ExploreResponse, ExploreExample
+from examples.example_schemas import ExploreResponse, ExploreExample, FavoritesResponse
 from learning_path.content_queue import ContentQueue as ContentQueueManager
 from learning_path.learning_tracker import LearningTracker
 from examples.example_repository import ExampleRepository
@@ -171,6 +171,7 @@ def get_explore_feed(
                 "example_id": ex.id,
                 "text": text_segments,
                 "extracted_words": extracted_words,
+                "is_favorite": ex.is_favorite,
             }
         )
 
@@ -254,7 +255,7 @@ def toggle_example_favorite(
     }
 
 
-@router.get("/favorites", response_model=dict)
+@router.get("/favorites", response_model=FavoritesResponse)
 @log_endpoint
 def get_favorite_examples(
     page: int = 1,

@@ -25,11 +25,30 @@ class ExploreExample(BaseModel):
     example_id: int
     text: List[TextSegment]
     extracted_words: List[str]
+    is_favorite: bool
 
 
 class ExploreResponse(BaseModel):
     """Schema de respuesta para el endpoint /explore de ejemplos"""
     examples: List[ExploreExample]
+    status: str = "ok"
+
+
+class FavoriteExample(BaseModel):
+    """Schema para un ejemplo favorito"""
+    id: int
+    text: List[TextSegment]
+    extracted_words: List[str]
+    is_favorite: bool
+
+
+class FavoritesResponse(BaseModel):
+    """Schema de respuesta para el endpoint /favorites"""
+    items: List[FavoriteExample]
+    total: int
+    page: int
+    limit: int
+    pages: int
     status: str = "ok"
 
 

@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import joinedload
+from sqlalchemy import nulls_last
 from sqlmodel import Session, func, or_, select
 from logging_client import logger
 from models import ContentQueue, ContentQueueStatus
@@ -278,6 +279,12 @@ class ExampleRepository:
             return False
 
         example.is_favorite = not example.is_favorite
+        # Registrar cuándo se marcó como favorito
+        if example.is_favorite:
+            example.favorited_at = datetime.now(timezone.utc)
+        else:
+            example.favorited_at = None
+
         self.session.add(example)
         self.session.commit()
         self.session.refresh(example)
@@ -306,11 +313,12 @@ class ExampleRepository:
         offset = (page - 1) * limit
         pages = (total + limit - 1) // limit if total > 0 else 1
 
-        # Obtener ejemplos
+        # Obtener ejemplos ordenados por fecha de favorito (más reciente primero)
+        # Los NULL van al final
         examples = self.session.exec(
             select(Example)
             .where(Example.is_favorite == True)
-            .order_by(Example.created_at.desc())
+            .order_by(nulls_last(Example.favorited_at.desc()))
             .offset(offset)
             .limit(limit)
         ).all()

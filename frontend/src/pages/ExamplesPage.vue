@@ -385,6 +385,8 @@ async function fetchFavorites() {
         favoriteExamples.value = response.data.items || []
       } else {
         favoriteExamples.value.push(...(response.data.items || []))
+        // Re-ordenar por ID descendente (más reciente primero)
+        favoriteExamples.value.sort((a, b) => (b.id || 0) - (a.id || 0))
       }
       favoritesTotalPages.value = response.data.pages || 1
     }
