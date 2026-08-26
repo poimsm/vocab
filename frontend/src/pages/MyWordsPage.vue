@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import api from '@/utils/api'
 
@@ -43,6 +43,7 @@ const showSearchMobile = ref(false)
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalWords = ref(0)
+const totalFavorites = ref(0)
 const hasMore = ref(false)
 const loadingMore = ref(false)
 
@@ -135,6 +136,10 @@ async function fetchWords(reset = false) {
       params.is_favorite = true
     }
 
+    if (searchQuery.value.trim()) {
+      params.search = searchQuery.value.trim()
+    }
+
     const response = await api.get('/words/words', { params })
 const data = response.data
 
@@ -163,6 +168,7 @@ const data = response.data
 
     totalPages.value = data.pages || 1
     totalWords.value = data.total || 0
+    totalFavorites.value = data.total_favorites || 0
     hasMore.value = data.page < data.pages
   } catch (e: any) {
     error.value = e.message
@@ -223,9 +229,18 @@ const data = response.data
 
 async function toggleFavoriteApi(word: Word) {
   try {
+    const wasFavorite = word.isFavorite
     const response = await api.patch(`words/words/${word.id}/favorite`)
-const data = response.data
+    const data = response.data
     word.isFavorite = data.is_favorite ?? !word.isFavorite
+
+    // Actualizar contador reactivamente
+    if (wasFavorite && !word.isFavorite) {
+      totalFavorites.value--
+    } else if (!wasFavorite && word.isFavorite) {
+      totalFavorites.value++
+    }
+
     if (selectedWord.value?.id === word.id) {
       selectedWord.value.isFavorite = word.isFavorite
     }
@@ -240,7 +255,7 @@ async function addWordApi() {
   adding.value = true
   try {
     try {
-  const response = await api.post('/words', { text })
+  const response = await api.post('/words/single', { text })
   const data = response.data
 } catch (error: any) {
   const detail = error.response?.data?.detail
@@ -271,22 +286,7 @@ async function deleteWordApi(id: number) {
 }
 
 // ─── Computed ───
-const filteredWords = computed(() => {
-  let list = words.value
-
-  const q = searchQuery.value.toLowerCase().trim()
-  if (q) {
-    list = list.filter(w =>
-      w.word.toLowerCase().includes(q) ||
-      w.definition.toLowerCase().includes(q) ||
-      w.category.toLowerCase().includes(q)
-    )
-  }
-
-  return list
-})
-
-const favoriteCount = computed(() => words.value.filter(w => w.isFavorite).length)
+// (totalFavorites removed - now using totalFavorites from API)
 
 // ─── Methods ───
 function toggleFavorite(word: Word) {
@@ -396,7 +396,7 @@ onUnmounted(() => {
             <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
           </svg>
           <span>Favorites</span>
-          <span v-if="favoriteCount > 0" class="fav-count">{{ favoriteCount }}</span>
+          <span v-if="totalFavorites > 0" class="fav-count">{{ totalFavorites }}</span>
         </button>
       </div>
       <!-- Mobile Search Button -->
@@ -413,7 +413,7 @@ onUnmounted(() => {
         <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
         </svg>
-        <span v-if="favoriteCount > 0" class="mobile-fav-badge">{{ favoriteCount }}</span>
+        <span v-if="totalFavorites > 0" class="mobile-fav-badge">{{ totalFavorites }}</span>
       </button>
       <!-- Mobile Filter Button -->
       <button class="mobile-filter-btn" @click="showFilterMenu = !showFilterMenu">
@@ -464,7 +464,7 @@ onUnmounted(() => {
           autofocus
           @keydown.escape="showSearchMobile = false"
         />
-        <button class="mobile-search-close" @click="showSearchMobile = false">
+        <button class="mobile-search-close" @click="searchQuery = ''; showSearchMobile = false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
           </svg>
@@ -538,7 +538,7 @@ onUnmounted(() => {
       <!-- Word List — NO internal scroll, flows naturally with the page -->
       <div class="word-list">
         <div
-          v-for="word in filteredWords"
+          v-for="word in words"
           :key="word.id"
           class="word-card"
           :class="{ active: selectedWord?.id === word.id }"
@@ -589,7 +589,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Empty State -->
-        <div v-if="filteredWords.length === 0 && !loadingMore" class="empty-state">
+        <div v-if="words.length === 0 && !loadingMore" class="empty-state">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>

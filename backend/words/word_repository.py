@@ -35,6 +35,7 @@ class WordRepository:
         limit: int = 15,
         learning_state: str = None,
         is_favorite: bool = False,
+        search: str = None,
     ) -> Dict[str, Any]:
         """
         Obtiene palabras del usuario con paginación.
@@ -56,6 +57,16 @@ class WordRepository:
         # Filtrar por favoritos si se solicita
         if is_favorite:
             statement = statement.where(Word.is_favorite == True)
+
+        # Filtrar por búsqueda (en word y meaning)
+        if search:
+            search_term = f"%{search}%"
+            statement = statement.where(
+                or_(
+                    Word.main.ilike(search_term),
+                    Word.meaning.ilike(search_term)
+                )
+            )
 
         # Filtrar por learning_state si se proporciona
         if learning_state:
@@ -102,6 +113,16 @@ class WordRepository:
         # Filtrar por favoritos en el conteo si se solicita
         if is_favorite:
             count_statement = count_statement.where(Word.is_favorite == True)
+
+        # Filtrar por búsqueda en el conteo si se solicita
+        if search:
+            search_term = f"%{search}%"
+            count_statement = count_statement.where(
+                or_(
+                    Word.main.ilike(search_term),
+                    Word.meaning.ilike(search_term)
+                )
+            )
 
         if learning_state:
             # Map user-friendly categories to internal states
@@ -280,3 +301,13 @@ class WordRepository:
 
         self.session.commit()
         return True
+
+    def get_total_favorites(self, user_id: int) -> int:
+        """Obtiene el total de palabras favoritas del usuario"""
+        return self.session.exec(
+            select(func.count()).select_from(Word).where(
+                Word.user_id == user_id,
+                Word.is_active == True,
+                Word.is_favorite == True
+            )
+        ).one() or 0

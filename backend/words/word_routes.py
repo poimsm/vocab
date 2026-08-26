@@ -28,6 +28,7 @@ def get_words(
     limit: int = Query(15, ge=1, le=100),
     learning_state: str = Query(None),
     is_favorite: bool = Query(False),
+    search: str = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -38,7 +39,7 @@ def get_words(
     learning_state: None (all), new, learning (in progress), mastered (learned)
     is_favorite: True para traer solo favoritas, False para traer todas
     """
-    logger.info(f"[get_words] User {current_user.id}: Fetching words (sort={sort}, page={page}, limit={limit}, learning_state={learning_state}, is_favorite={is_favorite})")
+    logger.info(f"[get_words] User {current_user.id}: Fetching words (sort={sort}, page={page}, limit={limit}, learning_state={learning_state}, is_favorite={is_favorite}, search={search})")
 
     word_repo = WordRepository(db)
     paginated_data = word_repo.get_words(
@@ -47,10 +48,15 @@ def get_words(
         page=page,
         limit=limit,
         learning_state=learning_state,
-        is_favorite=is_favorite
+        is_favorite=is_favorite,
+        search=search
     )
 
     logger.debug(f"[get_words] Retrieved {len(paginated_data['items'])} words")
+
+    # Contar total de palabras favoritas del usuario
+    total_favorites = word_repo.get_total_favorites(current_user.id)
+    paginated_data["total_favorites"] = total_favorites
 
     # Transformar palabras para respuesta
     paginated_data["items"] = [
