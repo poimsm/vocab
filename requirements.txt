@@ -13,3 +13,4 @@ celery
 redis
 requests
 lemminflect
+nltk

@@ -3,8 +3,10 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # 1. Copiamos el requirements que está en la raíz del contexto (.)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt ..
+
+RUN pip install --no-cache-dir -r requirements.txt \
+    && python -m nltk.downloader punkt wordnet stopwords punkt_tab
 
 # 2. Copiamos TODO el contenido de la carpeta local backend/ dentro de /app
 COPY ./backend/ .
