@@ -34,6 +34,7 @@ class WordRepository:
         page: int = 1,
         limit: int = 15,
         learning_state: str = None,
+        is_favorite: bool = False,
     ) -> Dict[str, Any]:
         """
         Obtiene palabras del usuario con paginación.
@@ -44,12 +45,17 @@ class WordRepository:
           - new: Only NEW words
           - learning: LEARNING + REINFORCING + SPACING + ALMOST_LEARNED
           - mastered: LEARNED + REVIEW
+        is_favorite: Filter only favorite words
         """
         # Obtener palabras del usuario
         statement = (
             select(Word)
             .where(Word.user_id == user_id, Word.is_active == True)
         )
+
+        # Filtrar por favoritos si se solicita
+        if is_favorite:
+            statement = statement.where(Word.is_favorite == True)
 
         # Filtrar por learning_state si se proporciona
         if learning_state:
@@ -92,6 +98,10 @@ class WordRepository:
                 Word.user_id == user_id, Word.is_active == True
             )
         )
+
+        # Filtrar por favoritos en el conteo si se solicita
+        if is_favorite:
+            count_statement = count_statement.where(Word.is_favorite == True)
 
         if learning_state:
             # Map user-friendly categories to internal states

@@ -36,6 +36,8 @@ const filterMode = ref<FilterMode>('all')
 const learningStateFilter = ref<LearningStateFilter>('all')
 const selectedWord = ref<Word | null>(null)
 const showMobileDetail = ref(false)
+const showFilterMenu = ref(false)
+const showSearchMobile = ref(false)
 
 // ─── Infinite Scroll State ───
 const currentPage = ref(1)
@@ -126,6 +128,10 @@ async function fetchWords(reset = false) {
 
     if (learningStateFilter.value !== 'all') {
       params.learning_state = learningStateFilter.value
+    }
+
+    if (filterMode.value === 'favorites') {
+      params.is_favorite = true
     }
 
     const response = await api.get('/words/words', { params })
@@ -266,10 +272,6 @@ async function deleteWordApi(id: number) {
 const filteredWords = computed(() => {
   let list = words.value
 
-  if (filterMode.value === 'favorites') {
-    list = list.filter(w => w.isFavorite)
-  }
-
   const q = searchQuery.value.toLowerCase().trim()
   if (q) {
     list = list.filter(w =>
@@ -395,6 +397,26 @@ onUnmounted(() => {
           <span v-if="favoriteCount > 0" class="fav-count">{{ favoriteCount }}</span>
         </button>
       </div>
+      <!-- Mobile Search Button -->
+      <button class="mobile-search-btn" @click="showSearchMobile = !showSearchMobile">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+      </button>
+      <!-- Mobile Favorites Button -->
+      <button class="mobile-favorites-btn" :class="{ active: filterMode === 'favorites' }" @click="filterMode = filterMode === 'favorites' ? 'all' : 'favorites'">
+        <svg v-if="filterMode === 'favorites'" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+        </svg>
+        <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+        </svg>
+        <span v-if="favoriteCount > 0" class="mobile-fav-badge">{{ favoriteCount }}</span>
+      </button>
+      <!-- Mobile Filter Button -->
+      <button class="mobile-filter-btn" @click="showFilterMenu = !showFilterMenu">
+        <Icon icon="solar:filter-outline" width="18" />
+      </button>
     </div>
 
     <!-- Learning State Filter -->
@@ -428,6 +450,74 @@ onUnmounted(() => {
         Mastered
       </button>
     </div>
+
+    <!-- Mobile Search Panel -->
+    <transition name="slide-down">
+      <div v-if="showSearchMobile" class="mobile-search-panel">
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Search your words..."
+          class="mobile-search-input"
+          autofocus
+          @keydown.escape="showSearchMobile = false"
+        />
+        <button class="mobile-search-close" @click="showSearchMobile = false">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+          </svg>
+        </button>
+      </div>
+    </transition>
+
+    <!-- Mobile Filter Menu -->
+    <transition name="fade">
+      <div v-if="showFilterMenu" class="mobile-filter-backdrop" @click="showFilterMenu = false"></div>
+    </transition>
+    <transition name="slide-down">
+      <div v-if="showFilterMenu" class="mobile-filter-menu">
+        <button
+          class="filter-menu-item"
+          :class="{ active: learningStateFilter === 'all' }"
+          @click="learningStateFilter = 'all'; showFilterMenu = false"
+        >
+          <span>All</span>
+          <svg v-if="learningStateFilter === 'all'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </button>
+        <button
+          class="filter-menu-item"
+          :class="{ active: learningStateFilter === 'new' }"
+          @click="learningStateFilter = 'new'; showFilterMenu = false"
+        >
+          <span>New</span>
+          <svg v-if="learningStateFilter === 'new'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </button>
+        <button
+          class="filter-menu-item"
+          :class="{ active: learningStateFilter === 'learning' }"
+          @click="learningStateFilter = 'learning'; showFilterMenu = false"
+        >
+          <span>In Progress</span>
+          <svg v-if="learningStateFilter === 'learning'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </button>
+        <button
+          class="filter-menu-item"
+          :class="{ active: learningStateFilter === 'mastered' }"
+          @click="learningStateFilter = 'mastered'; showFilterMenu = false"
+        >
+          <span>Mastered</span>
+          <svg v-if="learningStateFilter === 'mastered'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </button>
+      </div>
+    </transition>
 
     <!-- Loading -->
     <div v-if="loading" class="loading-state">
@@ -983,6 +1073,201 @@ onUnmounted(() => {
   gap: 6px;
   margin-bottom: 24px;
   flex-wrap: wrap;
+}
+
+/* ─── Mobile Search Button ─── */
+.mobile-search-btn {
+  display: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #9c99ab;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.mobile-search-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e0e8;
+}
+
+/* ─── Mobile Favorites Button ─── */
+.mobile-favorites-btn {
+  display: none;
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #9c99ab;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.mobile-favorites-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e0e8;
+}
+
+.mobile-favorites-btn.active {
+  color: #f472b6;
+  background: rgba(244, 114, 182, 0.1);
+  border-color: rgba(244, 114, 182, 0.2);
+}
+
+.mobile-fav-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #f472b6;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* ─── Mobile Search Panel ─── */
+.mobile-search-panel {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #36324a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  z-index: 1501;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+}
+
+.mobile-search-input {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e2e0e8;
+  font-size: 15px;
+  outline: none;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.mobile-search-input:focus {
+  border-color: rgba(124, 58, 237, 0.4);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mobile-search-input::placeholder {
+  color: #9c99ab;
+}
+
+.mobile-search-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: #9c99ab;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.mobile-search-close:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e0e8;
+}
+
+/* ─── Mobile Filter Button ─── */
+.mobile-filter-btn {
+  display: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #9c99ab;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.mobile-filter-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e0e8;
+}
+
+/* ─── Mobile Filter Menu ─── */
+.mobile-filter-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1500;
+}
+
+.mobile-filter-menu {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #36324a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  z-index: 1501;
+  flex-direction: column;
+}
+
+.filter-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border: none;
+  background: transparent;
+  color: #9c99ab;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.filter-menu-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+  color: #e2e0e8;
+}
+
+.filter-menu-item.active {
+  color: #a78bfa;
+  background: rgba(124, 58, 237, 0.1);
+}
+
+.filter-menu-item:last-child {
+  border-bottom: none;
 }
 
 .state-tab {
@@ -2206,6 +2491,17 @@ onUnmounted(() => {
   transform: translateY(100%);
 }
 
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.2s ease;
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+  transform: translateY(-100%);
+  opacity: 0;
+}
+
 /* ════════════════════════════════════════
    Responsive
    ════════════════════════════════════════ */
@@ -2235,16 +2531,45 @@ onUnmounted(() => {
   }
 
   .words-toolbar {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
   }
 
   .search-box {
-    max-width: none;
+    display: none;
   }
 
   .filter-tabs {
-    align-self: flex-start;
+    display: none;
+  }
+
+  .mobile-search-btn {
+    display: flex;
+  }
+
+  .mobile-favorites-btn {
+    display: flex;
+  }
+
+  .mobile-filter-btn {
+    display: flex;
+  }
+
+  .mobile-search-panel {
+    display: flex;
+  }
+
+  .learning-state-filter {
+    display: none;
+  }
+
+  .mobile-filter-backdrop {
+    display: block;
+  }
+
+  .mobile-filter-menu {
+    display: flex;
   }
 
   .words-content.detail-open .word-list {

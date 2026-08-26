@@ -179,7 +179,10 @@ def _extract_words_from_example(text_segments, target_word_ids, common_words):
     """
     Extrae palabras del ejemplo, excluyendo:
     - Palabras comunes (de most_common.txt)
-    - Palabras que son target words
+    - Palabras de una sola letra
+    - Contracciones (ej: didn't, couldn't)
+
+    Normaliza posesivos (ej: team's → team, comedian's → comedian)
 
     Args:
         text_segments: Lista de TextSegment del ejemplo
@@ -192,19 +195,34 @@ def _extract_words_from_example(text_segments, target_word_ids, common_words):
     # Construir el texto completo del ejemplo
     full_text = ''.join(segment['text'] for segment in text_segments)
 
-    # Extraer palabras (lowercase, sin puntuación, incluyendo posesivos)
-    # Pattern: palabras con letras, opcionalmente seguidas de apóstrofo+s o solo apóstrofo
-    words = re.findall(r"[a-z]+(?:'s)?(?:')?", full_text.lower())
+    # Extraer palabras: captura palabras simples y palabras con apóstrofos (contracciones/posesivos)
+    # Pattern: una o más letras, opcionalmente seguidas de apóstrofo+letras
+    words = re.findall(r"[a-z]+(?:'[a-z]+)?", full_text.lower())
 
     extracted = set()
     for word in words:
         if not word:  # Ignorar strings vacíos
             continue
-        # Excluir palabras comunes
+
+        # Excluir contracciones completas que están en common_words (ej: didn't)
         if word in common_words:
             continue
 
-        extracted.add(word)
+        # Remover 's al final (normalizar posesivos: team's → team, comedian's → comedian)
+        normalized = re.sub(r"'s$", "", word)
+
+        # Remover apóstrofos restantes
+        normalized = normalized.replace("'", "")
+
+        # No extraer palabras de una sola letra
+        if len(normalized) <= 1:
+            continue
+
+        # Excluir palabras comunes (versión normalizada)
+        if normalized in common_words:
+            continue
+
+        extracted.add(normalized)
 
     return sorted(list(extracted))
 
