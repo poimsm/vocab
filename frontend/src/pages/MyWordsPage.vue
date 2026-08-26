@@ -289,6 +289,15 @@ async function deleteWordApi(id: number) {
 // (totalFavorites removed - now using totalFavorites from API)
 
 // ─── Methods ───
+function toggleFavoritesFilter() {
+  if (filterMode.value === 'favorites') {
+    filterMode.value = 'all'
+  } else {
+    filterMode.value = 'favorites'
+    learningStateFilter.value = 'all'
+  }
+}
+
 function toggleFavorite(word: Word) {
   toggleFavoriteApi(word)
 }
@@ -390,7 +399,7 @@ onUnmounted(() => {
         <button
           class="filter-tab"
           :class="{ active: filterMode === 'favorites' }"
-          @click="filterMode = 'favorites'"
+          @click="filterMode = 'favorites'; learningStateFilter = 'all'"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
@@ -406,7 +415,7 @@ onUnmounted(() => {
         </svg>
       </button>
       <!-- Mobile Favorites Button -->
-      <button class="mobile-favorites-btn" :class="{ active: filterMode === 'favorites' }" @click="filterMode = filterMode === 'favorites' ? 'all' : 'favorites'">
+      <button class="mobile-favorites-btn" :class="{ active: filterMode === 'favorites' }" @click="toggleFavoritesFilter">
         <svg v-if="filterMode === 'favorites'" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
         </svg>
@@ -422,10 +431,11 @@ onUnmounted(() => {
     </div>
 
     <!-- Learning State Filter -->
-    <div class="learning-state-filter">
+    <div class="learning-state-filter" :class="{ disabled: filterMode === 'favorites' }">
       <button
         class="state-tab"
         :class="{ active: learningStateFilter === 'all' }"
+        :disabled="filterMode === 'favorites'"
         @click="learningStateFilter = 'all'"
       >
         All
@@ -433,6 +443,7 @@ onUnmounted(() => {
       <button
         class="state-tab"
         :class="{ active: learningStateFilter === 'new' }"
+        :disabled="filterMode === 'favorites'"
         @click="learningStateFilter = 'new'"
       >
         New
@@ -440,6 +451,7 @@ onUnmounted(() => {
       <button
         class="state-tab"
         :class="{ active: learningStateFilter === 'learning' }"
+        :disabled="filterMode === 'favorites'"
         @click="learningStateFilter = 'learning'"
       >
         In Progress
@@ -447,6 +459,7 @@ onUnmounted(() => {
       <button
         class="state-tab"
         :class="{ active: learningStateFilter === 'mastered' }"
+        :disabled="filterMode === 'favorites'"
         @click="learningStateFilter = 'mastered'"
       >
         Mastered
@@ -1300,6 +1313,20 @@ onUnmounted(() => {
   background: rgba(124, 58, 237, 0.2);
   border-color: rgba(124, 58, 237, 0.4);
   color: #a78bfa;
+}
+
+.state-tab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.02);
+  color: #6b6876;
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+.state-tab:disabled:hover {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.04);
+  color: #6b6876;
 }
 
 /* ─── Loading / Error ─── */
