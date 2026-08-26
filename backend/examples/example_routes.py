@@ -166,28 +166,51 @@ def _action_next(
 # ==================== Funciones Auxiliares ====================
 
 def _load_common_words():
-    """Carga el set de palabras comunes desde most_common.txt"""
-    common_words_path = Path(__file__).parent.parent / "most_common.txt"
-    if not common_words_path.exists():
+    """Carga el set de palabras comunes desde most_common.txt, normalizando posesivos y contracciones"""
+    # Intentar múltiples ubicaciones para encontrar most_common.txt
+    possible_paths = [
+        Path(__file__).parent.parent / "most_common.txt",  # backend/most_common.txt
+        Path(__file__).parent.parent.parent / "backend" / "most_common.txt",  # /backend/most_common.txt
+        Path("/app") / "most_common.txt",  # Docker
+        Path("/app/backend") / "most_common.txt",  # Docker with backend
+    ]
+
+    common_words_path = None
+    for path in possible_paths:
+        if path.exists():
+            common_words_path = path
+            break
+
+    if not common_words_path:
+        logger.warning(f"[_load_common_words] File not found in any location. Tried: {possible_paths}")
         return set()
 
+    common_words = set()
     with open(common_words_path, 'r', encoding='utf-8') as f:
-        return {word.strip().lower() for word in f.readlines() if word.strip()}
+        for word in f.readlines():
+            word = word.strip().lower()
+            if word:
+                # Normalizar: remover 's al final y apóstrofos
+                # Así "couldn't" → "couldnt", "team's" → "team", "could" → "could"
+                normalized = re.sub(r"'s$", "", word).replace("'", "")
+                common_words.add(normalized)
+
+    return common_words
 
 
 def _extract_words_from_example(text_segments, target_word_ids, common_words):
     """
     Extrae palabras del ejemplo, excluyendo:
-    - Palabras comunes (de most_common.txt)
+    - Palabras comunes (de most_common.txt, ya normalizadas)
     - Palabras de una sola letra
-    - Contracciones (ej: didn't, couldn't)
+    - Contracciones cuya raíz es común (ej: couldn't → could está en common_words)
 
     Normaliza posesivos (ej: team's → team, comedian's → comedian)
 
     Args:
         text_segments: Lista de TextSegment del ejemplo
         target_word_ids: Set de IDs de palabras que son target words en este ejemplo
-        common_words: Set de palabras comunes (lowercased)
+        common_words: Set de palabras comunes (lowercased y normalizadas)
 
     Returns:
         Lista de palabras extraídas únicas
@@ -204,21 +227,41 @@ def _extract_words_from_example(text_segments, target_word_ids, common_words):
         if not word:  # Ignorar strings vacíos
             continue
 
-        # Excluir contracciones completas que están en common_words (ej: didn't)
-        if word in common_words:
-            continue
+        # Detectar apostrofos: pueden ser ' (U+0027) o ' (U+2019) u otros
+        has_any_apostrophe = any(c in word for c in ["'", "'", "`", "´", "’", "‘"])
+
+        # Si tiene apóstrofo, verificar si la raíz es una palabra común
+        # Ej: "couldn't" → raíz "could" está en common_words → excluir
+        if has_any_apostrophe:
+            # Intentar split con diferentes tipos de apóstrofos
+            root = None
+            for apostrophe in ["'", "'", "`", "´"]:
+                if apostrophe in word:
+                    root = word.split(apostrophe)[0]
+                    break
+
+            # Para contracciones con "n't" (don't, can't, couldn't, won't, etc.)
+            # La raíz real es sin la "n". Ej: "couldn't" → raíz "could"
+            if root and root.endswith("n"):
+                root_without_n = root[:-1]
+                if root_without_n in common_words:
+                    continue
+
+            # Verificar raíz tal cual
+            if root and root in common_words:
+                continue
 
         # Remover 's al final (normalizar posesivos: team's → team, comedian's → comedian)
         normalized = re.sub(r"'s$", "", word)
 
-        # Remover apóstrofos restantes
+        # Remover apóstrofos restantes (contracciones: didn't → didnt)
         normalized = normalized.replace("'", "")
 
         # No extraer palabras de una sola letra
         if len(normalized) <= 1:
             continue
 
-        # Excluir palabras comunes (versión normalizada)
+        # Excluir palabras comunes (common_words ya están normalizadas)
         if normalized in common_words:
             continue
 
