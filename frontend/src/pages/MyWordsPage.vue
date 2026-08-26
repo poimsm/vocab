@@ -42,6 +42,7 @@ const showSearchMobile = ref(false)
 // ─── Infinite Scroll State ───
 const currentPage = ref(1)
 const totalPages = ref(1)
+const totalWords = ref(0)
 const hasMore = ref(false)
 const loadingMore = ref(false)
 
@@ -160,8 +161,9 @@ const data = response.data
       words.value.push(...newItems)
     }
 
-    totalPages.value = data.meta?.total_pages || 1
-    hasMore.value = data.meta?.has_next ?? false
+    totalPages.value = data.pages || 1
+    totalWords.value = data.total || 0
+    hasMore.value = data.page < data.pages
   } catch (e: any) {
     error.value = e.message
   } finally {
@@ -334,7 +336,7 @@ function handleAddKeydown(e: KeyboardEvent) {
 // ─── Watchers ───
 import { watch } from 'vue'
 
-watch([filterMode, learningStateFilter], () => {
+watch([filterMode, learningStateFilter, searchQuery], () => {
   fetchWords(true)
 })
 
@@ -354,7 +356,7 @@ onUnmounted(() => {
     <header class="words-header">
       <div class="header-left">
         <h1 class="words-title">My Words</h1>
-        <p class="words-subtitle">{{ words.length }} words saved</p>
+        <p class="words-subtitle">{{ totalWords }} words saved</p>
       </div>
       <button class="add-btn" @click="openAdd" :disabled="loading">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
