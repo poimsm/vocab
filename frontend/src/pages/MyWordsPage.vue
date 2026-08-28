@@ -282,7 +282,7 @@ async function addWordApi() {
         frequency: 'common',
         isFavorite: false,
         isLearned: false,
-        addedAt: new Date().toISOString().split('T')[0],
+        addedAt: new Date().toISOString().split('T')[0] ?? '',
         totalExamples: 0,
         type: 'pending',
         examples: [],
