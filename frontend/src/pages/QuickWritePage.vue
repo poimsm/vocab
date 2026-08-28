@@ -309,7 +309,7 @@ const revealWord = (word: string, e: Event) => {
           <div v-if="prompt.words && prompt.words.length > 0" class="words-chips">
             <div v-for="word in prompt.words" :key="word" class="chip-wrapper">
               <span class="chip">{{ maskWord(word) }}</span>
-              <button v-if="hideMaskingEnabled && !revealedWords.has(word)" class="reveal-btn" @click="revealWord(word, $event)">
+              <button v-if="hideMaskingEnabled && !revealedWords.has(word)" class="reveal-btn" @click="revealWord(word, $event)" style="display:none">
                 <Icon icon="solar:lightbulb-linear" width="14" />
               </button>
               <span v-else-if="hideMaskingEnabled && revealedWords.has(word)" class="revealed-indicator">✓</span>
@@ -337,10 +337,10 @@ const revealWord = (word: string, e: Event) => {
           <h3 class="mobile-title">{{ selectedPrompt?.prompt }}</h3>
 
           <div v-if="selectedPrompt?.words && selectedPrompt.words.length > 0" class="mobile-words">
-            <div v-for="word in selectedPrompt.words" :key="word" class="word-badge-wrapper">
+            <div v-for="word in selectedPrompt.words" :key="word" class="word-badge-wrapper" style="margin-right: 5px;">
               <span class="word-badge">{{ maskWord(word) }}</span>
               <button v-if="hideMaskingEnabled && !revealedWords.has(word)" class="reveal-btn-modal" @click="revealWord(word, $event)">
-                <Icon icon="solar:lightbulb-linear" width="16" />
+                <Icon icon="solar:lightbulb-linear" width="22" />
               </button>
               <span v-else-if="hideMaskingEnabled && revealedWords.has(word)" class="revealed-badge">✓</span>
             </div>
@@ -1250,6 +1250,11 @@ const revealWord = (word: string, e: Event) => {
 
   .edit-btn {
     font-size: 17.5px;
+  }
+
+  .reveal-btn-modal {
+    width: auto;
+    height: auto;
   }
 }
 </style>

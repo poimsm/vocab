@@ -382,7 +382,7 @@ async function randomize() {
   }
 
   .word-text {
-    font-size: 22px;
+    font-size: 21px;
   }
 
   .randomizer-subtitle {

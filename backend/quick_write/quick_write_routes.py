@@ -141,10 +141,10 @@ def update_quick_write(
         # Validar que tenga al menos 5 palabras
         word_count = len(original_content.split())
         if word_count < 8:
-            logger.warning(f"[update_quick_write] Text is too short: {word_count} words (minimum: 8)")
+            logger.warning(f"[update_quick_write] Text is too short: {word_count} words.")
             raise HTTPException(
                 status_code=400,
-                detail=f"Your response is too short. Please write at least 5 words (you wrote {word_count})."
+                detail=f"Your response is too short."
             )
 
         # Validar que sea inglés - detectar una sola vez

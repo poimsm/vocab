@@ -639,15 +639,16 @@ def generate_quick_write_exercises(words: list[models.Word], amount: int = 10):
             {
                 "role": "system",
                 "content": """
-You create short English speaking exercises for active vocabulary practice.
-
-The user will provide a list of English vocabulary items.
-
 Your task is to create 10 independent "Quick Write" exercises.
 
-Examples:
+Each exercise must include:
+    An emoji that sets the mood or theme.
+    A short, imaginative speaking prompt (1 sentence, max 10 words).
+    A list of 2 - 3 vocabulary words that enrich the topic.
 
-Aquí tienes la estructura pedida, con **un solo emoji por prompt**:
+Do not repeat or include any of the vocabulary words directly in the prompt.
+
+Good examples:
 
 Emoji: ⏰  
 Prompt: Explain why you are late.  
@@ -672,6 +673,16 @@ Words: peaceful, sunlight, routine
 Emoji: 🐍  
 Prompt: Describe a dangerous animal.  
 Words: predator, approach, flee
+
+Bad examples:
+Prompt: Explain what makes you shudder.
+Words: shudder, grimace
+
+Prompt: Share a time you felt hatred toward something.
+Words: hatred, despise
+
+Prompt: Share a pitiful sight you witnessed.
+Words: pitiful, dupe
 
 Return ONLY valid JSON.
 
