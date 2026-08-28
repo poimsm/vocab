@@ -50,6 +50,7 @@ const storyComplete = ref(false)
 const currentSpark = computed(() => sparks[currentSparkIndex.value])
 
 const hasUsedWord = (text: string): boolean => {
+  if (!currentSpark.value) return false
   const lowerText = text.toLowerCase()
   return currentSpark.value.words.some(word => lowerText.includes(word.toLowerCase()))
 }
@@ -63,6 +64,11 @@ const validateAndContinue = () => {
   }
 
   if (!hasUsedWord(currentInput.value)) {
+    showError.value = true
+    return
+  }
+
+  if (!currentSpark.value) {
     showError.value = true
     return
   }
@@ -126,7 +132,7 @@ const handleKeydown = (e: KeyboardEvent) => {
         <div class="progress-fill" :style="{ width: `${(currentSparkIndex / (sparks.length - 1)) * 100}%` }"></div>
       </div>
 
-      <div class="scene-card">
+      <div v-if="currentSpark" class="scene-card">
         <div class="scene-number">Scene {{ currentSparkIndex + 1 }}/{{ sparks.length }}</div>
 
         <p class="scene-text">{{ currentSpark.narration }}</p>
