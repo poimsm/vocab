@@ -2,6 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Instalar Java (versión 21 disponible en Debian estable)
+RUN apt-get update && apt-get install -y openjdk-21-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
+
 # 1. Copiamos el requirements que está en la raíz del contexto (.)
 COPY requirements.txt ..
 

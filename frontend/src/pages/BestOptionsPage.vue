@@ -530,7 +530,7 @@ onUnmounted(stopPolling)
 
 /* Question */
 .question {
-  font-size: 22px; line-height: 1.45; color: #e2e0e8;
+  font-size: 22px; line-height: 1.45; color: #e2e0e8e3;
   text-align: center; margin: 0; padding: 0 4px;
 }
 
@@ -575,7 +575,7 @@ onUnmounted(stopPolling)
 .opt.selected .letter { background: #7c3aed; color: white; }
 .opt.correct .letter { background: #4ade80; color: #064e3b; }
 .opt.wrong .letter { background: #f87171; color: #450a0a; }
-.text { font-size: 13px; line-height: 1.3; }
+.text { font-size: 14px; line-height: 1.3; }
 
 @media (max-width: 768px) {
   .text {
@@ -628,6 +628,6 @@ onUnmounted(stopPolling)
 @media (max-width: 480px) {
   .options { grid-template-columns: 1fr; }
   .question { font-size: 20px; }
-  .word { font-size: 17px; padding: 8px 18px; }
+  .word { font-size: 17px; padding: 8px 18px; margin-top: 50px}
 }
 </style>

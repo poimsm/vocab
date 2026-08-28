@@ -984,7 +984,7 @@ onUnmounted(() => {
 }
 
 .sentence-text {
-  font-size: 28px;
+  font-size: 25px;
   line-height: 1.5;
   font-weight: 400;
   color: #b8b5c8;
@@ -1070,6 +1070,7 @@ onUnmounted(() => {
   border-left: 1px solid rgba(255, 255, 255, 0.06);
   padding: 24px;
   overflow-y: auto;
+  z-index: 999;
 }
 
 .panel-header {

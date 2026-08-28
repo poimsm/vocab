@@ -15,9 +15,49 @@ from decorators import log_endpoint
 from words.word_repository import WordRepository
 from words.word_generator import WordGenerator
 import ai
+import os
 
 
 router = APIRouter()
+
+
+# Load bad words list at startup
+def load_bad_words():
+    """Carga la lista de palabras prohibidas desde bad_words.txt"""
+    bad_words_path = os.path.join(os.path.dirname(__file__), "..", "bad_words.txt")
+    try:
+        with open(bad_words_path, 'r', encoding='utf-8') as f:
+            # Convertir a lowercase para búsqueda case-insensitive
+            return set(word.strip().lower() for word in f.readlines() if word.strip())
+    except Exception as e:
+        logger.warning(f"[load_bad_words] Error loading bad_words.txt: {e}")
+        return set()
+
+
+BAD_WORDS_SET = load_bad_words()
+
+
+def contains_bad_words(text: str) -> tuple[bool, str]:
+    """
+    Verifica si el texto contiene palabras prohibidas.
+
+    Retorna:
+        (tiene_bad_words, palabra_encontrada)
+    """
+    text_lower = text.lower()
+    words_in_text = text_lower.split()
+
+    # Búsqueda exacta en palabras individuales
+    for word in words_in_text:
+        if word in BAD_WORDS_SET:
+            return True, word
+
+    # Búsqueda de bad words contenidas en el texto
+    for bad_word in BAD_WORDS_SET:
+        if bad_word in text_lower:
+            return True, bad_word
+
+    return False, ""
 
 
 @router.get("/words", response_model=dict)
@@ -77,6 +117,39 @@ def get_words(
     ]
 
     return paginated_data
+
+
+@router.get("/random", response_model=dict)
+@log_endpoint
+def get_random_words(
+    limit: int = Query(15, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Obtiene palabras aleatorias del usuario"""
+    logger.info(f"[get_random_words] User {current_user.id}: Fetching {limit} random words")
+
+    word_repo = WordRepository(db)
+    random_words = word_repo.get_random_words(current_user.id, limit)
+
+    items = [
+        {
+            "id": w.id,
+            "main": TextFormatter.capitalize(w.main),
+            "meaning": TextFormatter.capitalize(w.meaning),
+            "type": w.type,
+            "frequency": w.frequency,
+            "level": w.level,
+        }
+        for w in random_words
+    ]
+
+    logger.debug(f"[get_random_words] Retrieved {len(items)} random words")
+
+    return {
+        "items": items,
+        "total": len(items)
+    }
 
 
 @router.get("/words/{word_id}", response_model=WordDetail)
@@ -153,6 +226,15 @@ def create_single_word(
         return {
             "status": "error",
             "message": "El campo 'text' no puede estar vacío"
+        }
+
+    # Validar que no contenga palabras prohibidas
+    has_bad_words, bad_word = contains_bad_words(text)
+    if has_bad_words:
+        logger.warning(f"[create_single_word] Text contains bad word: {bad_word}")
+        return {
+            "status": "error",
+            "message": "Cannot add this word. It contains inappropriate content."
         }
 
     try:

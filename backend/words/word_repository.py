@@ -311,3 +311,129 @@ class WordRepository:
                 Word.is_favorite == True
             )
         ).one() or 0
+
+    def get_random_words(self, user_id: int, limit: int = 15) -> List[Word]:
+        """Obtiene palabras aleatorias del usuario"""
+        # Obtener todas las palabras del usuario
+        words = self.session.exec(
+            select(Word).where(
+                Word.user_id == user_id,
+                Word.is_active == True
+            )
+        ).all()
+
+        # Si hay menos palabras que el límite, devolver todas
+        if len(words) <= limit:
+            return words
+
+        # Si hay más, devolver una muestra aleatoria
+        return random.sample(words, limit)
+
+    def get_words_by_learning_priority(
+        self,
+        user_id: int,
+        limit: int = 10,
+        content_type: ContentType = ContentType.EXAMPLE
+    ) -> List[Word]:
+        """
+        Obtiene palabras del usuario priorizadas por estado de aprendizaje.
+
+        Prioridad:
+        1. Palabras con learning_state = LEARNED (máxima prioridad)
+        2. Palabras en progreso (SPACING, ALMOST_LEARNED, REINFORCING, LEARNING)
+        3. Palabras NEW (mínima prioridad)
+
+        Args:
+            user_id: ID del usuario
+            limit: Máximo número de palabras a devolver
+            content_type: Tipo de contenido a filtrar (default: EXAMPLE)
+
+        Returns:
+            Lista de palabras ordenadas por prioridad de aprendizaje
+        """
+        logger.info(f"[WordRepository] Getting {limit} words by learning priority for user {user_id}")
+
+        # Estados de progreso (entre NEW y LEARNED)
+        in_progress_states = [
+            LearningState.LEARNING,
+            LearningState.REINFORCING,
+            LearningState.SPACING,
+            LearningState.ALMOST_LEARNED
+        ]
+
+        # Obtener palabras LEARNED
+        learned_words = self.session.exec(
+            select(func.distinct(Word.id))
+            .select_from(Word)
+            .join(WordStatistics)
+            .where(
+                Word.user_id == user_id,
+                Word.is_active == True,
+                WordStatistics.type == content_type,
+                WordStatistics.learning_state == LearningState.LEARNED
+            )
+            .limit(limit)
+        ).all()
+
+        result = []
+        remaining_limit = limit - len(learned_words)
+
+        if learned_words:
+            result.extend(
+                self.session.exec(
+                    select(Word).where(Word.id.in_(learned_words))
+                ).all()
+            )
+            logger.debug(f"[WordRepository] Found {len(learned_words)} LEARNED words")
+
+        # Si aún necesitamos más palabras, obtener palabras en progreso
+        if remaining_limit > 0:
+            in_progress_words = self.session.exec(
+                select(func.distinct(Word.id))
+                .select_from(Word)
+                .join(WordStatistics)
+                .where(
+                    Word.user_id == user_id,
+                    Word.is_active == True,
+                    WordStatistics.type == content_type,
+                    WordStatistics.learning_state.in_(in_progress_states),
+                    ~Word.id.in_(learned_words) if learned_words else True
+                )
+                .limit(remaining_limit)
+            ).all()
+
+            if in_progress_words:
+                result.extend(
+                    self.session.exec(
+                        select(Word).where(Word.id.in_(in_progress_words))
+                    ).all()
+                )
+                remaining_limit -= len(in_progress_words)
+                logger.debug(f"[WordRepository] Found {len(in_progress_words)} in-progress words")
+
+        # Si aún necesitamos más palabras, obtener palabras NEW
+        if remaining_limit > 0:
+            new_words = self.session.exec(
+                select(func.distinct(Word.id))
+                .select_from(Word)
+                .join(WordStatistics)
+                .where(
+                    Word.user_id == user_id,
+                    Word.is_active == True,
+                    WordStatistics.type == content_type,
+                    WordStatistics.learning_state == LearningState.NEW,
+                    ~Word.id.in_(learned_words + in_progress_words) if (learned_words or in_progress_words) else True
+                )
+                .limit(remaining_limit)
+            ).all()
+
+            if new_words:
+                result.extend(
+                    self.session.exec(
+                        select(Word).where(Word.id.in_(new_words))
+                    ).all()
+                )
+                logger.debug(f"[WordRepository] Found {len(new_words)} NEW words")
+
+        logger.debug(f"[WordRepository] Returning {len(result)} words by learning priority")
+        return result

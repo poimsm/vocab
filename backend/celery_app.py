@@ -33,6 +33,7 @@ celery_app.conf.update(
         "examples.example_generator",
         "best_options.best_options_generator",
         "words.word_generator",
+        "quick_write.quick_write_generator",
     ],
     # Celery Beat: Tareas programadas
     # beat_schedule={

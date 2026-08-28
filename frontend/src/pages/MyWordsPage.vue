@@ -24,6 +24,7 @@ interface Word {
   examples: string[]
   synonyms: string[]
   sourceText?: string
+  status?: 'pending' | 'ready'
 }
 
 // ─── State ───
@@ -52,6 +53,8 @@ const showAddDesktop = ref(false)
 const showAddMobile = ref(false)
 const newWordText = ref('')
 const adding = ref(false)
+const addError = ref<string | null>(null)
+const addSuccess = ref<string | null>(null)
 
 // ─── Helpers ───
 const levelColor = (level: WordLevel | number) => {
@@ -253,18 +256,56 @@ async function addWordApi() {
   const text = newWordText.value.trim()
   if (!text) return
   adding.value = true
+  addError.value = null
+  addSuccess.value = null
+
   try {
-    try {
-  const response = await api.post('/words/single', { text })
-  const data = response.data
-} catch (error: any) {
-  const detail = error.response?.data?.detail
-  throw new Error(detail || 'Failed to add word')
-}
-    await fetchWords(true)
-    closeAdd()
-  } catch (e: any) {
-    alert(e.message)
+    const response = await api.post('/words/single', { text })
+    const data = response.data
+
+    // Handle bad words error
+    if (data.status === 'error') {
+      addError.value = data.message
+      return
+    }
+
+    // Handle successful queue
+    if (data.status === 'queued') {
+      // Add word optimistically with pending status
+      const tempId = -Date.now() // Temporary ID
+      const newWord: Word = {
+        id: tempId,
+        word: text.charAt(0).toUpperCase() + text.slice(1).toLowerCase(),
+        definition: 'Loading...',
+        level: 2,
+        category: 'Pending',
+        frequency: 'common',
+        isFavorite: false,
+        isLearned: false,
+        addedAt: new Date().toISOString().split('T')[0],
+        totalExamples: 0,
+        type: 'pending',
+        examples: [],
+        synonyms: [],
+        status: 'pending'
+      }
+
+      // Add to the beginning of the list
+      words.value.unshift(newWord)
+      totalWords.value++
+
+      addSuccess.value = 'Word added! It will be processed shortly.'
+      newWordText.value = ''
+      closeAdd()
+
+      // Reload after a delay to get the real word data
+      setTimeout(() => {
+        fetchWords(true)
+      }, 4000)
+    }
+  } catch (error: any) {
+    const detail = error.response?.data?.detail || error.response?.data?.message || error.message
+    addError.value = detail
   } finally {
     adding.value = false
   }
@@ -331,6 +372,8 @@ function closeAdd() {
   showAddDesktop.value = false
   showAddMobile.value = false
   newWordText.value = ''
+  addError.value = null
+  addSuccess.value = null
 }
 
 function addWord() {
@@ -554,7 +597,7 @@ onUnmounted(() => {
           v-for="word in words"
           :key="word.id"
           class="word-card"
-          :class="{ active: selectedWord?.id === word.id }"
+          :class="{ active: selectedWord?.id === word.id, pending: word.status === 'pending' }"
           @click="openDetail(word)"
         >
           <div class="word-card-main">
@@ -565,6 +608,9 @@ onUnmounted(() => {
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
                   </svg>
+                </span>
+                <span v-if="word.status === 'pending'" class="word-pending-badge">
+                  Pending
                 </span>
               </div>
               <p class="word-definition">{{ word.definition }}</p>
@@ -823,8 +869,21 @@ onUnmounted(() => {
           </div>
           <div class="modal-body">
             <p class="modal-hint">
-              Enter a word and our AI will automatically generate its definition, level, and category.
+              Type a word and our AI will tell you about it
             </p>
+            <div v-if="addError" class="add-error">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="12" r="10"/>
+                <path fill="white" d="M12 5c-3.9 0-7 3.1-7 7s3.1 7 7 7 7-3.1 7-7-3.1-7-7-7zm3.5 7c0 .8-.7 1.5-1.5 1.5S12.5 12.8 12.5 12 13.2 10.5 14 10.5s1.5.7 1.5 1.5zm-7 0c0 .8-.7 1.5-1.5 1.5S4.5 12.8 4.5 12 5.2 10.5 6 10.5 7.5 11.2 7.5 12z"/>
+              </svg>
+              {{ addError }}
+            </div>
+            <div v-if="addSuccess" class="add-success">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
+              </svg>
+              {{ addSuccess }}
+            </div>
             <div class="form-group">
               <label class="form-label">Word</label>
               <input
@@ -858,8 +917,21 @@ onUnmounted(() => {
         <div class="mobile-add-content">
           <h3 class="mobile-add-title">Add New Word</h3>
           <p class="mobile-add-hint">
-            Our AI will generate the definition, level, and category automatically.
+            Type a word and our AI will tell you about it
           </p>
+          <div v-if="addError" class="add-error">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="12" cy="12" r="10"/>
+              <path fill="white" d="M12 5c-3.9 0-7 3.1-7 7s3.1 7 7 7 7-3.1 7-7-3.1-7-7-7zm3.5 7c0 .8-.7 1.5-1.5 1.5S12.5 12.8 12.5 12 13.2 10.5 14 10.5s1.5.7 1.5 1.5zm-7 0c0 .8-.7 1.5-1.5 1.5S4.5 12.8 4.5 12 5.2 10.5 6 10.5 7.5 11.2 7.5 12z"/>
+            </svg>
+            {{ addError }}
+          </div>
+          <div v-if="addSuccess" class="add-success">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
+            </svg>
+            {{ addSuccess }}
+          </div>
           <input
             v-model="newWordText"
             type="text"
@@ -1520,6 +1592,36 @@ onUnmounted(() => {
   align-items: center;
 }
 
+.word-pending-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(96, 165, 250, 0.15);
+  color: #60a5fa;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+@media (max-width: 768px) {
+  .word-pending-badge {
+    font-size: 12px;
+  }
+}
+
+.word-card.pending {
+  opacity: 0.85;
+  border-color: rgba(96, 165, 250, 0.2);
+  background: rgba(96, 165, 250, 0.05);
+}
+
+.word-card.pending:hover {
+  background: rgba(96, 165, 250, 0.08);
+}
+
 .word-definition {
   font-size: 13px;
   color: #9c99ab;
@@ -2088,6 +2190,54 @@ onUnmounted(() => {
 
 .form-input::placeholder {
   color: #9c99ab;
+}
+
+.add-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+@media (max-width: 768px) {
+  .add-error {
+    font-size: 15px;
+  }
+}
+
+.add-error svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.add-success {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+@media (max-width: 768px) {
+  .add-success {
+    font-size: 15px;
+  }
+}
+
+.add-success svg {
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .modal-footer {

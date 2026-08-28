@@ -6,6 +6,9 @@ import MyWordsPage from '@/pages/MyWordsPage.vue'
 import LoginPage from '@/pages/LoginPage.vue'
 import HomePage from '@/pages/HomePage.vue'
 import BestOptionsPage from '@/pages/BestOptionsPage.vue'
+import RandomizerPage from '@/pages/RandomizerPage.vue'
+import GameStoryPage from '@/pages/GameStoryPage.vue'
+import QuickWritePage from '@/pages/QuickWritePage.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -38,6 +41,24 @@ const router = createRouter({
       path: '/best-options',
       name: 'best-options',
       component: BestOptionsPage,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/randomizer',
+      name: 'randomizer',
+      component: RandomizerPage,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/game-story',
+      name: 'game-story',
+      component: GameStoryPage,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/quick-write',
+      name: 'quick-write',
+      component: QuickWritePage,
       meta: { requiresAuth: true }
     }
   ]
