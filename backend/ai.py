@@ -646,42 +646,90 @@ def generate_quick_write_exercises(words: list[models.Word]):
                 "role": "system",
                 "content": f"""
 The user will provide a list of English vocabulary items.
-Your task is to create exactly {amount} independent "Quick Write" exercises.
 
-- Create exactly {amount} exercises.
-- Each exercise must include:
-    An emoji that sets the mood or theme.
-    A short, imaginative speaking prompt (1 sentence, max 10 words).
-    A list of 2-3 vocabulary words that enrich the topic.
-- Do not repeat or include any of the vocabulary words directly in the prompt.
-- You must only use vocabulary words given by the user.
-- Avoid repeating the same vocabulary word across exercises when possible.
+Create exactly {amount} independent "Quick Write" exercises.
 
-Good examples:
+IMPORTANT: The vocabulary list is ONLY a pool of words that can be assigned
+to exercises. It must NOT be used as inspiration for writing the prompts.
 
-Emoji: ⏰
-Prompt: Explain why you are late.
-Words: traffic, ridiculous, apologize
+For EACH exercise, follow these steps internally:
 
-Emoji: 🔑
-Prompt: Say what you would do with a mysterious key.
-Words: unlock, suspicious, basement
+1. Select 2-3 vocabulary words from the user's list.
+2. Create a completely independent speaking prompt.
+3. The prompt must NOT contain any of the selected vocabulary words.
+4. The prompt must NOT contain any other vocabulary word from the user's list.
+5. The prompt should be understandable and interesting WITHOUT seeing the
+   selected vocabulary words.
+6. The selected vocabulary words are added AFTER the prompt as useful words
+   to incorporate into the answer.
 
-Emoji: 🏘️
-Prompt: Describe your neighbor.
-Words: noisy, complain, awkward
+Think of the relationship like this:
 
-Emoji: 💼
-Prompt: Explain why you quit a job.
-Words: stress, opportunity, decision
+    Prompt = independent situation/question
+    Words  = vocabulary the learner should try to use when answering
 
-Bad examples:
+The prompt should NOT be a definition, explanation, clue, synonym, or
+paraphrase of any of the vocabulary words.
 
-Prompt: Explain what makes you shudder.
-Words: shudder, grimace
+For example, if the vocabulary list contains:
 
-Prompt: Share a time you felt hatred toward something.
-Words: hatred, despise
+["boat", "jump", "dangerous", "basement", "apologize"]
+
+GOOD:
+
+Prompt: "Describe an unexpected problem during a weekend trip."
+Words: ["boat", "jump"]
+
+The prompt does not contain "boat" or "jump".
+The learner can naturally use those words when answering.
+
+GOOD:
+
+Prompt: "Explain what you would do after discovering something strange at home."
+Words: ["basement", "dangerous"]
+
+The prompt does not contain "basement" or "dangerous".
+
+BAD:
+
+Prompt: "Describe a dangerous situation on a boat."
+Words: ["jump", "apologize"]
+
+Why BAD:
+The prompt uses vocabulary from the user's list that was not selected
+for this exercise.
+
+BAD:
+
+Prompt: "Describe a place under your house."
+Words: ["basement", "apologize"]
+
+Why BAD:
+The prompt indirectly gives away or strongly hints at "basement".
+
+BAD:
+
+Prompt: "Explain why you would jump into the water."
+Words: ["boat", "apologize"]
+
+Why BAD:
+The prompt directly uses "jump", even though it was not selected.
+
+Rules:
+
+- Prompts must be completely independent from the vocabulary list.
+- NEVER put ANY vocabulary item from the user's list inside a prompt.
+- This applies even if the word is not selected for that exercise.
+- Do not use grammatical variations of vocabulary items either.
+  Example: if the list contains "jump", do not use "jumping", "jumped", etc.
+- Do not use obvious synonyms or paraphrases of vocabulary items merely to
+  hint at them.
+- The selected words should only appear in the "words" array.
+- Each exercise should have 2-3 selected vocabulary words.
+- Avoid repeating vocabulary words across exercises when possible.
+- Prompts should be short, imaginative, and natural.
+- Prompt: exactly one sentence, maximum 10 words.
+- Do not make the prompt a definition or clue for the selected words.
 
 Return ONLY valid JSON.
 
@@ -690,13 +738,15 @@ Format:
 [
   {{
     "emoji": "⏰",
-    "prompt": "Short speaking prompt.",
+    "prompt": "Explain an unexpected problem during your morning.",
     "words": [
       {{
-        "word": "suspicious"
+        "word_id": 123,
+        "word": "traffic"
       }},
       {{
-        "word": "investigate"
+        "word_id": 456,
+        "word": "apologize"
       }}
     ]
   }}
