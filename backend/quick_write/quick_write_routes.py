@@ -88,7 +88,7 @@ def generate_quick_write_exercises(
         word_repo = WordRepository(db)
         words = word_repo.get_words_by_learning_priority(
             user_id=target_user_id,
-            limit=30,
+            limit=40,
             content_type=ContentType.EXAMPLE
         )
 
