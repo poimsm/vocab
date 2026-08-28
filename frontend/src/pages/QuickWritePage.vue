@@ -559,6 +559,7 @@ const revealWord = (word: string, e: Event) => {
   .toggle-masking {
     width: 100%;
     justify-content: center;
+    font-size: 15px;
   }
 
   .toggle-label {

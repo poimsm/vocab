@@ -621,16 +621,22 @@ WORDS:
         return None
 
 
-def generate_quick_write_exercises(words: list[models.Word], amount: int = 10):
-    logger.info(f"generate_quick_write_exercises")
+def generate_quick_write_exercises(words: list[models.Word]):
+    logger.info("generate_quick_write_exercises")
 
-    payload = [
-        {
-            "word_id": w.id,
-            "word": w.main
-        }
-        for w in words
-    ]
+    word_count = len(words)
+
+    if word_count >= 25:
+        amount = 10
+    elif word_count >= 15:
+        amount = 8
+    else:
+        amount = 5
+
+    payload = [w.main for w in words]
+
+    logger.info(f"payload: {payload}")
+    logger.info(f"amount: {amount}")
 
     response = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -638,71 +644,62 @@ def generate_quick_write_exercises(words: list[models.Word], amount: int = 10):
         messages=[
             {
                 "role": "system",
-                "content": """
-Your task is to create 10 independent "Quick Write" exercises.
+                "content": f"""
+The user will provide a list of English vocabulary items.
+Your task is to create exactly {amount} independent "Quick Write" exercises.
 
-Each exercise must include:
+- Create exactly {amount} exercises.
+- Each exercise must include:
     An emoji that sets the mood or theme.
     A short, imaginative speaking prompt (1 sentence, max 10 words).
-    A list of 2 - 3 vocabulary words that enrich the topic.
-
-Do not repeat or include any of the vocabulary words directly in the prompt.
+    A list of 2-3 vocabulary words that enrich the topic.
+- Do not repeat or include any of the vocabulary words directly in the prompt.
+- You must only use vocabulary words given by the user.
+- Avoid repeating the same vocabulary word across exercises when possible.
 
 Good examples:
 
-Emoji: ⏰  
-Prompt: Explain why you are late.  
-Words: traffic, ridiculous, apologize  
+Emoji: ⏰
+Prompt: Explain why you are late.
+Words: traffic, ridiculous, apologize
 
-Emoji: 🔑  
-Prompt: Say what you would do with a mysterious key.  
-Words: unlock, suspicious, basement  
+Emoji: 🔑
+Prompt: Say what you would do with a mysterious key.
+Words: unlock, suspicious, basement
 
-Emoji: 🏘️  
-Prompt: Describe your neighbor.  
-Words: noisy, complain, awkward  
+Emoji: 🏘️
+Prompt: Describe your neighbor.
+Words: noisy, complain, awkward
 
-Emoji: 💼  
-Prompt: Explain why you quit a job.  
-Words: stress, opportunity, decision  
-
-Emoji: 🌅  
-Prompt: Describe a perfect morning.  
-Words: peaceful, sunlight, routine  
-
-Emoji: 🐍  
-Prompt: Describe a dangerous animal.  
-Words: predator, approach, flee
+Emoji: 💼
+Prompt: Explain why you quit a job.
+Words: stress, opportunity, decision
 
 Bad examples:
+
 Prompt: Explain what makes you shudder.
 Words: shudder, grimace
 
 Prompt: Share a time you felt hatred toward something.
 Words: hatred, despise
 
-Prompt: Share a pitiful sight you witnessed.
-Words: pitiful, dupe
-
 Return ONLY valid JSON.
 
 Format:
 
 [
-  {
+  {{
     "emoji": "⏰",
     "prompt": "Short speaking prompt.",
     "words": [
-      {
-        "word_id": 123,
+      {{
         "word": "suspicious"
-      },
-      {
-        "word_id": 456,
+      }},
+      {{
         "word": "investigate"
-      }
+      }}
     ]
-  }
+  }}
 ]
 """
             },
@@ -718,6 +715,7 @@ Format:
     )
 
     content = response.choices[0].message.content.strip()
+
     logger.info(f"generate_quick_write_exercises:::: {content}")
 
     try:
@@ -735,7 +733,7 @@ Format:
         return json.loads(content)
 
     except json.JSONDecodeError:
-        print("Error parsing JSON:\n", content)
+        logger.error(f"Error parsing JSON:\n{content}")
         return None
 
 
