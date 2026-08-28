@@ -627,7 +627,7 @@ onUnmounted(stopPolling)
 /* Mobile */
 @media (max-width: 480px) {
   .options { grid-template-columns: 1fr; }
-  .question { font-size: 20px; }
+  .question { font-size: 22px; }
   .word { font-size: 17px; padding: 8px 18px; margin-top: 50px}
 }
 </style>

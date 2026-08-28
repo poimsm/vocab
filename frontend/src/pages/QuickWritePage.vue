@@ -1217,39 +1217,39 @@ const revealWord = (word: string, e: Event) => {
   }
 
   .label {
-    font-size: 14px;
+    font-size: 16px;
   }
 
   .text {
-    font-size: 16.7px;
+    font-size: 18.7px;
   }
 
   .card-text {
-    font-size: 17px;
+    font-size: 19px;
   }
 
   .chip {
-    font-size: 15px;
-  }
-
-  .card-preview {
-    font-size: 16px;
-  }
-
-  .mobile-input {
     font-size: 17px;
   }
 
+  .card-preview {
+    font-size: 18px;
+  }
+
+  .mobile-input {
+    font-size: 19px;
+  }
+
   .word-badge {
-    font-size: 16px;
+    font-size: 18px;
   }
 
   .save-btn {
-    font-size: 15.5px;
+    font-size: 17.5px;
   }
 
   .edit-btn {
-    font-size: 15.5px;
+    font-size: 17.5px;
   }
 }
 </style>

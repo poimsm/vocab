@@ -376,5 +376,29 @@ async function randomize() {
   .randomize-btn {
     font-size: 16px;
   }
+
+  .word-meaning {
+    font-size: 17px;
+  }
+
+  .word-text {
+    font-size: 22px;
+  }
+
+  .randomizer-subtitle {
+    font-size: 17px;
+  }
+
+  .word-level {
+    font-size: 13px;
+  }
+
+  .word-footer {
+    font-size: 13px;;
+  }
+
+  .toggle-meanings {
+    font-size: 15px;
+  }
 }
 </style>
