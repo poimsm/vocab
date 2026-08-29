@@ -673,17 +673,12 @@ Prompts can be about:
 - travel
 - food
 - animals
-- fantasy
-- movies
 - music
 - unusual places
 - everyday life
 - holidays
 - childhood
-- future scenarios
-- imaginary worlds
 - personal preferences
-- "what would you..." scenarios
 
 The prompts do NOT need to describe a problem or dramatic situation.
 
@@ -722,6 +717,7 @@ AVOID:
 - Repeated "How do you respond to...?" questions.
 - Repeated "Describe a time when..." questions.
 - Repeated "Tell a story about..." questions.
+- Prompts that sound like magic, dream, unrealistic.
 - Prompts that sound like an English textbook.
 - Prompts that require a specific correct answer.
 
