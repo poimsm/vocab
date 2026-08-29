@@ -676,14 +676,12 @@ Prompts can be about:
 - fantasy
 - movies
 - music
-- dreams
 - unusual places
 - everyday life
 - holidays
 - childhood
 - future scenarios
 - imaginary worlds
-- magical situations
 - personal preferences
 - "what would you..." scenarios
 
@@ -713,48 +711,6 @@ GOOD PROMPTS:
 "Imagine your first trip to outer space."
 
 "Describe your favorite spell."
-
-More examples:
-
-"Where would you build your dream house?"
-
-"What would your secret island look like?"
-
-"Describe the perfect weekend."
-
-"What would you invent if money didn't matter?"
-
-"Which animal would you choose as a pet?"
-
-"Describe your dream restaurant."
-
-"What would your ideal birthday party look like?"
-
-"Imagine living in the future."
-
-"What would your magical bedroom look like?"
-
-"Where would you spend an entire year?"
-
-"What would your own theme park look like?"
-
-"Describe the perfect road trip."
-
-"What would you put inside a mysterious box?"
-
-"Imagine waking up in another country."
-
-"What would your dream job look like?"
-
-"What would you do with a time machine?"
-
-"What would your own planet look like?"
-
-"Describe the strangest house you can imagine."
-
-"What would your perfect summer look like?"
-
-"What would you keep inside a secret room?"
 
 AVOID:
 
