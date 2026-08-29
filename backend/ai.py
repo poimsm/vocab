@@ -649,87 +649,144 @@ The user will provide a list of English vocabulary items.
 
 Create exactly {amount} independent "Quick Write" exercises.
 
-IMPORTANT: The vocabulary list is ONLY a pool of words that can be assigned
-to exercises. It must NOT be used as inspiration for writing the prompts.
+The purpose of these exercises is to make the learner quickly imagine a
+situation and speak about it using the selected vocabulary words.
 
-For EACH exercise, follow these steps internally:
+IMPORTANT VOCABULARY RULE:
 
+For each exercise:
 1. Select 2-3 vocabulary words from the user's list.
-2. Create a completely independent speaking prompt.
-3. The prompt must NOT contain any of the selected vocabulary words.
-4. The prompt must NOT contain any other vocabulary word from the user's list.
-5. The prompt should be understandable and interesting WITHOUT seeing the
-   selected vocabulary words.
-6. The selected vocabulary words are added AFTER the prompt as useful words
-   to incorporate into the answer.
+2. Write a completely independent prompt.
+3. The prompt MUST NOT contain any vocabulary word from the user's list.
+4. This includes grammatical variations of those words.
+5. The selected words must appear ONLY in the "words" field.
+6. Do not hint at, define, translate, or paraphrase the vocabulary words.
 
-Think of the relationship like this:
+PROMPT STYLE:
 
-    Prompt = independent situation/question
-    Words  = vocabulary the learner should try to use when answering
+Create prompts that are simple, imaginative, visual, and fun to answer.
 
-The prompt should NOT be a definition, explanation, clue, synonym, or
-paraphrase of any of the vocabulary words.
+The learner should immediately have something to imagine, describe, explain,
+or talk about.
 
-For example, if the vocabulary list contains:
+Prompts can be about:
+- travel
+- food
+- animals
+- fantasy
+- movies
+- music
+- dreams
+- unusual places
+- everyday life
+- holidays
+- childhood
+- future scenarios
+- imaginary worlds
+- magical situations
+- personal preferences
+- "what would you..." scenarios
 
-["boat", "jump", "dangerous", "basement", "apologize"]
+The prompts do NOT need to describe a problem or dramatic situation.
 
-GOOD:
+Prefer open-ended prompts that let the learner take the answer in any
+direction.
 
-Prompt: "Describe an unexpected problem during a weekend trip."
-Words: ["boat", "jump"]
+GOOD PROMPTS:
 
-The prompt does not contain "boat" or "jump".
-The learner can naturally use those words when answering.
+"Where would you travel in the world?"
 
-GOOD:
+"What would a dragon's lair look like?"
 
-Prompt: "Explain what you would do after discovering something strange at home."
-Words: ["basement", "dangerous"]
+"Describe your perfect beach day."
 
-The prompt does not contain "basement" or "dangerous".
+"What song describes your life?"
 
-BAD:
+"What happens on Halloween night?"
 
-Prompt: "Describe a dangerous situation on a boat."
-Words: ["jump", "apologize"]
+"Describe a day in a royal castle."
 
-Why BAD:
-The prompt uses vocabulary from the user's list that was not selected
-for this exercise.
+"What would you do with a unicorn?"
 
-BAD:
+"What would your masterpiece look like?"
 
-Prompt: "Describe a place under your house."
-Words: ["basement", "apologize"]
+"Imagine your first trip to outer space."
 
-Why BAD:
-The prompt indirectly gives away or strongly hints at "basement".
+"Describe your favorite spell."
 
-BAD:
+More examples:
 
-Prompt: "Explain why you would jump into the water."
-Words: ["boat", "apologize"]
+"Where would you build your dream house?"
 
-Why BAD:
-The prompt directly uses "jump", even though it was not selected.
+"What would your secret island look like?"
 
-Rules:
+"Describe the perfect weekend."
 
-- Prompts must be completely independent from the vocabulary list.
-- NEVER put ANY vocabulary item from the user's list inside a prompt.
-- This applies even if the word is not selected for that exercise.
-- Do not use grammatical variations of vocabulary items either.
-  Example: if the list contains "jump", do not use "jumping", "jumped", etc.
-- Do not use obvious synonyms or paraphrases of vocabulary items merely to
-  hint at them.
-- The selected words should only appear in the "words" array.
-- Each exercise should have 2-3 selected vocabulary words.
-- Avoid repeating vocabulary words across exercises when possible.
-- Prompts should be short, imaginative, and natural.
-- Prompt: exactly one sentence, maximum 10 words.
-- Do not make the prompt a definition or clue for the selected words.
+"What would you invent if money didn't matter?"
+
+"Which animal would you choose as a pet?"
+
+"Describe your dream restaurant."
+
+"What would your ideal birthday party look like?"
+
+"Imagine living in the future."
+
+"What would your magical bedroom look like?"
+
+"Where would you spend an entire year?"
+
+"What would your own theme park look like?"
+
+"Describe the perfect road trip."
+
+"What would you put inside a mysterious box?"
+
+"Imagine waking up in another country."
+
+"What would your dream job look like?"
+
+"What would you do with a time machine?"
+
+"What would your own planet look like?"
+
+"Describe the strangest house you can imagine."
+
+"What would your perfect summer look like?"
+
+"What would you keep inside a secret room?"
+
+AVOID:
+
+- Formal or academic questions.
+- IELTS/TOEFL-style questions.
+- Generic discussion questions.
+- Abstract questions about society or opinions.
+- Repeated "What do you think about...?" questions.
+- Repeated "How do you respond to...?" questions.
+- Repeated "Describe a time when..." questions.
+- Repeated "Tell a story about..." questions.
+- Prompts that sound like an English textbook.
+- Prompts that require a specific correct answer.
+
+The prompt should feel like a fun idea someone casually gives you to talk
+about.
+
+IMPORTANT:
+The prompt must be completely independent from the vocabulary list.
+Do not use, hint at, define, translate, or paraphrase ANY vocabulary item
+from the user's list.
+
+The vocabulary words are only tools that the learner should try to include
+in their answer.
+
+Each prompt:
+- exactly one sentence
+- maximum 10 words
+- natural conversational English
+- easy to understand
+- open-ended
+- interesting enough to inspire a short spoken answer
 
 Return ONLY valid JSON.
 
@@ -737,16 +794,16 @@ Format:
 
 [
   {{
-    "emoji": "⏰",
-    "prompt": "Explain an unexpected problem during your morning.",
+    "emoji": "🤨",
+    "prompt": "You find something strange inside your backpack.",
     "words": [
       {{
         "word_id": 123,
-        "word": "traffic"
+        "word": "suspicious"
       }},
       {{
         "word_id": 456,
-        "word": "apologize"
+        "word": "investigate"
       }}
     ]
   }}
