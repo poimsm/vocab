@@ -336,12 +336,13 @@ class WordRepository:
         content_type: ContentType = ContentType.EXAMPLE
     ) -> List[Word]:
         """
-        Obtiene palabras del usuario priorizadas por estado de aprendizaje.
+        Obtiene palabras del usuario con mezcla aleatoria.
 
-        Prioridad:
-        1. Palabras con learning_state = LEARNED (máxima prioridad)
-        2. Palabras en progreso (SPACING, ALMOST_LEARNED, REINFORCING, LEARNING)
-        3. Palabras NEW (mínima prioridad)
+        Estrategia:
+        1. Traer todas las palabras LEARNED e in_progress
+        2. Si faltan palabras, completar con NEW words
+        3. Mezclar aleatoriamente
+        4. Devolver la cantidad solicitada
 
         Args:
             user_id: ID del usuario
@@ -349,9 +350,9 @@ class WordRepository:
             content_type: Tipo de contenido a filtrar (default: EXAMPLE)
 
         Returns:
-            Lista de palabras ordenadas por prioridad de aprendizaje
+            Lista de palabras seleccionadas aleatoriamente del pool disponible
         """
-        logger.info(f"[WordRepository] Getting {limit} words by learning priority for user {user_id}")
+        logger.info(f"[WordRepository] Getting {limit} words (randomized) for user {user_id}")
 
         # Estados de progreso (entre NEW y LEARNED)
         in_progress_states = [
@@ -360,6 +361,9 @@ class WordRepository:
             LearningState.SPACING,
             LearningState.ALMOST_LEARNED
         ]
+
+        # Recolectar palabras LEARNED e in_progress
+        primary_word_ids = set()
 
         # Obtener palabras LEARNED
         learned_words = self.session.exec(
@@ -372,47 +376,29 @@ class WordRepository:
                 WordStatistics.type == content_type,
                 WordStatistics.learning_state == LearningState.LEARNED
             )
-            .limit(limit)
         ).all()
+        primary_word_ids.update(learned_words)
+        logger.debug(f"[WordRepository] Found {len(learned_words)} LEARNED words")
 
-        result = []
-        remaining_limit = limit - len(learned_words)
-
-        if learned_words:
-            result.extend(
-                self.session.exec(
-                    select(Word).where(Word.id.in_(learned_words))
-                ).all()
+        # Obtener palabras en progreso
+        in_progress_words = self.session.exec(
+            select(func.distinct(Word.id))
+            .select_from(Word)
+            .join(WordStatistics)
+            .where(
+                Word.user_id == user_id,
+                Word.is_active == True,
+                WordStatistics.type == content_type,
+                WordStatistics.learning_state.in_(in_progress_states)
             )
-            logger.debug(f"[WordRepository] Found {len(learned_words)} LEARNED words")
+        ).all()
+        primary_word_ids.update(in_progress_words)
+        logger.debug(f"[WordRepository] Found {len(in_progress_words)} in-progress words")
 
-        # Si aún necesitamos más palabras, obtener palabras en progreso
-        if remaining_limit > 0:
-            in_progress_words = self.session.exec(
-                select(func.distinct(Word.id))
-                .select_from(Word)
-                .join(WordStatistics)
-                .where(
-                    Word.user_id == user_id,
-                    Word.is_active == True,
-                    WordStatistics.type == content_type,
-                    WordStatistics.learning_state.in_(in_progress_states),
-                    ~Word.id.in_(learned_words) if learned_words else True
-                )
-                .limit(remaining_limit)
-            ).all()
-
-            if in_progress_words:
-                result.extend(
-                    self.session.exec(
-                        select(Word).where(Word.id.in_(in_progress_words))
-                    ).all()
-                )
-                remaining_limit -= len(in_progress_words)
-                logger.debug(f"[WordRepository] Found {len(in_progress_words)} in-progress words")
-
-        # Si aún necesitamos más palabras, obtener palabras NEW
-        if remaining_limit > 0:
+        # Si no hay suficientes palabras, rellenar con NEW words
+        all_word_ids = primary_word_ids.copy()
+        if len(primary_word_ids) < limit:
+            remaining_needed = limit - len(primary_word_ids)
             new_words = self.session.exec(
                 select(func.distinct(Word.id))
                 .select_from(Word)
@@ -421,19 +407,25 @@ class WordRepository:
                     Word.user_id == user_id,
                     Word.is_active == True,
                     WordStatistics.type == content_type,
-                    WordStatistics.learning_state == LearningState.NEW,
-                    ~Word.id.in_(learned_words + in_progress_words) if (learned_words or in_progress_words) else True
+                    WordStatistics.learning_state == LearningState.NEW
                 )
-                .limit(remaining_limit)
             ).all()
+            # Tomar solo las que necesitamos
+            all_word_ids.update(new_words[:remaining_needed])
+            logger.debug(f"[WordRepository] Added {len(new_words[:remaining_needed])} NEW words to fill")
 
-            if new_words:
-                result.extend(
-                    self.session.exec(
-                        select(Word).where(Word.id.in_(new_words))
-                    ).all()
-                )
-                logger.debug(f"[WordRepository] Found {len(new_words)} NEW words")
+        # Si no hay palabras disponibles, devolver lista vacía
+        if not all_word_ids:
+            logger.debug(f"[WordRepository] No words available for user {user_id}")
+            return []
 
-        logger.debug(f"[WordRepository] Returning {len(result)} words by learning priority")
-        return result
+        # Obtener los objetos Word completos
+        all_words = self.session.exec(
+            select(Word).where(Word.id.in_(list(all_word_ids)))
+        ).all()
+
+        # Mezclar aleatoriamente y devolver la cantidad solicitada
+        selected_words = random.sample(all_words, min(limit, len(all_words)))
+        logger.debug(f"[WordRepository] Returning {len(selected_words)} randomly selected words")
+
+        return selected_words

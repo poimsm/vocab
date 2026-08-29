@@ -627,11 +627,11 @@ def generate_quick_write_exercises(words: list[models.Word]):
     word_count = len(words)
 
     if word_count >= 25:
-        amount = 10
-    elif word_count >= 15:
         amount = 8
+    elif word_count >= 15:
+        amount = 6
     else:
-        amount = 5
+        amount = 4
 
     payload = [w.main for w in words]
 
@@ -688,23 +688,14 @@ direction.
 GOOD PROMPTS:
 
 "Where would you travel in the world?"
-
 "What would a dragon's lair look like?"
-
 "Describe your perfect beach day."
-
 "What song describes your life?"
-
 "What happens on Halloween night?"
-
 "Describe a day in a royal castle."
-
 "What would you do with a unicorn?"
-
 "What would your masterpiece look like?"
-
 "Imagine your first trip to outer space."
-
 "Describe your favorite spell."
 
 AVOID:
@@ -725,9 +716,17 @@ The prompt should feel like a fun idea someone casually gives you to talk
 about.
 
 IMPORTANT:
+
 The prompt must be completely independent from the vocabulary list.
 Do not use, hint at, define, translate, or paraphrase ANY vocabulary item
 from the user's list.
+
+SELECTION RULES:
+
+The vocabulary list is a large candidate pool.
+DO NOT use the words in the order they appear.
+You must actively select the vocabulary words that are the BEST FIT
+for each prompt.
 
 The vocabulary words are only tools that the learner should try to include
 in their answer.
