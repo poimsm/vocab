@@ -627,11 +627,11 @@ def generate_quick_write_exercises(words: list[models.Word]):
     word_count = len(words)
 
     if word_count >= 25:
-        amount = 8
+        amount = 10
     elif word_count >= 15:
-        amount = 6
+        amount = 8
     else:
-        amount = 4
+        amount = 5
 
     payload = [w.main for w in words]
 
@@ -646,98 +646,46 @@ def generate_quick_write_exercises(words: list[models.Word]):
                 "role": "system",
                 "content": f"""
 The user will provide a list of English vocabulary items.
+Your task is to create exactly {amount} independent "Quick Write" exercises.
 
-Create exactly {amount} independent "Quick Write" exercises.
+- Create exactly {amount} exercises.
+- Each exercise must include:
+    An emoji that sets the mood or theme.
+    A short, imaginative speaking prompt (1 sentence, max 10 words).
+    A list of 2-3 vocabulary words that enrich the topic.
+- Do not include any of the vocabulary words directly in the prompt.
+- You must only use vocabulary words given by the user.
 
-The purpose of these exercises is to make the learner quickly imagine a
-situation and speak about it using the selected vocabulary words.
+Good examples:
 
-IMPORTANT VOCABULARY RULE:
+Emoji: ⏰
+Prompt: Explain why you are late.
+Words: traffic, ridiculous, apologize
 
-For each exercise:
-1. Select 2-3 vocabulary words from the user's list.
-2. Write a completely independent prompt.
-3. The prompt MUST NOT contain any vocabulary word from the user's list.
-4. This includes grammatical variations of those words.
-5. The selected words must appear ONLY in the "words" field.
-6. Do not hint at, define, translate, or paraphrase the vocabulary words.
+Emoji: 🏰
+Prompt: Describe a day in a royal castle.
+Words: regal, banquet
 
-PROMPT STYLE:
+Emoji: 🏘️
+Prompt: Describe your neighbor.
+Words: noisy, complain, awkward
 
-Create prompts that are simple, imaginative, visual, and fun to answer.
+Emoji: 💼
+Prompt: Explain why you quit a job.
+Words: stress, opportunity, decision
 
-The learner should immediately have something to imagine, describe, explain,
-or talk about.
+Bad examples:
 
-Prompts can be about:
-- travel
-- food
-- animals
-- music
-- unusual places
-- everyday life
-- holidays
-- childhood
-- personal preferences
+Prompt: Explain what makes you shudder.
+Words: shudder, grimace
 
-The prompts do NOT need to describe a problem or dramatic situation.
-
-Prefer open-ended prompts that let the learner take the answer in any
-direction.
-
-GOOD PROMPTS:
-
-"Where would you travel in the world?"
-"What would a dragon's lair look like?"
-"Describe your perfect beach day."
-"What song describes your life?"
-"What happens on Halloween night?"
-"Describe a day in a royal castle."
-"What would you do with a unicorn?"
-"What would your masterpiece look like?"
-"Imagine your first trip to outer space."
-"Describe your favorite spell."
-
-AVOID:
-
-- Formal or academic questions.
-- IELTS/TOEFL-style questions.
-- Generic discussion questions.
-- Abstract questions about society or opinions.
-- Repeated "What do you think about...?" questions.
-- Repeated "How do you respond to...?" questions.
-- Repeated "Describe a time when..." questions.
-- Repeated "Tell a story about..." questions.
-- Prompts that sound like magic, dream, unrealistic.
-- Prompts that sound like an English textbook.
-- Prompts that require a specific correct answer.
-
-The prompt should feel like a fun idea someone casually gives you to talk
-about.
-
-IMPORTANT:
-
-The prompt must be completely independent from the vocabulary list.
-Do not use, hint at, define, translate, or paraphrase ANY vocabulary item
-from the user's list.
+Prompt: Share a time you felt hatred toward something.
+Words: hatred, despise
 
 SELECTION RULES:
-
-The vocabulary list is a large candidate pool.
-DO NOT use the words in the order they appear.
-You must actively select the vocabulary words that are the BEST FIT
-for each prompt.
-
-The vocabulary words are only tools that the learner should try to include
-in their answer.
-
-Each prompt:
-- exactly one sentence
-- maximum 10 words
-- natural conversational English
-- easy to understand
-- open-ended
-- interesting enough to inspire a short spoken answer
+- The vocabulary list is a large candidate pool.
+- DO NOT use the words in the order they appear.
+- You must actively select the vocabulary words that are the BEST FIT for each prompt.
 
 Return ONLY valid JSON.
 
@@ -745,15 +693,13 @@ Format:
 
 [
   {{
-    "emoji": "🤨",
-    "prompt": "You find something strange inside your backpack.",
+    "emoji": "⏰",
+    "prompt": "Short speaking prompt.",
     "words": [
       {{
-        "word_id": 123,
         "word": "suspicious"
       }},
       {{
-        "word_id": 456,
         "word": "investigate"
       }}
     ]
