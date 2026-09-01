@@ -15,7 +15,9 @@ interface RandomWord {
 const words = ref<RandomWord[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
-const showMeanings = ref(true)
+const showMeanings = ref(false)
+const flipped = ref<Set<number>>(new Set())
+const isAnimating = ref(false)
 
 onMounted(() => {
   const stored = localStorage.getItem('randomizer-show-meanings')
@@ -42,12 +44,30 @@ const levelLabel = (level: number) => {
   return '—'
 }
 
+const toggleFlip = (wordId: number) => {
+  if (flipped.value.has(wordId)) {
+    flipped.value.delete(wordId)
+  } else {
+    flipped.value.add(wordId)
+  }
+}
+
+const isFlipped = (wordId: number) => {
+  return flipped.value.has(wordId)
+}
+
+const getAnimationDelay = (index: number) => {
+  return `${index * 0.08}s`
+}
+
 async function randomize() {
   loading.value = true
   error.value = null
+  isAnimating.value = true
   try {
     const response = await api.get('/words/random', { params: { limit: 6 } })
     words.value = response.data.items || []
+    flipped.value = new Set()
   } catch (e: any) {
     error.value = e.message || 'Failed to load words'
   } finally {
@@ -59,17 +79,23 @@ async function randomize() {
 <template>
   <div class="randomizer-view">
     <header class="randomizer-header">
-      <div>
+      <div style="display:none">
         <h1 class="randomizer-title">Randomizer</h1>
         <p class="randomizer-subtitle">Get random words to use however you want 🎲</p>
       </div>
-      <button class="toggle-meanings" :class="{ active: showMeanings }" @click="showMeanings = !showMeanings" :title="showMeanings ? 'Hide meanings' : 'Show meanings'">
+      <button 
+        class="toggle-meanings" 
+        :class="{ active: showMeanings }" 
+        @click="showMeanings = !showMeanings" 
+        :title="showMeanings ? 'Hide meanings' : 'Show meanings'"
+        style="display:none;"
+        >
         <Icon :icon="showMeanings ? 'solar:eye-linear' : 'solar:eye-closed-linear'" width="20" />
         <span class="toggle-label">{{ showMeanings ? 'Visible' : 'Hidden' }}</span>
       </button>
     </header>
 
-    <div class="randomizer-button-container">
+    <div class="randomizer-button-container" :style="{ marginTop: words.length === 0 ? '200px' : '40px' }">
       <button class="randomize-btn" @click="randomize" :disabled="loading">
         <Icon icon="solar:dice-3-linear" width="20" />
         <span>{{ loading ? 'Loading...' : 'Randomize' }}</span>
@@ -81,22 +107,32 @@ async function randomize() {
     </div>
 
     <div v-else-if="words.length > 0" class="words-grid">
-      <div v-for="word in words" :key="word.id" class="word-item">
-        <div class="word-header">
-          <h3 class="word-text">{{ word.main }}</h3>
-          <span class="word-level" :style="{ color: levelColor(word.level) }">
-            {{ levelLabel(word.level) }}
-          </span>
-        </div>
-        <p v-if="showMeanings" class="word-meaning">{{ word.meaning }}</p>
-        <div class="word-footer">
-          <span class="word-type">{{ word.type }}</span>
-          <span class="word-frequency">{{ word.frequency }}</span>
+      <div
+        v-for="(word, index) in words"
+        :key="word.id"
+        class="word-item-container"
+        :class="{ 'animate-in': isAnimating }"
+        :style="{ '--delay': getAnimationDelay(index) }"
+        @click="toggleFlip(word.id)">
+        <div class="word-item" :class="{ flipped: isFlipped(word.id) || showMeanings }">
+          <div class="word-card word-card-front">
+            <h3 class="word-text">{{ word.main }}</h3>
+          </div>
+          <div class="word-card word-card-back">
+            <p class="word-meaning">{{ word.meaning }}</p>
+            <div class="word-footer">
+              <span class="word-type">{{ word.type }}</span>
+              <span class="word-frequency">{{ word.frequency }}</span>
+            </div>
+            <span class="word-level" :style="{ color: levelColor(word.level) }">
+              {{ levelLabel(word.level) }}
+            </span>
+          </div>
         </div>
       </div>
     </div>
 
-    <div v-else class="empty-state" style="display:none">
+    <div v-else class="empty-state">
       <Icon icon="solar:dice-3-linear" width="48" />
       <p>Click the randomize button to get started</p>
     </div>
@@ -151,6 +187,12 @@ async function randomize() {
   flex-shrink: 0;
 }
 
+.toggle-meanings.active {
+  background: rgba(124, 58, 237, 0.2);
+  border-color: rgba(124, 58, 237, 0.4);
+  color: #a78bfa;
+}
+
 .toggle-meanings:hover {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.2);
@@ -165,6 +207,7 @@ async function randomize() {
   display: flex;
   justify-content: center;
   margin-bottom: 40px;
+  xtransition: margin-top 0.5s ease;
 }
 
 .randomize-btn {
@@ -213,88 +256,130 @@ async function randomize() {
 
 .words-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 32px;
+  padding: 4px;
+}
+
+.word-item-container {
+  perspective: 1000px;
+  cursor: pointer;
+  height: 200px;
+  box-sizing: border-box;
+  --delay: 0s;
+  opacity: 1;
+  transform: scale(1);
+}
+
+.word-item-container.animate-in {
+  animation: fadeInScale 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation-delay: var(--delay);
 }
 
 .word-item {
-  padding: 16px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: all 0.2s ease;
-  animation: popIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  transform-style: preserve-3d;
+  box-sizing: border-box;
 }
 
-.word-item:nth-child(1) { animation-delay: 0.08s; }
-.word-item:nth-child(2) { animation-delay: 0.16s; }
-.word-item:nth-child(3) { animation-delay: 0.24s; }
-.word-item:nth-child(4) { animation-delay: 0.32s; }
-.word-item:nth-child(5) { animation-delay: 0.4s; }
-.word-item:nth-child(6) { animation-delay: 0.48s; }
+.word-item.flipped {
+  transform: rotateY(180deg);
+}
 
-.word-item:hover {
+.word-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.word-card-front {
+  background: rgba(255, 255, 255, 0.04);
+  transform: rotateY(0deg);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.word-card-back {
+  background: rgba(124, 58, 237, 0.15);
+  border-color: rgba(124, 58, 237, 0.3);
+  transform: rotateY(180deg);
+}
+
+.word-item-container:not(.animate-in):hover .word-card-front {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.12);
 }
 
-.word-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
 .word-text {
-  font-size: 18px;
+  font-size: 26px;
   font-weight: 700;
   color: #e2e0e8;
   margin: 0;
+  text-align: center;
 }
 
 .word-level {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  padding: 2px 8px;
+  padding: 5px 12px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
   white-space: nowrap;
+  margin-top: auto;
 }
 
 .word-meaning {
-  font-size: 13px;
-  color: #9c99ab;
+  font-size: 15px;
+  color: #e2e0e8;
   line-height: 1.5;
-  margin: 0 0 12px 0;
+  margin: 0;
+  text-align: center;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
 .word-footer {
   display: flex;
-  gap: 8px;
-  font-size: 12px;
+  gap: 10px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  justify-content: center;
 }
 
 .word-type {
   color: #a78bfa;
   background: rgba(167, 139, 250, 0.1);
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: 600;
 }
 
 .word-frequency {
   color: #9c99ab;
   background: rgba(255, 255, 255, 0.04);
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: 600;
 }
 
 .empty-state {
@@ -314,31 +399,23 @@ async function randomize() {
 }
 
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 @keyframes pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.7);
-  }
-  50% {
-    box-shadow: 0 0 0 10px rgba(124, 58, 237, 0);
-  }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.7); }
+  50% { box-shadow: 0 0 0 10px rgba(124, 58, 237, 0); }
 }
 
-@keyframes popIn {
-  from {
+@keyframes fadeInScale {
+  0% {
     opacity: 0;
-    transform: scale(0.3) translateY(30px);
+    transform: scale(0.97);
   }
-  to {
+  100% {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: scale(1);
   }
 }
 
@@ -350,6 +427,7 @@ async function randomize() {
   .randomizer-header {
     flex-direction: column;
     align-items: center;
+    text-align: center;
   }
 
   .randomizer-title {
@@ -357,7 +435,7 @@ async function randomize() {
   }
 
   .randomizer-subtitle {
-    font-size: 14px;
+    font-size: 15px;
   }
 
   .toggle-meanings {
@@ -371,34 +449,48 @@ async function randomize() {
 
   .words-grid {
     grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 4px;
   }
 
-  .randomize-btn {
-    font-size: 16px;
+  .word-item-container {
+    height: 220px;
+  }
+
+  .word-text {
+    font-size: 30px;
   }
 
   .word-meaning {
     font-size: 17px;
+    -webkit-line-clamp: 4;
   }
 
-  .word-text {
-    font-size: 21px;
-  }
-
-  .randomizer-subtitle {
-    font-size: 17px;
+  .word-footer {
+    font-size: 14px;
+    gap: 12px;
   }
 
   .word-level {
     font-size: 13px;
   }
 
-  .word-footer {
-    font-size: 13px;;
+  .word-card {
+    padding: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .word-item-container {
+    height: 200px;
   }
 
-  .toggle-meanings {
-    font-size: 15px;
+  .word-text {
+    font-size: 26px;
+  }
+
+  .word-meaning {
+    font-size: 16px;
   }
 }
 </style>
