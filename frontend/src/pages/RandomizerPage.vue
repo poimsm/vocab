@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, onBeforeUnmount } from 'vue'
 import { Icon } from '@iconify/vue'
 import api from '@/utils/api'
 
@@ -18,12 +18,33 @@ const error = ref<string | null>(null)
 const showMeanings = ref(false)
 const flipped = ref<Set<number>>(new Set())
 const isAnimating = ref(false)
+const buttonMarginTop = ref('200px')
+
+const calculateButtonMargin = () => {
+  if (words.value.length === 0) {
+    const viewportHeight = window.innerHeight
+    const margin = Math.max(viewportHeight / 3, 120)
+    buttonMarginTop.value = `${margin}px`
+  } else {
+    buttonMarginTop.value = '40px'
+  }
+}
 
 onMounted(() => {
   const stored = localStorage.getItem('randomizer-show-meanings')
   if (stored !== null) {
     showMeanings.value = stored === 'true'
   }
+  calculateButtonMargin()
+  window.addEventListener('resize', calculateButtonMargin)
+})
+
+watch(words, () => {
+  calculateButtonMargin()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', calculateButtonMargin)
 })
 
 watch(showMeanings, (newValue) => {
@@ -95,10 +116,10 @@ async function randomize() {
       </button>
     </header>
 
-    <div class="randomizer-button-container" :style="{ marginTop: words.length === 0 ? '200px' : '40px' }">
+    <div class="randomizer-button-container" :style="{ marginTop: buttonMarginTop }">
       <button class="randomize-btn" @click="randomize" :disabled="loading">
-        <Icon icon="solar:dice-3-linear" width="20" />
-        <span>{{ loading ? 'Loading...' : 'Randomize' }}</span>
+        <!-- <Icon icon="solar:dice-3-linear" width="20" /> -->
+        <span style="font-weight: bold;">{{ loading ? 'Loading...' : 'Randomize' }}</span>
       </button>
     </div>
 
@@ -478,6 +499,11 @@ async function randomize() {
   .word-card {
     padding: 24px;
   }
+
+  .empty-state {
+    padding: 0px 20px;
+    margin-top: -20px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -491,6 +517,11 @@ async function randomize() {
 
   .word-meaning {
     font-size: 16px;
+  }
+
+  .empty-state {
+    padding: 0px 20px;
+    margin-top: -20px;
   }
 }
 </style>
