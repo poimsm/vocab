@@ -9,6 +9,7 @@ import BestOptionsPage from '@/pages/BestOptionsPage.vue'
 import RandomizerPage from '@/pages/RandomizerPage.vue'
 import GameStoryPage from '@/pages/GameStoryPage.vue'
 import QuickWritePage from '@/pages/QuickWritePage.vue'
+import CollocationsPage from '@/pages/CollocationsPage.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -59,6 +60,12 @@ const router = createRouter({
       path: '/quick-write',
       name: 'quick-write',
       component: QuickWritePage,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/collocations',
+      name: 'collocations',
+      component: CollocationsPage,
       meta: { requiresAuth: true }
     }
   ]

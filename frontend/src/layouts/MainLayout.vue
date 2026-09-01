@@ -23,15 +23,16 @@ function handleLogout() {
 const modules = [
   { id: 'words', label: 'My Words', icon: 'solar:book-bookmark-linear', to: { name: 'my-words' } },
   { id: 'examples', label: 'Examples', icon: 'solar:chat-round-line-linear', to: { name: 'examples' } },
-  { id: 'best-options', label: 'Best Options', icon: 'mynaui:question', to: { name: 'best-options' } },
+  { id: 'best-options', label: 'Best Options', icon: 'akar-icons:chat-question', to: { name: 'best-options' } },
   { id: 'randomizer', label: 'Randomizer', icon: 'bi:dice-5', to: { name: 'randomizer' } },
   // { id: 'game-story', label: 'Game Story', icon: 'fluent:game-20-filled', to: { name: 'game-story' } },
   { id: 'quick-write', label: 'Quick Write', icon: 'solar:pen-bold', to: { name: 'quick-write' } },
+  { id: 'collocations', label: 'Pairs', icon: 'oui:magnet', to: { name: 'collocations' } },
   // { id: 'search', label: 'Search', icon: 'iconamoon:search-light', to: { name: 'home' } },
-  { id: 'explore', label: 'Explore', icon: 'material-symbols-light:explore-outline', to: { name: 'home' } },
-  { id: 'clusters', label: 'Clusters', icon: 'solar:widget-3-linear', to: { name: 'home' } },
-  { id: 'roleplay', label: 'Roleplay', icon: 'solar:users-group-rounded-linear', to: { name: 'home' } },
-  { id: 'monsters', label: 'Monsters', icon: 'solar:ghost-linear', to: { name: 'home' } }
+  // { id: 'explore', label: 'Explore', icon: 'material-symbols-light:explore-outline', to: { name: 'home' } },
+  // { id: 'clusters', label: 'Clusters', icon: 'solar:widget-3-linear', to: { name: 'home' } },
+  // { id: 'roleplay', label: 'Roleplay', icon: 'solar:users-group-rounded-linear', to: { name: 'home' } },
+  // { id: 'monsters', label: 'Monsters', icon: 'solar:ghost-linear', to: { name: 'home' } }
   // { id: 'monsters', label: 'Monsters', icon: 'iconoir:wolf', to: { name: 'home' } }
 ]
 </script>
