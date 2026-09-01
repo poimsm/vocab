@@ -608,7 +608,8 @@ onUnmounted(() => {
           <div class="favorite-card-wrapper">
             <div class="favorite-card-text">
               <template v-for="(segment, idx) in example.text" :key="idx">
-                <span v-if="segment.is_highlighted" class="word-highlight">
+                <span v-if="segment.is_highlighted && segment.target_word" class="word-highlight"
+                  @click="handleWordClick(segment.target_word)">
                   {{ segment.text }}
                 </span>
                 <span v-else>{{ segment.text }}</span>
@@ -632,7 +633,7 @@ onUnmounted(() => {
   </div>
 
   <!-- Main Examples View -->
-  <div v-else class="examples-view">
+  <div v-else class="examples-view" :class="{ 'panel-open': selectedWord && !isMobileDetailOpen }">
     <!-- Loading / Generating State -->
     <LoadingCard v-if="generating && examples.length === 0" message="Generating..." />
 
@@ -710,76 +711,6 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Right Panel: Word Detail (Desktop) -->
-    <transition name="slide-panel">
-      <aside v-if="selectedWord && !isMobileDetailOpen" class="word-panel">
-        <div class="panel-header">
-          <button class="back-btn" @click="selectedWord = null">
-            <Icon icon="solar:arrow-left-linear" width="20" />
-          </button>
-          <div class="panel-header-actions">
-            <button class="sound-btn" @click="speakWord" title="Play pronunciation">
-              <Icon icon="solar:volume-loud-linear" width="20" />
-            </button>
-            <button class="heart-btn" @click="handleToggleFavorite" title="Add to favorites">
-              <Icon v-if="selectedWord?.is_favorite" icon="solar:heart-bold" width="20" />
-              <Icon v-else icon="solar:heart-linear" width="20" />
-            </button>
-          </div>
-        </div>
-
-        <h2 class="panel-word">{{ selectedWord.word }}</h2>
-        <p class="panel-definition">{{ selectedWord.definition }}</p>
-
-        <!-- Synonyms Section (Desktop) -->
-        <div v-if="selectedWord.synonyms && selectedWord.synonyms.length" class="panel-section">
-          <h3 class="section-title">SYNONYMS</h3>
-          <div class="synonyms-list">
-            <span v-for="syn in selectedWord.synonyms" :key="syn" class="synonym-tag" @click="speak(syn)"
-              title="Click to hear">
-              {{ syn }}
-            </span>
-          </div>
-        </div>
-
-        <div class="panel-section">
-          <h3 class="section-title">EXAMPLES</h3>
-          <ul class="examples-list">
-            <li v-for="(ex, i) in selectedWord.examples" :key="i">{{ ex }}</li>
-          </ul>
-        </div>
-
-        <div class="badges-row">
-          <div class="badge">
-            <span class="badge-label">{{ selectedWord.level }}</span>
-            <span class="badge-sublabel">Level</span>
-          </div>
-          <div class="badge-divider">/</div>
-          <div class="badge">
-            <span class="badge-label">{{ selectedWord.context }}</span>
-            <span class="badge-sublabel">Context</span>
-          </div>
-        </div>
-
-        <div class="frequency-section">
-          <span class="frequency-label">FREQUENCY</span>
-          <div class="frequency-bar">
-            <div v-for="(seg, i) in frequencySegments" :key="i" class="frequency-segment"
-              :class="{ active: seg.active }" :style="{ background: seg.active ? seg.color : '#3d3a52' }">
-              <div v-if="seg.active && selectedWord.frequency === 'common' && i === 2" class="frequency-star">
-                <Icon icon="solar:star-bold" width="12" />
-              </div>
-            </div>
-          </div>
-          <div class="frequency-labels">
-            <span>RARE</span>
-            <span>UNCOMMON</span>
-            <span>COMMON</span>
-          </div>
-        </div>
-      </aside>
-    </transition>
-
     <!-- Extracted Words Modal (Desktop) -->
     <transition name="fade">
       <div v-if="showExtractedWordsModal" class="modal-overlay extracted-words-overlay" @click="closeExtractedWordsModal">
@@ -848,70 +779,134 @@ onUnmounted(() => {
       </div>
     </transition>
 
-    <!-- Mobile Detail Overlay -->
-    <transition name="slide-up">
-      <div v-if="isMobileDetailOpen" class="mobile-detail-overlay">
-        <div class="mobile-detail-header">
-          <button class="mobile-back-btn" @click="closeMobileDetail">
-            <Icon icon="solar:arrow-left-linear" width="24" />
-          </button>
-          <div class="mobile-header-actions">
-            <button class="mobile-sound-btn" @click="speakWord" title="Play pronunciation">
-              <Icon icon="solar:volume-loud-linear" width="22" />
-            </button>
-            <button class="mobile-heart-btn" @click="handleToggleFavorite" title="Add to favorites">
-              <Icon v-if="selectedWord?.is_favorite" icon="solar:heart-bold" width="22" />
-              <Icon v-else icon="solar:heart-linear" width="22" />
-            </button>
-          </div>
-        </div>
-
-        <div class="mobile-detail-content">
-          <div class="mobile-word-header">
-            <h2 class="mobile-word">{{ selectedWord?.word }}</h2>
-            <!-- <button class="mobile-sound-inline" @click="speakWord" title="Play pronunciation">
-              <Icon icon="solar:volume-loud-linear" width="18" />
-            </button> -->
-          </div>
-          <!-- <p class="mobile-meta">{{ selectedWord?.level }} Level · {{ selectedWord?.context }} Context</p> -->
-
-          <div class="mobile-section">
-            <!-- <h3 class="mobile-section-title">Definition</h3> -->
-            <p class="mobile-definition">{{ selectedWord?.definition }}</p>
-          </div>
-
-          <!-- Synonyms Section (Mobile) -->
-          <div class="mobile-section" v-if="selectedWord?.synonyms && selectedWord.synonyms.length">
-            <h3 class="mobile-section-title">Synonyms</h3>
-            <div class="synonyms-tags">
-              <span v-for="syn in selectedWord.synonyms" :key="syn" class="synonym-tag" @click="speak(syn)"
-                title="Tap to hear">
-                {{ syn }}
-              </span>
-            </div>
-          </div>
-
-          <div class="mobile-section">
-            <h3 class="mobile-section-title">Examples</h3>
-            <ul class="mobile-examples-list">
-              <li v-for="(ex, i) in selectedWord?.examples" :key="i">{{ ex }}</li>
-            </ul>
-          </div>
-
-          <div class="known-toggle">
-            <span>Already know this word?</span>
-            <label class="toggle-switch">
-              <input type="checkbox" @change="handleToggleKnown" />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-
 
   </div>
+
+  <!-- Mobile Detail Overlay - Global -->
+  <transition name="slide-up">
+    <div v-if="isMobileDetailOpen" class="mobile-detail-overlay">
+      <div class="mobile-detail-header">
+        <button class="mobile-back-btn" @click="closeMobileDetail">
+          <Icon icon="solar:arrow-left-linear" width="24" />
+        </button>
+        <div class="mobile-header-actions">
+          <button class="mobile-sound-btn" @click="speakWord" title="Play pronunciation">
+            <Icon icon="solar:volume-loud-linear" width="22" />
+          </button>
+          <button class="mobile-heart-btn" @click="handleToggleFavorite" title="Add to favorites">
+            <Icon v-if="selectedWord?.is_favorite" icon="solar:heart-bold" width="22" />
+            <Icon v-else icon="solar:heart-linear" width="22" />
+          </button>
+        </div>
+      </div>
+
+      <div class="mobile-detail-content">
+        <div class="mobile-word-header">
+          <h2 class="mobile-word">{{ selectedWord?.word }}</h2>
+        </div>
+
+        <div class="mobile-section">
+          <p class="mobile-definition">{{ selectedWord?.definition }}</p>
+        </div>
+
+        <!-- Synonyms Section (Mobile) -->
+        <div class="mobile-section" v-if="selectedWord?.synonyms && selectedWord.synonyms.length">
+          <h3 class="mobile-section-title">Synonyms</h3>
+          <div class="synonyms-tags">
+            <span v-for="syn in selectedWord.synonyms" :key="syn" class="synonym-tag" @click="speak(syn)"
+              title="Tap to hear">
+              {{ syn }}
+            </span>
+          </div>
+        </div>
+
+        <div class="mobile-section">
+          <h3 class="mobile-section-title">Examples</h3>
+          <ul class="mobile-examples-list">
+            <li v-for="(ex, i) in selectedWord?.examples" :key="i">{{ ex }}</li>
+          </ul>
+        </div>
+
+        <div class="known-toggle">
+          <span>Already know this word?</span>
+          <label class="toggle-switch">
+            <input type="checkbox" @change="handleToggleKnown" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- Right Panel: Word Detail (Desktop) - Global -->
+  <transition name="slide-panel">
+    <aside v-if="selectedWord && !isMobileDetailOpen" class="word-panel">
+      <div class="panel-header">
+        <button class="back-btn" @click="selectedWord = null">
+          <Icon icon="solar:arrow-left-linear" width="20" />
+        </button>
+        <div class="panel-header-actions">
+          <button class="sound-btn" @click="speakWord" title="Play pronunciation">
+            <Icon icon="solar:volume-loud-linear" width="20" />
+          </button>
+          <button class="heart-btn" @click="handleToggleFavorite" title="Add to favorites">
+            <Icon v-if="selectedWord?.is_favorite" icon="solar:heart-bold" width="20" />
+            <Icon v-else icon="solar:heart-linear" width="20" />
+          </button>
+        </div>
+      </div>
+
+      <h2 class="panel-word">{{ selectedWord.word }}</h2>
+      <p class="panel-definition">{{ selectedWord.definition }}</p>
+
+      <!-- Synonyms Section (Desktop) -->
+      <div v-if="selectedWord.synonyms && selectedWord.synonyms.length" class="panel-section">
+        <h3 class="section-title">SYNONYMS</h3>
+        <div class="synonyms-list">
+          <span v-for="syn in selectedWord.synonyms" :key="syn" class="synonym-tag" @click="speak(syn)"
+            title="Click to hear">
+            {{ syn }}
+          </span>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <h3 class="section-title">EXAMPLES</h3>
+        <ul class="examples-list">
+          <li v-for="(ex, i) in selectedWord.examples" :key="i">{{ ex }}</li>
+        </ul>
+      </div>
+
+      <div class="badges-row">
+        <div class="badge">
+          <span class="badge-label">{{ selectedWord.level }}</span>
+          <span class="badge-sublabel">Level</span>
+        </div>
+        <div class="badge-divider">/</div>
+        <div class="badge">
+          <span class="badge-label">{{ selectedWord.context }}</span>
+          <span class="badge-sublabel">Context</span>
+        </div>
+      </div>
+
+      <div class="frequency-section">
+        <span class="frequency-label">FREQUENCY</span>
+        <div class="frequency-bar">
+          <div v-for="(seg, i) in frequencySegments" :key="i" class="frequency-segment"
+            :class="{ active: seg.active }" :style="{ background: seg.active ? seg.color : '#3d3a52' }">
+            <div v-if="seg.active && selectedWord.frequency === 'common' && i === 2" class="frequency-star">
+              <Icon icon="solar:star-bold" width="12" />
+            </div>
+          </div>
+        </div>
+        <div class="frequency-labels">
+          <span>RARE</span>
+          <span>UNCOMMON</span>
+          <span>COMMON</span>
+        </div>
+      </div>
+    </aside>
+  </transition>
 
   <!-- Copy Toast Notification -->
   <transition name="fade">
@@ -928,6 +923,10 @@ onUnmounted(() => {
   position: relative;
 }
 
+.examples-view.panel-open {
+  margin-right: 380px;
+}
+
 /* ─── Center Sentence Area ─── */
 .sentence-area {
   flex: 1;
@@ -936,7 +935,6 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 40px;
-  transition: flex 0.3s ease;
   position: relative;
 }
 
@@ -969,11 +967,6 @@ onUnmounted(() => {
 
 .top-bar-btn:hover {
   color: #e2e0e8;
-}
-
-
-.sentence-area.panel-open {
-  flex: 0 0 55%;
 }
 
 .sentence-wrapper {
@@ -1071,6 +1064,11 @@ onUnmounted(() => {
   padding: 24px;
   overflow-y: auto;
   z-index: 999;
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  height: 100vh;
 }
 
 .panel-header {
