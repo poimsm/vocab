@@ -471,14 +471,14 @@ onMounted(() => {
   }
 
   .list-item {
-    padding: 8px 0;
+    padding: 18px 0;
     gap: 10px;
     border-bottom-color: rgba(255, 255, 255, 0.04);
   }
 
   .phrase {
-    font-size: 14px;
-    font-weight: 500;
+    font-size: 19px;
+    font-weight: normal;
   }
 
   .page-footer {
