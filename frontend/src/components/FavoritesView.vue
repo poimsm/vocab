@@ -188,7 +188,7 @@ async function toggleMarkedExample(exampleId: number) {
 
 function closeModal() {
   emit('update:modelValue', false)
-  favoriteExamples.value = []
+  // No limpiar datos para mantener la posición cuando se reabre
 }
 
 function handleWordClick(word: any) {
@@ -209,13 +209,19 @@ watch(
   () => props.modelValue,
   (newValue) => {
     if (newValue) {
-      favoritesPage.value = 1
-      isInitialLoad.value = true
-      resetScrollTracking()
-      fetchFavorites()
-      setTimeout(() => {
-        isInitialLoad.value = false
-      }, 50)
+      // Si ya tiene datos, solo resetear el scroll
+      if (favoriteExamples.value.length > 0) {
+        resetScrollTracking()
+      } else {
+        // Si no tiene datos, traer desde cero
+        favoritesPage.value = 1
+        isInitialLoad.value = true
+        resetScrollTracking()
+        fetchFavorites()
+        setTimeout(() => {
+          isInitialLoad.value = false
+        }, 50)
+      }
     }
   }
 )
@@ -235,7 +241,7 @@ onMounted(() => {
 
 <template>
   <!-- Favorites View (Fullscreen) -->
-  <div v-if="modelValue" class="favorites-view">
+  <div v-show="modelValue" class="favorites-view">
     <div class="favorites-header">
       <h2>Favorite Examples</h2>
       <button class="close-favorites-btn" @click="closeModal" title="Close">

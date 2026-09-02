@@ -61,6 +61,7 @@ const isMobileDetailOpen = ref(false)
 const showExtractedWordsModal = ref(false)
 const showFavoritesModal = ref(false)
 const showCopiedToast = ref(false)
+const comingFromFavorites = ref(false)
 
 const BATCH_SIZE = 4
 const POLL_INTERVAL = 3000
@@ -303,9 +304,21 @@ function handleWordClick(word: TargetWord) {
   }
 }
 
+function closeWordDetail() {
+  selectedWord.value = null
+  if (comingFromFavorites.value) {
+    showFavoritesModal.value = true
+    comingFromFavorites.value = false
+  }
+}
+
 function closeMobileDetail() {
   isMobileDetailOpen.value = false
   selectedWord.value = null
+  if (comingFromFavorites.value) {
+    showFavoritesModal.value = true
+    comingFromFavorites.value = false
+  }
 }
 
 async function handleToggleKnown() {
@@ -425,8 +438,12 @@ function copyFallback(text: string) {
 }
 
 function handleFavoritesWordClick(word: TargetWord) {
+  comingFromFavorites.value = true
   handleWordClick(word)
-  showFavoritesModal.value = false
+  // Solo cerrar el modal en mobile (donde el detalle es fullscreen)
+  if (window.innerWidth <= 768) {
+    showFavoritesModal.value = false
+  }
 }
 
 onMounted(() => {
@@ -448,7 +465,7 @@ onUnmounted(() => {
   />
 
   <!-- Main Examples View -->
-  <div v-if="!showFavoritesModal" class="examples-view" :class="{ 'panel-open': selectedWord && !isMobileDetailOpen }">
+  <div v-if="!showFavoritesModal && !comingFromFavorites" class="examples-view" :class="{ 'panel-open': selectedWord && !isMobileDetailOpen }">
     <!-- Loading / Generating State -->
     <LoadingCard v-if="generating && examples.length === 0" message="Generating..." />
 
@@ -532,7 +549,7 @@ onUnmounted(() => {
   <!-- Word Detail Panel (Desktop) -->
   <WordDetailPanel
     :word="selectedWord"
-    @close="selectedWord = null"
+    @close="closeWordDetail"
     @speak="speakWord"
     @toggle-favorite="handleToggleFavorite"
     @toggle-known="handleToggleKnown"
@@ -542,7 +559,7 @@ onUnmounted(() => {
   <MobileWordDetail
     :modelValue="isMobileDetailOpen"
     :word="selectedWord"
-    @update:modelValue="v => isMobileDetailOpen = v"
+    @update:modelValue="v => { if (!v) closeMobileDetail() }"
     @speak-word="speakWord"
     @speak="speak"
     @toggle-favorite="handleToggleFavorite"
