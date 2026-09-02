@@ -65,6 +65,8 @@ const comingFromFavorites = ref(false)
 
 const BATCH_SIZE = 4
 const POLL_INTERVAL = 3000
+const SPEECH_RATES = [0.9, 0.7]
+const currentSpeechRateIndex = ref(0)
 
 // ─── Computed ───
 const currentExample = computed(() => {
@@ -137,7 +139,7 @@ function speak(text: string) {
 
   const utterance = new SpeechSynthesisUtterance(text)
   utterance.lang = 'en-US'
-  utterance.rate = 0.9
+  utterance.rate = SPEECH_RATES[currentSpeechRateIndex.value]!
   utterance.pitch = 1
 
   const voices = window.speechSynthesis.getVoices()
@@ -147,6 +149,9 @@ function speak(text: string) {
   }
 
   window.speechSynthesis.speak(utterance)
+
+  // Cambiar a la siguiente velocidad para la próxima vez
+  currentSpeechRateIndex.value = (currentSpeechRateIndex.value + 1) % SPEECH_RATES.length
 }
 
 function speakWord() {
@@ -355,12 +360,14 @@ async function refreshExample() {
     currentIndex.value++
     selectedWord.value = null
     isMobileDetailOpen.value = false
+    currentSpeechRateIndex.value = 0
     return
   }
 
   await resolveAndFetchNext(currentEx.queue_item_id)
   selectedWord.value = null
   isMobileDetailOpen.value = false
+  currentSpeechRateIndex.value = 0
 }
 
 function prevExample() {
@@ -368,6 +375,7 @@ function prevExample() {
     currentIndex.value--
     selectedWord.value = null
     isMobileDetailOpen.value = false
+    currentSpeechRateIndex.value = 0
   }
 }
 
@@ -381,6 +389,7 @@ async function nextExample() {
     currentIndex.value++
     selectedWord.value = null
     isMobileDetailOpen.value = false
+    currentSpeechRateIndex.value = 0
   } else {
     await refreshExample()
   }
@@ -850,13 +859,13 @@ onUnmounted(() => {
   }
 
   .sentence-text {
-    font-size: 22px;
+    font-size: 25px;
   }
 
   .sentence-speak-btn {
     position: static;
     transform: none;
-    margin-top: 16px;
+    margin: 16px auto 0;
   }
 
   .action-buttons {

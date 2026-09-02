@@ -748,7 +748,7 @@ onMounted(() => {
   }
 
   .favorite-card-text {
-    font-size: 18px !important;
+    font-size: 19px !important;
   }
 
   .mark-checkbox {

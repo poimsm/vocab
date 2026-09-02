@@ -186,7 +186,7 @@ function handleClose() {
 }
 
 .mobile-section-title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 1px;
   color: #9c99ab;
@@ -195,7 +195,7 @@ function handleClose() {
 }
 
 .mobile-definition {
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1.6;
   color: #b8b5c8;
   margin: 0;
@@ -211,7 +211,7 @@ function handleClose() {
   position: relative;
   padding-left: 16px;
   margin-bottom: 10px;
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1.5;
   color: #b8b5c8;
 }
@@ -235,7 +235,7 @@ function handleClose() {
   border-radius: 999px;
   background: rgba(124, 58, 237, 0.12);
   color: #a78bfa;
-  font-size: 13px;
+  font-size: 15.5px;
   font-weight: 600;
   border: 1px solid rgba(124, 58, 237, 0.2);
   cursor: pointer;
@@ -257,7 +257,7 @@ function handleClose() {
   background: rgba(255, 255, 255, 0.04);
   border-radius: 14px;
   margin-top: 8px;
-  font-size: 14px;
+  font-size: 17px;
   color: #b8b5c8;
 }
 
