@@ -158,6 +158,7 @@ def _action_next(
             "text": text_segments,
             "extracted_words": extracted_words,
             "is_favorite": ex.is_favorite,
+            "is_marked": ex.is_marked,
         })
 
     return examples_response, "ok"
@@ -369,6 +370,31 @@ def toggle_example_favorite(
     }
 
 
+@router.patch("/{example_id}/toggle-marked")
+@log_endpoint
+def toggle_example_marked(
+    example_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Alterna el estado de marcado de un ejemplo.
+
+    Retorna el nuevo estado de is_marked.
+    """
+    logger.info(f"[toggle_example_marked] User {current_user.id}: Toggling marked status for example {example_id}")
+
+    example_repo = ExampleRepository(db)
+    is_marked = example_repo.toggle_marked(example_id)
+
+    logger.debug(f"[toggle_example_marked] Example {example_id} is_marked: {is_marked}")
+
+    return {
+        "example_id": example_id,
+        "is_marked": is_marked
+    }
+
+
 @router.get("/favorites", response_model=FavoritesResponse)
 @log_endpoint
 def get_favorite_examples(
@@ -402,7 +428,8 @@ def get_favorite_examples(
             "id": example.id,
             "text": text_segments,
             "extracted_words": extracted_words,
-            "is_favorite": example.is_favorite
+            "is_favorite": example.is_favorite,
+            "is_marked": example.is_marked
         })
 
     logger.debug(f"[get_favorite_examples] Retrieved {len(examples_response)} favorite examples")

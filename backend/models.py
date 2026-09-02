@@ -138,6 +138,7 @@ class Example(SQLModel, table=True):
     enqueued: bool = Field(default=False, index=True)
     is_favorite: bool = Field(default=False)
     is_consumed: bool = Field(default=False, index=True)
+    is_marked: bool = Field(default=False, index=True)
 
     example_words: List["ExampleWord"] = Relationship(back_populates="example")
 
@@ -274,6 +275,19 @@ class QuickWrite(SQLModel, table=True):
     corrected_content: Optional[str] = Field(default=None, max_length=500)
     has_corrections: bool = Field(default=False)
     is_favorite: bool = Field(default=False)
+    is_active: bool = Field(default=True, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class Collocation(SQLModel, table=True):
+    __tablename__: str = "collocations"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
+    word_id: Optional[int] = Field(foreign_key="words.id", nullable=True, index=True)
+    phrase: str = Field(nullable=False, max_length=255)
+    is_marked: bool = Field(default=False, index=True)
     is_active: bool = Field(default=True, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

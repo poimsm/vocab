@@ -1,163 +1,157 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
+import { collocationApi } from '@/services/collocationApi'
 
 interface Collocation {
   id: number
   phrase: string
+  is_marked: boolean
 }
 
-const original = [
-  { id: 1, phrase: 'quivering hands' },
-  { id: 2, phrase: 'flushed cheeks' },
-  { id: 3, phrase: 'flung stone' },
-  { id: 4, phrase: 'grimacing face' },
-  { id: 5, phrase: 'sledgehammer blow' },
-  { id: 6, phrase: 'blowlamp flame' },
-  { id: 7, phrase: 'deep hatred' },
-  { id: 8, phrase: 'religious heretic' },
-  { id: 9, phrase: 'neat goatee' }
-]
+const original = ref<Collocation[]>([])
+const isLoading = ref(true)
+const error = ref<string | null>(null)
+const filterStatus = ref<'all' | 'marked' | 'not_marked'>('all')
+const isSavingStatus = ref<number | null>(null)
 
-const shuffled = ref<Collocation[]>([...original])
-const isShuffled = ref(false)
-const completed = ref<Set<number>>(new Set())
-
-const collocations = computed(() => shuffled.value)
-
-const completedCount = computed(() => completed.value.size)
-const totalCount = computed(() => original.length)
-const progressPercent = computed(() => Math.round((completedCount.value / totalCount.value) * 100))
-
-const shuffle = () => {
-  const arr = [...original]
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i]!, arr[j]!] = [arr[j]!, arr[i]!]
-  }
-  shuffled.value = arr
-  isShuffled.value = true
-}
-
-const reset = () => {
-  shuffled.value = [...original]
-  isShuffled.value = false
-}
-
-const toggleCompleted = (id: number) => {
-  if (completed.value.has(id)) {
-    completed.value.delete(id)
+const collocations = computed(() => {
+  if (filterStatus.value === 'all') {
+    return original.value
+  } else if (filterStatus.value === 'marked') {
+    return original.value.filter(c => c.is_marked)
   } else {
-    completed.value.add(id)
+    return original.value.filter(c => !c.is_marked)
   }
-  saveProgress()
-}
+})
 
-const isCompleted = (id: number) => {
-  return completed.value.has(id)
-}
+const toggleMarked = async (collocation: Collocation) => {
+  const newStatus = !collocation.is_marked
+  isSavingStatus.value = collocation.id
 
-const saveProgress = () => {
-  const ids = Array.from(completed.value)
-  localStorage.setItem('collocations-completed', JSON.stringify(ids))
-}
+  try {
+    const updated = await collocationApi.toggleMarked(collocation.id, newStatus)
 
-const loadProgress = () => {
-  const saved = localStorage.getItem('collocations-completed')
-  if (saved) {
-    try {
-      const ids = JSON.parse(saved)
-      completed.value = new Set(ids)
-    } catch {
-      completed.value = new Set()
+    // Update local state
+    const item = original.value.find(c => c.id === collocation.id)
+    if (item) {
+      item.is_marked = updated.is_marked
     }
+  } catch (err) {
+    console.error('Error updating collocation status:', err)
+    error.value = 'Failed to update status'
+  } finally {
+    isSavingStatus.value = null
   }
 }
 
-const clearProgress = () => {
-  completed.value.clear()
-  localStorage.removeItem('collocations-completed')
+const clearProgress = async () => {
+  try {
+    // Clear all marked items by setting them back to unmarked
+    const markedItems = original.value.filter(c => c.is_marked)
+    for (const item of markedItems) {
+      await collocationApi.toggleMarked(item.id, false)
+      item.is_marked = false
+    }
+  } catch (err) {
+    console.error('Error clearing progress:', err)
+    error.value = 'Failed to clear progress'
+  }
+}
+
+const loadCollocations = async () => {
+  try {
+    isLoading.value = true
+    error.value = null
+    let response = await collocationApi.getCollocations('all')
+
+    // Generate initial collocations if empty
+    if (response.items.length === 0) {
+      const initResult = await collocationApi.generateInitial()
+      if (initResult.status === 'created' && initResult.items) {
+        response.items = initResult.items
+      }
+    }
+
+    original.value = response.items
+  } catch (err: any) {
+    error.value = err.message || 'Failed to load collocations'
+    console.error('Error loading collocations:', err)
+  } finally {
+    isLoading.value = false
+  }
 }
 
 onMounted(() => {
-  loadProgress()
+  loadCollocations()
 })
 </script>
 
 <template>
   <div class="collocations-view">
     <div class="page">
-      <!-- Header -->
-      <div class="page-header">
-        <div class="title-section">
-          <h1 class="title">Cozy Collocations</h1>
-          <Icon icon="fluent-emoji:relaxed-face" width="32" class="emoji" />
-        </div>
-        <div class="date-section">
-          <span class="label">Date:</span>
-          <span class="date">{{ new Date().toISOString().split('T')[0] }}</span>
-          <Icon icon="solar:calendar-outline" width="16" class="date-icon" />
-        </div>
+      <!-- Loading State -->
+      <div v-if="isLoading" class="loading-state">
+        <p>Loading collocations...</p>
       </div>
 
-      <!-- Progress Bar -->
-      <div class="progress-section">
-        <div class="progress-bar-container">
-          <div class="progress-bar" :style="{ width: progressPercent + '%' }"></div>
-        </div>
-        <span class="progress-text">{{ completedCount }} / {{ totalCount }}</span>
+      <!-- Error State -->
+      <div v-else-if="error" class="error-state">
+        <p>{{ error }}</p>
+        <button @click="loadCollocations" class="retry-btn">Retry</button>
       </div>
 
-      <!-- List -->
-      <div class="items-list">
-        <div
-          v-for="(collocation, index) in collocations"
-          :key="collocation.id"
-          class="list-item"
-          :class="{ completed: isCompleted(collocation.id) }"
-          @click="toggleCompleted(collocation.id)"
-        >
-          <div
-            class="number-badge"
-            :class="{ checked: isCompleted(collocation.id) }"
-          >
-            {{ isCompleted(collocation.id) ? '✓' : index + 1 }}
+      <!-- Empty State -->
+      <div v-else-if="original.length === 0" class="empty-state">
+        <p>No collocations yet. Create some to get started!</p>
+      </div>
+
+      <!-- Content -->
+      <template v-else>
+        <!-- Header -->
+        <div class="page-header">
+          <div class="title-section">
+            <h1 class="title">Cozy Collocations</h1>
+            <Icon icon="fluent-emoji:relaxed-face" width="32" class="emoji" />
           </div>
-          <span class="phrase">{{ collocation.phrase }}</span>
         </div>
-      </div>
 
-      <!-- Footer -->
-      <div class="page-footer">
-        <div class="footer-content">
-          <span class="next-pack">
-            <Icon icon="noto:ball-of-yarn" width="16" />
-            Next Pack
-          </span>
-          <p class="footer-text">A cozy study companion</p>
+        <!-- Filter -->
+        <div class="filter-section">
+          <div class="filter-group">
+            <button
+              v-for="option in ['all', 'marked', 'not_marked']"
+              :key="option"
+              class="filter-btn"
+              :class="{ active: filterStatus === option }"
+              @click="filterStatus = option as any"
+            >
+              {{ option === 'all' ? 'All' : option === 'marked' ? 'Marked' : 'Not Marked' }}
+            </button>
+          </div>
         </div>
-      </div>
-    </div>
 
-    <!-- Controls -->
-    <div class="controls">
-      <button
-        class="clear-btn"
-        @click="clearProgress"
-        title="Clear all progress"
-        v-if="completedCount > 0"
-      >
-        <Icon icon="solar:trash-bin-trash-linear" width="16" />
-      </button>
-      <button
-        class="shuffle-btn"
-        :class="{ active: isShuffled }"
-        @click="isShuffled ? reset() : shuffle()"
-        :title="isShuffled ? 'Reset to original' : 'Shuffle'"
-      >
-        <Icon :icon="isShuffled ? 'solar:undo-left-linear' : 'solar:shuffle-linear'" width="18" />
-        <span>{{ isShuffled ? 'Reset' : 'Shuffle' }}</span>
-      </button>
+        <!-- List -->
+        <div class="items-list">
+          <div
+            v-for="(collocation, index) in collocations"
+            :key="collocation.id"
+            class="list-item"
+            :class="{ completed: collocation.is_marked, saving: isSavingStatus === collocation.id }"
+            @click="toggleMarked(collocation)"
+          >
+            <div
+              class="number-badge"
+              :class="{ checked: collocation.is_marked }"
+            >
+              {{ collocation.is_marked ? '✓' : index + 1 }}
+            </div>
+            <span class="phrase">{{ collocation.phrase }}</span>
+            <div v-if="isSavingStatus === collocation.id" class="saving-spinner"></div>
+          </div>
+        </div>
+      </template>
+
     </div>
   </div>
 </template>
@@ -169,6 +163,52 @@ onMounted(() => {
   background: #2d2a3e;
   color: #e2e0e8;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.loading-state,
+.error-state,
+.empty-state {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 40px 36px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
+}
+
+.loading-state p,
+.error-state p,
+.empty-state p {
+  font-size: 16px;
+  color: #9c99ab;
+  margin: 0;
+}
+
+.error-state {
+  border-color: rgba(255, 100, 100, 0.2);
+}
+
+.error-state p {
+  color: #ff6464;
+  margin-bottom: 16px;
+}
+
+.retry-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  background: rgba(167, 139, 250, 0.1);
+  color: #a78bfa;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.retry-btn:hover {
+  background: rgba(167, 139, 250, 0.2);
+  border-color: rgba(167, 139, 250, 0.6);
 }
 
 .page {
@@ -183,17 +223,15 @@ onMounted(() => {
 
 .page-header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   margin-bottom: 32px;
-  gap: 24px;
+  gap: 12px;
 }
 
 .title-section {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex: 1;
 }
 
 .title {
@@ -208,63 +246,44 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.date-section {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: #9c99ab;
-  white-space: nowrap;
-}
-
-.label {
-  font-weight: 600;
-}
-
-.date {
-  font-family: 'Courier New', monospace;
-  color: #a8a5b8;
-}
-
-.date-icon {
-  color: #7c7a8a;
-}
-
-.progress-section {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 28px;
-}
-
-.progress-bar-container {
-  flex: 1;
-  height: 5px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 2.5px;
-  overflow: hidden;
-}
-
-.progress-bar {
-  height: 100%;
-  background: #a78bfa;
-  border-radius: 2.5px;
-  transition: width 0.4s ease;
-}
-
-.progress-text {
-  font-size: 12px;
-  color: #9c99ab;
-  font-weight: 600;
-  min-width: 45px;
-  text-align: right;
-}
-
 .items-list {
   display: flex;
   flex-direction: column;
   gap: 0;
   margin-bottom: 32px;
+}
+
+.filter-section {
+  margin-bottom: 24px;
+}
+
+.filter-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #9c99ab;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filter-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.filter-btn.active {
+  background: rgba(167, 139, 250, 0.15);
+  border-color: rgba(167, 139, 250, 0.4);
+  color: #a78bfa;
 }
 
 .list-item {
@@ -276,6 +295,7 @@ onMounted(() => {
   transition: opacity 0.2s ease, background 0.15s ease;
   cursor: pointer;
   user-select: none;
+  position: relative;
 }
 
 .list-item:hover {
@@ -289,6 +309,30 @@ onMounted(() => {
 .list-item.completed .phrase {
   text-decoration: line-through;
   color: #7c7a8a;
+}
+
+.list-item.saving {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.saving-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(167, 139, 250, 0.3);
+  border-top-color: #a78bfa;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+@keyframes spin {
+  to {
+    transform: translateY(-50%) rotate(360deg);
+  }
 }
 
 .number-badge {
@@ -323,92 +367,7 @@ onMounted(() => {
   text-align: left;
 }
 
-.page-footer {
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  text-align: center;
-}
 
-.footer-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.next-pack {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #a78bfa;
-}
-
-.footer-text {
-  font-size: 12px;
-  color: #7c7a8a;
-  margin: 0;
-  font-style: italic;
-}
-
-.controls {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  max-width: 700px;
-  margin: 0 auto;
-}
-
-.shuffle-btn,
-.clear-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
-  color: #9c99ab;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.shuffle-btn:hover,
-.clear-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: #e2e0e8;
-}
-
-.shuffle-btn.active {
-  background: rgba(167, 139, 250, 0.15);
-  border-color: rgba(167, 139, 250, 0.4);
-  color: #a78bfa;
-}
-
-@media (max-width: 900px) {
-  .page {
-    max-width: 100%;
-  }
-
-  .page-header {
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .title-section {
-    width: 100%;
-  }
-
-  .date-section {
-    justify-content: flex-start;
-    width: 100%;
-  }
-}
 
 @media (max-width: 768px) {
   .page {
@@ -450,17 +409,22 @@ onMounted(() => {
     font-size: 22px;
   }
 
-  .date-section {
-    font-size: 11px;
-  }
-
   .emoji {
     width: 24px;
     height: 24px;
   }
 
-  .progress-section {
-    margin-bottom: 20px;
+  .filter-section {
+    margin-bottom: 16px;
+  }
+
+  .filter-group {
+    gap: 6px;
+  }
+
+  .filter-btn {
+    padding: 5px 10px;
+    font-size: 11px;
   }
 
   .number-badge {
@@ -479,22 +443,6 @@ onMounted(() => {
   .phrase {
     font-size: 19px;
     font-weight: normal;
-  }
-
-  .page-footer {
-    margin-top: 16px;
-    padding-top: 16px;
-  }
-
-  .controls {
-    gap: 6px;
-    max-width: 100%;
-  }
-
-  .shuffle-btn,
-  .clear-btn {
-    padding: 6px 10px;
-    font-size: 12px;
   }
 }
 </style>

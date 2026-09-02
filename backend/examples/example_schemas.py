@@ -26,6 +26,7 @@ class ExploreExample(BaseModel):
     text: List[TextSegment]
     extracted_words: List[str]
     is_favorite: bool
+    is_marked: bool
 
 
 class ExploreResponse(BaseModel):
@@ -40,6 +41,7 @@ class FavoriteExample(BaseModel):
     text: List[TextSegment]
     extracted_words: List[str]
     is_favorite: bool
+    is_marked: bool
 
 
 class FavoritesResponse(BaseModel):

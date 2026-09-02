@@ -337,6 +337,26 @@ class ExampleRepository:
         logger.debug(f"[ExampleRepository] Example {example_id} is_favorite toggled to {example.is_favorite}")
         return example.is_favorite
 
+    def toggle_marked(self, example_id: int) -> bool:
+        """
+        Alterna el estado de marcado de un ejemplo.
+
+        Retorna el nuevo estado de is_marked.
+        """
+        example = self.session.get(Example, example_id)
+
+        if not example:
+            logger.warning(f"[ExampleRepository] Example {example_id} not found")
+            return False
+
+        example.is_marked = not example.is_marked
+        self.session.add(example)
+        self.session.commit()
+        self.session.refresh(example)
+
+        logger.debug(f"[ExampleRepository] Example {example_id} is_marked toggled to {example.is_marked}")
+        return example.is_marked
+
     def get_examples(self, page: int = 1, limit: int = 15) -> dict:
         """
         Obtiene ejemplos favoritos con paginación.

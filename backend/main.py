@@ -13,6 +13,7 @@ from auth import routes as auth
 from learning_path import routes as learning_path
 from test import routes as test
 from quick_write import quick_write_routes as quick_write
+from collocation import collocation_routes as collocation
 
 app = FastAPI(redirect_slashes=False)
 
@@ -35,6 +36,7 @@ app.include_router(examples.router, prefix="/examples", tags=["examples"])
 app.include_router(best_options.router, prefix="/best-options", tags=["best_options"])
 app.include_router(learning_path.router, prefix="/learning-path", tags=["learning_path"])
 app.include_router(quick_write.router, prefix="/quick-write", tags=["quick_write"])
+app.include_router(collocation.router, prefix="/collocations", tags=["collocations"])
 app.include_router(test.router, prefix="/test", tags=["test"])
 
 @app.on_event("startup")
