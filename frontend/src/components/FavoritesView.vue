@@ -30,6 +30,7 @@ const emit = defineEmits<Emits>()
 
 // State
 const favoriteExamples = ref<FavoriteExample[]>([])
+const displayedExamples = ref<FavoriteExample[]>([])
 const favoritesLoading = ref(false)
 const favoritesPage = ref(1)
 const favoritesTotalPages = ref(1)
@@ -47,16 +48,16 @@ let scrollAccumulatedDown = 0
 let scrollAccumulatedUp = 0
 let scrollLastDirection: 'up' | 'down' | null = null
 
-// Computed
-const filteredFavoriteExamples = computed(() => {
+// Actualizar listado mostrado cuando se cambia el filtro
+function updateDisplayedExamples() {
   if (favoritesFilter.value === 'all') {
-    return favoriteExamples.value
+    displayedExamples.value = favoriteExamples.value
   } else if (favoritesFilter.value === 'marked') {
-    return favoriteExamples.value.filter(ex => ex.is_marked)
+    displayedExamples.value = favoriteExamples.value.filter(ex => ex.is_marked)
   } else {
-    return favoriteExamples.value.filter(ex => !ex.is_marked)
+    displayedExamples.value = favoriteExamples.value.filter(ex => !ex.is_marked)
   }
-})
+}
 
 // Methods
 async function fetchFavorites() {
@@ -88,6 +89,7 @@ async function fetchFavorites() {
         favoriteExamples.value.push(...(response.data.items || []))
       }
       favoritesTotalPages.value = response.data.pages || 1
+      updateDisplayedExamples()
     }
   } catch (e: any) {
     alert('Failed to load favorite examples: ' + (e.response?.data?.message || e.message))
@@ -202,6 +204,7 @@ watch(favoritesFilter, () => {
   scrollAccumulatedUp = 0
   favoritesPage.value = 1
   favoriteExamples.value = []
+  displayedExamples.value = []
   fetchFavorites()
 })
 
@@ -321,8 +324,8 @@ onMounted(() => {
         <p>Loading favorites...</p>
       </div>
 
-      <div v-else-if="filteredFavoriteExamples.length > 0" class="favorites-items">
-        <div v-for="example in filteredFavoriteExamples" :key="example.id" class="favorite-card" :class="{ marked: example.is_marked }">
+      <div v-else-if="displayedExamples.length > 0" class="favorites-items">
+        <div v-for="example in displayedExamples" :key="example.id" class="favorite-card" :class="{ marked: example.is_marked }">
           <div class="favorite-card-wrapper">
             <button
               class="mark-checkbox"
