@@ -644,7 +644,7 @@ onMounted(() => {
 }
 
 .favorite-card-text.line-through {
-  text-decoration: line-through;
+  /* text-decoration: line-through; */
   color: #7c7a8a;
 }
 
@@ -675,7 +675,7 @@ onMounted(() => {
 }
 
 .mark-checkbox .checked {
-  color: #4ade80;
+  color:#bfb0f7;
 }
 
 .empty-favorites,
