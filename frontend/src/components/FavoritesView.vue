@@ -42,6 +42,9 @@ const isInitialLoad = ref(true)
 
 const FAVORITES_LIMIT = 10
 
+// Flag para evitar reiniciar cuando se hace scroll
+let isUserChangingFilter = false
+
 // ─── Scroll tracking (non-reactive for performance) ───
 let scrollLastY = 0
 let scrollAccumulatedDown = 0
@@ -84,12 +87,15 @@ async function fetchFavorites() {
 
     if (response.data && response.data.status === 'ok') {
       if (favoritesPage.value === 1) {
+        // Cargar inicialmente: actualizar todo y recalcular filtro
         favoriteExamples.value = response.data.items || []
+        updateDisplayedExamples()
       } else {
+        // Infinite scroll: solo concatenar sin recalcular filtro
         favoriteExamples.value.push(...(response.data.items || []))
+        displayedExamples.value.push(...(response.data.items || []))
       }
       favoritesTotalPages.value = response.data.pages || 1
-      updateDisplayedExamples()
     }
   } catch (e: any) {
     alert('Failed to load favorite examples: ' + (e.response?.data?.message || e.message))
@@ -197,8 +203,20 @@ function handleWordClick(word: any) {
   emit('word-click', word)
 }
 
+// Cambiar filtro solo cuando el usuario hace click (no por scroll)
+function changeFilter(newFilter: 'all' | 'marked' | 'not_marked') {
+  isUserChangingFilter = true
+  favoritesFilter.value = newFilter
+  if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+    showFilterMenu.value = false
+  }
+}
+
 // When filter changes, show header so user sees content changed
 watch(favoritesFilter, () => {
+  // Solo reiniciar si el usuario cambió el filtro manualmente
+  if (!isUserChangingFilter) return
+
   showFilterBar.value = true
   scrollAccumulatedDown = 0
   scrollAccumulatedUp = 0
@@ -206,6 +224,8 @@ watch(favoritesFilter, () => {
   favoriteExamples.value = []
   displayedExamples.value = []
   fetchFavorites()
+
+  isUserChangingFilter = false
 })
 
 watch(
@@ -257,21 +277,21 @@ onMounted(() => {
       <button
         class="filter-btn"
         :class="{ active: favoritesFilter === 'all' }"
-        @click="favoritesFilter = 'all'"
+        @click="changeFilter('all')"
       >
         All
       </button>
       <button
         class="filter-btn"
         :class="{ active: favoritesFilter === 'marked' }"
-        @click="favoritesFilter = 'marked'"
+        @click="changeFilter('marked')"
       >
         Marked
       </button>
       <button
         class="filter-btn"
         :class="{ active: favoritesFilter === 'not_marked' }"
-        @click="favoritesFilter = 'not_marked'"
+        @click="changeFilter('not_marked')"
       >
         Not Marked
       </button>
@@ -297,21 +317,21 @@ onMounted(() => {
         <button
           class="filter-option"
           :class="{ active: favoritesFilter === 'all' }"
-          @click="favoritesFilter = 'all'; showFilterMenu = false"
+          @click="changeFilter('all')"
         >
           All
         </button>
         <button
           class="filter-option"
           :class="{ active: favoritesFilter === 'marked' }"
-          @click="favoritesFilter = 'marked'; showFilterMenu = false"
+          @click="changeFilter('marked')"
         >
           Marked
         </button>
         <button
           class="filter-option"
           :class="{ active: favoritesFilter === 'not_marked' }"
-          @click="favoritesFilter = 'not_marked'; showFilterMenu = false"
+          @click="changeFilter('not_marked')"
         >
           Not Marked
         </button>
