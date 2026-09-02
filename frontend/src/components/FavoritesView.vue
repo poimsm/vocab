@@ -65,11 +65,20 @@ async function fetchFavorites() {
   favoritesLoading.value = true
 
   try {
+    const params: any = {
+      page: favoritesPage.value,
+      limit: FAVORITES_LIMIT
+    }
+
+    // Agregar filtro is_marked si está activo
+    if (favoritesFilter.value === 'marked') {
+      params.is_marked = true
+    } else if (favoritesFilter.value === 'not_marked') {
+      params.is_marked = false
+    }
+
     const response = await api.get('/examples/favorites', {
-      params: {
-        page: favoritesPage.value,
-        limit: FAVORITES_LIMIT
-      }
+      params
     })
 
     if (response.data && response.data.status === 'ok') {
@@ -191,6 +200,9 @@ watch(favoritesFilter, () => {
   showFilterBar.value = true
   scrollAccumulatedDown = 0
   scrollAccumulatedUp = 0
+  favoritesPage.value = 1
+  favoriteExamples.value = []
+  fetchFavorites()
 })
 
 watch(

@@ -357,9 +357,14 @@ class ExampleRepository:
         logger.debug(f"[ExampleRepository] Example {example_id} is_marked toggled to {example.is_marked}")
         return example.is_marked
 
-    def get_examples(self, page: int = 1, limit: int = 15) -> dict:
+    def get_examples(self, page: int = 1, limit: int = 15, is_marked: bool | None = None) -> dict:
         """
         Obtiene ejemplos favoritos con paginación.
+
+        Args:
+            page: Número de página
+            limit: Items por página
+            is_marked: Filtrar por estado de marcado (True/False/None para sin filtro)
 
         Retorna un diccionario con:
         - items: List de ejemplos
@@ -368,10 +373,15 @@ class ExampleRepository:
         - limit: Items por página
         - pages: Total de páginas
         """
+        # Construir condiciones de filtro
+        filters = [Example.is_favorite == True]
+        if is_marked is not None:
+            filters.append(Example.is_marked == is_marked)
+
         # Contar total de ejemplos favoritos
         total = self.session.exec(
             select(func.count(Example.id))
-            .where(Example.is_favorite == True)
+            .where(*filters)
         ).first() or 0
 
         # Calcular paginación
@@ -382,13 +392,13 @@ class ExampleRepository:
         # Los NULL van al final
         examples = self.session.exec(
             select(Example)
-            .where(Example.is_favorite == True)
+            .where(*filters)
             .order_by(nulls_last(Example.favorited_at.desc()))
             .offset(offset)
             .limit(limit)
         ).all()
 
-        logger.debug(f"[ExampleRepository] Retrieved {len(examples)} favorite examples (page {page}, total {total})")
+        logger.debug(f"[ExampleRepository] Retrieved {len(examples)} favorite examples (page {page}, total {total}, is_marked={is_marked})")
 
         return {
             "items": examples,

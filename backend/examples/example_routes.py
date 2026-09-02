@@ -400,11 +400,17 @@ def toggle_example_marked(
 def get_favorite_examples(
     page: int = 1,
     limit: int = 15,
+    is_marked: Optional[bool] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     Obtiene ejemplos marcados como favoritos con paginación.
+
+    Parámetros:
+    - page: Número de página
+    - limit: Items por página
+    - is_marked: Filtrar por estado de marcado (true/false/null para sin filtro)
 
     Retorna:
     - items: Lista de ejemplos favoritos con texto segmentado
@@ -414,10 +420,10 @@ def get_favorite_examples(
     - pages: Total de páginas
     - status: "ok"
     """
-    logger.info(f"[get_favorite_examples] User {current_user.id}: Fetching favorite examples (page={page}, limit={limit})")
+    logger.info(f"[get_favorite_examples] User {current_user.id}: Fetching favorite examples (page={page}, limit={limit}, is_marked={is_marked})")
 
     example_repo = ExampleRepository(db)
-    paginated_data = example_repo.get_examples(page=page, limit=limit)
+    paginated_data = example_repo.get_examples(page=page, limit=limit, is_marked=is_marked)
 
     # Segmentar el texto de cada ejemplo
     examples_response = []
