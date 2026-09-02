@@ -242,7 +242,7 @@ onMounted(() => {
 <template>
   <!-- Favorites View (Fullscreen) -->
   <div v-show="modelValue" class="favorites-view">
-    <div class="favorites-header">
+    <div class="favorites-header" :class="{ 'is-hidden': !showFilterBar }">
       <h2>Favorite Examples</h2>
       <button class="close-favorites-btn" @click="closeModal" title="Close">
         <Icon icon="solar:close-linear" width="28" />
@@ -393,6 +393,14 @@ onMounted(() => {
   background: #2d2a3e;
   position: relative;
   z-index: 20;
+  /* Smooth hide/show */
+  transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1),
+              box-shadow 0.35s ease;
+  will-change: transform;
+}
+
+.favorites-header.is-hidden {
+  display: none;
 }
 
 .favorites-header h2 {
