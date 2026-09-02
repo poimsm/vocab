@@ -454,9 +454,7 @@ onMounted(() => {
 }
 
 .favorites-filter-mobile.is-hidden {
-  transform: translateY(-100%);
-  opacity: 0.85;
-  box-shadow: none;
+  display: none;
 }
 
 .filter-menu-btn {
