@@ -273,7 +273,7 @@ onMounted(() => {
     </div>
 
     <!-- Filter Buttons (Desktop) -->
-    <div class="favorites-filter" v-if="favoriteExamples.length > 0">
+    <div class="favorites-filter">
       <button
         class="filter-btn"
         :class="{ active: favoritesFilter === 'all' }"
@@ -299,7 +299,6 @@ onMounted(() => {
 
     <!-- Filter Menu (Mobile) -->
     <div
-      v-show="favoriteExamples.length > 0"
       class="favorites-filter-mobile"
       :class="{ 'is-hidden': !showFilterBar }"
     >
