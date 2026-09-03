@@ -292,6 +292,7 @@ class Collocation(SQLModel, table=True):
     text_form: Optional[str] = Field(default=None, max_length=255)
     is_marked: bool = Field(default=False, index=True)
     is_in_use: bool = Field(default=False, index=True)
+    in_use_at: Optional[datetime] = Field(default=None, index=True)
     is_active: bool = Field(default=True, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

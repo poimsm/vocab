@@ -1,5 +1,6 @@
 from typing import List, Optional, Dict, Any
 from sqlmodel import Session, select
+from sqlalchemy import desc
 from models import Collocation
 
 
@@ -120,7 +121,12 @@ class CollocationRepository:
         user_id: int,
         status: str = "all"  # "all", "marked", "not_marked"
     ) -> List[Collocation]:
-        """Obtiene collocations del usuario con filtro opcional de estado."""
+        """Obtiene collocations del usuario con filtro opcional de estado.
+
+        Ordena por:
+        1. in_use_at DESC (más reciente primero, NULL al final)
+        2. created_at DESC (para items sin in_use_at)
+        """
         query = select(Collocation).where(
             Collocation.user_id == user_id,
             Collocation.is_active == True
@@ -131,7 +137,12 @@ class CollocationRepository:
         elif status == "not_marked":
             query = query.where(Collocation.is_marked == False)
 
-        return self.session.exec(query.order_by(Collocation.created_at.desc())).all()
+        return self.session.exec(
+            query.order_by(
+                desc(Collocation.in_use_at),
+                Collocation.created_at.desc()
+            )
+        ).all()
 
     def get_available_collocation_for_word(self, user_id: int, word_id: int) -> Optional[Collocation]:
         """Obtiene una collocation disponible (is_in_use=False) para una palabra específica."""
@@ -148,10 +159,12 @@ class CollocationRepository:
         ).first()
 
     def mark_as_in_use(self, collocation_id: int) -> Optional[Collocation]:
-        """Marca una collocation como en uso."""
+        """Marca una collocation como en uso y establece in_use_at."""
+        from datetime import datetime, timezone
         collocation = self.session.get(Collocation, collocation_id)
         if collocation:
             collocation.is_in_use = True
+            collocation.in_use_at = datetime.now(timezone.utc)
             self.session.add(collocation)
             self.session.commit()
             self.session.refresh(collocation)
