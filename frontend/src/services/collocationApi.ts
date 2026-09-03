@@ -1,8 +1,15 @@
 import { apiClient } from '@/api/client'
 
+export interface TextSegment {
+  text: string
+  is_highlighted: boolean
+}
+
 export interface Collocation {
   id: number
   phrase: string
+  word_id: number | null
+  text: TextSegment[]
   is_marked: boolean
 }
 

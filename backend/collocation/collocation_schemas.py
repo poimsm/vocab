@@ -2,10 +2,18 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 
+class TextSegment(BaseModel):
+    """Segmento de texto con información de destacado"""
+    text: str
+    is_highlighted: bool
+
+
 class CollocationItem(BaseModel):
     """Schema para una colocación individual"""
     id: int
     phrase: str
+    word_id: Optional[int] = None
+    text: List[TextSegment]
     is_marked: bool = False
 
 

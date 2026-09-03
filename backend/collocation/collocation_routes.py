@@ -14,7 +14,8 @@ from collocation.collocation_schemas import (
     CollocationItem,
     CollocationListResponse,
     CollocationCreateRequest,
-    CollocationToggleRequest
+    CollocationToggleRequest,
+    TextSegment
 )
 from collocation.collocation_repository import CollocationRepository
 from words.word_repository import WordRepository
@@ -49,10 +50,19 @@ def get_collocations(
     offset = (page - 1) * limit
     paginated_collocations = all_collocations[offset:offset + limit]
 
-    items = [
-        CollocationItem(id=c.id, phrase=c.phrase, is_marked=c.is_marked)
-        for c in paginated_collocations
-    ]
+    items = []
+    for c in paginated_collocations:
+        segments = repository.get_text_segments(c)
+        logger.debug(f"Collocation {c.id}: phrase='{c.phrase}', text_form='{c.text_form}', segments={segments}")
+        items.append(
+            CollocationItem(
+                id=c.id,
+                phrase=c.phrase,
+                word_id=c.word_id,
+                text=[TextSegment(**seg) for seg in segments],
+                is_marked=c.is_marked
+            )
+        )
 
     # Calcular total de páginas
     pages = (total + limit - 1) // limit
@@ -82,7 +92,14 @@ def create_collocation(
         word_id=request.word_id
     )
     logger.info(f"Created collocation {collocation.id} for user {current_user.id}")
-    return CollocationItem(id=collocation.id, phrase=collocation.phrase, is_marked=collocation.is_marked)
+    segments = repository.get_text_segments(collocation)
+    return CollocationItem(
+        id=collocation.id,
+        phrase=collocation.phrase,
+        word_id=collocation.word_id,
+        text=[TextSegment(**seg) for seg in segments],
+        is_marked=collocation.is_marked
+    )
 
 
 @router.patch("/{collocation_id}", response_model=CollocationItem)
@@ -104,7 +121,14 @@ def toggle_collocation_status(
         )
 
     logger.info(f"Updated collocation {collocation_id} is_marked={request.is_marked}")
-    return CollocationItem(id=collocation.id, phrase=collocation.phrase, is_marked=collocation.is_marked)
+    segments = repository.get_text_segments(collocation)
+    return CollocationItem(
+        id=collocation.id,
+        phrase=collocation.phrase,
+        word_id=collocation.word_id,
+        text=[TextSegment(**seg) for seg in segments],
+        is_marked=collocation.is_marked
+    )
 
 
 @router.post("/batch")
@@ -118,12 +142,22 @@ def create_collocations_batch(
     repository = CollocationRepository(db)
     collocations = repository.create_many(current_user.id, phrases)
     logger.info(f"Created {len(collocations)} collocations for user {current_user.id}")
+    items = []
+    for c in collocations:
+        segments = repository.get_text_segments(c)
+        items.append(
+            CollocationItem(
+                id=c.id,
+                phrase=c.phrase,
+                word_id=c.word_id,
+                text=[TextSegment(**seg) for seg in segments],
+                is_marked=c.is_marked
+            )
+        )
+
     return {
         "created": len(collocations),
-        "items": [
-            CollocationItem(id=c.id, phrase=c.phrase, is_marked=c.is_marked)
-            for c in collocations
-        ]
+        "items": items
     }
 
 
@@ -193,13 +227,23 @@ def generate_initial_collocations(
     collocations = repository.create_many(current_user.id, initial_phrases)
     logger.info(f"Generated {len(collocations)} initial collocations for user {current_user.id}")
 
+    items = []
+    for c in collocations:
+        segments = repository.get_text_segments(c)
+        items.append(
+            CollocationItem(
+                id=c.id,
+                phrase=c.phrase,
+                word_id=c.word_id,
+                text=[TextSegment(**seg) for seg in segments],
+                is_marked=c.is_marked
+            )
+        )
+
     return {
         "status": "created",
         "count": len(collocations),
-        "items": [
-            CollocationItem(id=c.id, phrase=c.phrase, is_marked=c.is_marked)
-            for c in collocations
-        ]
+        "items": items
     }
 
 
@@ -214,9 +258,9 @@ def generate_collocations(
     Estrategia:
     - Obtiene máximo 15 palabras que el usuario ya haya visto (no NEW)
     - Preferencia por palabras en progreso (LEARNING, REINFORCING, SPACING, ALMOST_LEARNED)
-    - Si faltan palabras, completa con LEARNED/REVIEW
-    - Usa round-robin para distribuir collocations entre palabras
-    - Si se agotaron palabras nuevas, repite sobre las existentes
+    - Para cada palabra:
+      - Si tiene collocations disponibles (is_in_use=False), devuelve una y la marca como is_in_use=True
+      - Si no, genera nuevas usando IA, devuelve una y la marca como is_in_use=True
     """
     collocation_repo = CollocationRepository(db)
 
@@ -278,47 +322,81 @@ def generate_collocations(
 
     logger.info(f"Selected {len(selected_words)} words for collocation generation")
 
-    # Generar pares naturales usando IA
-    pairs = generate_natural_pairs_from_words(selected_words)
+    # Para cada palabra, obtener collocation disponible o generar nuevas
+    result_collocations = []
+    words_to_generate = []
 
-    if not pairs:
-        logger.warning(f"AI failed to generate pairs for user {current_user.id}")
-        return {
-            "status": "generation_failed",
-            "message": "Failed to generate natural word pairs",
-            "count": 0,
-            "items": []
-        }
+    for word in selected_words:
+        # Buscar collocation disponible
+        available_collocation = collocation_repo.get_available_collocation_for_word(current_user.id, word.id)
 
-    logger.info(f"Generated {len(pairs)} natural pairs")
+        if available_collocation:
+            # Marcar como en uso y agregar al resultado
+            collocation_repo.mark_as_in_use(available_collocation.id)
+            result_collocations.append(available_collocation)
+            logger.info(f"Found available collocation {available_collocation.id} for word {word.id}")
+        else:
+            # Esta palabra necesita generación de nuevas collocations
+            words_to_generate.append(word)
 
-    # Crear collocations usando round-robin
-    # Estrategia: distribuir pares entre palabras, repitiendo palabras si es necesario
-    collocations_to_create = []
-    word_index = 0
-    selected_word_ids = [w.id for w in selected_words]
+    # Generar nuevas collocations para palabras que no tienen disponibles
+    if words_to_generate:
+        logger.info(f"Generating new collocations for {len(words_to_generate)} words")
+        response = generate_natural_pairs_from_words(words_to_generate)
 
-    for pair in pairs:
-        # Round-robin: ciclar entre palabras seleccionadas
-        word_id = selected_word_ids[word_index % len(selected_word_ids)]
+        if response and response.get("results"):
+            logger.info(f"Generated pairs for {len(response['results'])} words")
 
-        collocation_data = {
-            "phrase": pair.get("text", ""),
-            "word_id": word_id
-        }
-        collocations_to_create.append(collocation_data)
-        word_index += 1
+            # Crear collocations desde la respuesta (que tiene estructura word_id -> pairs)
+            collocations_to_create = []
 
-    # Crear todas las collocations
-    collocations = collocation_repo.create_many(current_user.id, collocations_to_create)
-    logger.info(f"Created {len(collocations)} collocations for user {current_user.id}")
+            for result in response["results"]:
+                word_id = result.get("word_id")
+                pairs = result.get("pairs", [])
+
+                # Crear una collocation por cada pair para esta palabra
+                for pair in pairs:
+                    collocation_data = {
+                        "phrase": pair.get("text", ""),
+                        "word_id": word_id,
+                        "text_form": pair.get("text_form", "")
+                    }
+                    collocations_to_create.append(collocation_data)
+
+            # Crear todas las collocations
+            if collocations_to_create:
+                new_collocations = collocation_repo.create_many(current_user.id, collocations_to_create)
+                logger.info(f"Created {len(new_collocations)} collocations")
+
+                # Tomar una collocation por palabra a generar y marcarlas como en uso
+                for word in words_to_generate:
+                    word_collocations = [c for c in new_collocations if c.word_id == word.id]
+                    if word_collocations:
+                        collocation_repo.mark_as_in_use(word_collocations[0].id)
+                        result_collocations.append(word_collocations[0])
+                        logger.info(f"Created and marked collocation {word_collocations[0].id} for word {word.id}")
+        else:
+            logger.warning(f"AI failed to generate pairs for {len(words_to_generate)} words")
+
+    logger.info(f"Returning {len(result_collocations)} collocations for user {current_user.id}")
+
+    items = []
+    for c in result_collocations:
+        segments = collocation_repo.get_text_segments(c)
+        logger.debug(f"Generated collocation {c.id}: phrase='{c.phrase}', text_form='{c.text_form}', segments={segments}")
+        items.append(
+            CollocationItem(
+                id=c.id,
+                phrase=c.phrase,
+                word_id=c.word_id,
+                text=[TextSegment(**seg) for seg in segments],
+                is_marked=c.is_marked
+            )
+        )
 
     return {
-        "status": "created",
-        "count": len(collocations),
+        "status": "created" if result_collocations else "no_collocations",
+        "count": len(result_collocations),
         "words_used": len(selected_words),
-        "items": [
-            CollocationItem(id=c.id, phrase=c.phrase, is_marked=c.is_marked)
-            for c in collocations
-        ]
+        "items": items
     }

@@ -1,13 +1,23 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { collocationApi } from '@/services/collocationApi'
+
+interface TextSegment {
+  text: string
+  is_highlighted: boolean
+}
 
 interface Collocation {
   id: number
   phrase: string
+  word_id: number | null
+  text: TextSegment[]
   is_marked: boolean
 }
+
+const router = useRouter()
 
 const original = ref<Collocation[]>([])
 const displayedCollocations = ref<Collocation[]>([])
@@ -54,6 +64,12 @@ const toggleMarked = async (collocation: Collocation) => {
   }
 }
 
+const handleWordClick = (wordId: number | null) => {
+  if (wordId) {
+    router.push(`/words/${wordId}`)
+  }
+}
+
 const changeFilter = (newFilter: 'all' | 'marked' | 'not_marked') => {
   filterStatus.value = newFilter
   currentPage.value = 1
@@ -93,21 +109,12 @@ const loadCollocations = async () => {
     error.value = null
     const response = await collocationApi.getCollocations(filterStatus.value, currentPage.value, ITEMS_PER_PAGE)
 
-    // Generate initial collocations if empty
-    if (response.total === 0) {
-      const initResult = await collocationApi.generateInitial()
-      if (initResult.status === 'created' && initResult.items) {
-        original.value = initResult.items
-        totalPages.value = 1
-      }
+    if (currentPage.value === 1) {
+      original.value = response.items
     } else {
-      if (currentPage.value === 1) {
-        original.value = response.items
-      } else {
-        original.value.push(...response.items)
-      }
-      totalPages.value = response.pages
+      original.value.push(...response.items)
     }
+    totalPages.value = response.pages
 
     // Update displayed items with the loaded data
     updateDisplayedCollocations()
@@ -257,7 +264,25 @@ onMounted(() => {
                 width="24"
               />
             </button>
-            <span class="phrase" :class="{ 'line-through': collocation.is_marked }">{{ collocation.phrase }}</span>
+            <span class="phrase" :class="{ 'line-through': collocation.is_marked }">
+              <template v-if="collocation.text && collocation.text.length > 0">
+                <span
+                  v-for="(segment, idx) in collocation.text"
+                  :key="idx"
+                  class="text-segment"
+                  :class="{
+                    'highlighted': segment.is_highlighted,
+                    'clickable': segment.is_highlighted && collocation.word_id
+                  }"
+                  @click="segment.is_highlighted && collocation.word_id && handleWordClick(collocation.word_id)"
+                >
+                  {{ segment.text }}
+                </span>
+              </template>
+              <template v-else>
+                {{ collocation.phrase }}
+              </template>
+            </span>
           </div>
         </div>
 
@@ -584,6 +609,36 @@ onMounted(() => {
 
 .phrase.line-through {
   color: #7c7a8a;
+}
+
+.text-segment {
+  display: inline;
+}
+
+.text-segment.highlighted {
+  color: #c4b5fd;
+  font-weight: 600;
+}
+
+.text-segment.clickable {
+  cursor: pointer;
+  /* padding: 2px 4px; */
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.text-segment.clickable:hover {
+  background: rgba(167, 139, 250, 0.2);
+  color: #c9b8ff;
+}
+
+.phrase.line-through .text-segment.highlighted {
+  color: #9d8dc0;
+}
+
+.phrase.line-through .text-segment.clickable:hover {
+  background: rgba(167, 139, 250, 0.1);
+  color: #a48fb5;
 }
 
 @media (max-width: 768px) {

@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from sqlmodel import Session, select
 from models import Collocation
 
@@ -34,13 +34,15 @@ class CollocationRepository:
         self,
         user_id: int,
         phrase: str,
-        word_id: Optional[int] = None
+        word_id: Optional[int] = None,
+        text_form: Optional[str] = None
     ) -> Collocation:
         """Crea una nueva colocación."""
         collocation = Collocation(
             user_id=user_id,
             phrase=phrase,
             word_id=word_id,
+            text_form=text_form,
             is_active=True
         )
         self.session.add(collocation)
@@ -53,7 +55,7 @@ class CollocationRepository:
 
         Args:
             user_id: ID del usuario
-            phrases: Lista de dicts con estructura {phrase, word_id (opcional)}
+            phrases: Lista de dicts con estructura {phrase, word_id (opcional), text_form (opcional)}
         """
         collocations = []
         for item in phrases:
@@ -61,6 +63,7 @@ class CollocationRepository:
                 user_id=user_id,
                 phrase=item.get("phrase"),
                 word_id=item.get("word_id"),
+                text_form=item.get("text_form"),
                 is_active=True
             )
             self.session.add(collocation)
@@ -129,3 +132,65 @@ class CollocationRepository:
             query = query.where(Collocation.is_marked == False)
 
         return self.session.exec(query.order_by(Collocation.created_at.desc())).all()
+
+    def get_available_collocation_for_word(self, user_id: int, word_id: int) -> Optional[Collocation]:
+        """Obtiene una collocation disponible (is_in_use=False) para una palabra específica."""
+        return self.session.exec(
+            select(Collocation)
+            .where(
+                Collocation.user_id == user_id,
+                Collocation.word_id == word_id,
+                Collocation.is_in_use == False,
+                Collocation.is_active == True
+            )
+            .order_by(Collocation.created_at.asc())
+            .limit(1)
+        ).first()
+
+    def mark_as_in_use(self, collocation_id: int) -> Optional[Collocation]:
+        """Marca una collocation como en uso."""
+        collocation = self.session.get(Collocation, collocation_id)
+        if collocation:
+            collocation.is_in_use = True
+            self.session.add(collocation)
+            self.session.commit()
+            self.session.refresh(collocation)
+        return collocation
+
+    def get_text_segments(self, collocation: Collocation) -> List[Dict[str, Any]]:
+        """Obtiene los segmentos de texto de una collocation.
+
+        Si text_form está guardado, busca esa forma en la phrase y la marca como highlighted.
+        Si no, retorna un segmento único con toda la phrase sin destacar.
+        """
+        if not collocation.text_form:
+            return [{"text": collocation.phrase, "is_highlighted": False}]
+
+        # Buscar text_form en la phrase (case-insensitive)
+        phrase = collocation.phrase
+        text_form = collocation.text_form
+
+        # Buscar la posición del text_form en la phrase
+        phrase_lower = phrase.lower()
+        text_form_lower = text_form.lower()
+        pos = phrase_lower.find(text_form_lower)
+
+        if pos == -1:
+            # No se encontró, retornar la phrase completa sin destacar
+            return [{"text": phrase, "is_highlighted": False}]
+
+        # Construir segmentos: antes, highlighted, después
+        segments = []
+
+        # Segmento antes
+        if pos > 0:
+            segments.append({"text": phrase[:pos], "is_highlighted": False})
+
+        # Segmento destacado
+        segments.append({"text": phrase[pos:pos + len(text_form)], "is_highlighted": True})
+
+        # Segmento después
+        if pos + len(text_form) < len(phrase):
+            segments.append({"text": phrase[pos + len(text_form):], "is_highlighted": False})
+
+        return segments

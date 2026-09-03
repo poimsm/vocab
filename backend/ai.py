@@ -832,6 +832,7 @@ neat goatee
 Rules:
 - Generate one strong combination per vocabulary item when possible.
 - Usually use 2 words; 3 only when natural.
+- Each item in the output MUST contain a "pairs" list with exactly 6 elements.
 - The combination must contain the vocabulary item.
 - You may add words that are not in the input.
 - Do not force two input words together.
@@ -843,13 +844,22 @@ Rules:
 - Return ONLY valid JSON.
 
 Format:
-[
-  {
-    "word_id": 12,
-    "text_form": "quivering",
-    "text": "quivering hands"
-  }
-]
+{
+  "results": [
+    {
+      "word_id": 88,
+      "main": "spark",
+      "pairs": [
+        {"text_form": "sparked", "text": "sparked debate"},
+        {"text_form": "sparks", "text": "flying sparks"},
+        {"text_form": "sparking", "text": "sparking interest"},
+        {"text_form": "spark", "text": "bright spark"},
+        {"text_form": "sparked", "text": "sparked outrage"},
+        {"text_form": "sparks", "text": "sparks anger"}
+      ]
+    }
+  ]
+}
 """
             },
             {

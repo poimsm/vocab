@@ -10,9 +10,18 @@ import RandomizerPage from '@/pages/RandomizerPage.vue'
 import GameStoryPage from '@/pages/GameStoryPage.vue'
 import QuickWritePage from '@/pages/QuickWritePage.vue'
 import CollocationsPage from '@/pages/CollocationsPage.vue'
+import WordDetailPage from '@/pages/WordDetailPage.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
+  scrollBehavior(to, from, savedPosition) {
+    // Si hay una posición guardada (back button), usarla
+    if (savedPosition) {
+      return savedPosition
+    }
+    // Si es una nueva navegación, ir al top
+    return { left: 0, top: 0 }
+  },
   routes: [
     {
       path: '/',
@@ -66,6 +75,12 @@ const router = createRouter({
       path: '/collocations',
       name: 'collocations',
       component: CollocationsPage,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/words/:id',
+      name: 'word-detail',
+      component: WordDetailPage,
       meta: { requiresAuth: true }
     }
   ]

@@ -1,5 +1,5 @@
 import enum
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from datetime import datetime, timezone
 from sqlmodel import Field, SQLModel, Relationship
 from sqlalchemy import JSON, Integer
@@ -289,7 +289,9 @@ class Collocation(SQLModel, table=True):
     user_id: int = Field(foreign_key="users.id", nullable=False, index=True)
     word_id: Optional[int] = Field(foreign_key="words.id", nullable=True, index=True)
     phrase: str = Field(nullable=False, max_length=255)
+    text_form: Optional[str] = Field(default=None, max_length=255)
     is_marked: bool = Field(default=False, index=True)
+    is_in_use: bool = Field(default=False, index=True)
     is_active: bool = Field(default=True, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
