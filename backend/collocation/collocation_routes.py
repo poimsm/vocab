@@ -3,6 +3,7 @@ from sqlmodel import Session
 from typing import List
 from sqlalchemy import func
 from sqlmodel import select
+import random
 
 from db import get_db
 from logging_client import logger
@@ -307,6 +308,9 @@ def generate_collocations(
         ).all()
         selected_words.extend(new_words)
         logger.info(f"Added {len(new_words)} NEW words to reach minimum")
+
+    # Revolver la lista para variar las palabras seleccionadas
+    random.shuffle(selected_words)
 
     # Limitar a máximo 15
     selected_words = selected_words[:15]
