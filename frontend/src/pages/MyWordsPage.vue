@@ -468,7 +468,7 @@ onUnmounted(() => {
         <span v-if="totalFavorites > 0" class="mobile-fav-badge">{{ totalFavorites }}</span>
       </button>
       <!-- Mobile Filter Button -->
-      <button class="mobile-filter-btn" @click="showFilterMenu = !showFilterMenu">
+      <button class="mobile-filter-btn" :class="{ active: learningStateFilter !== 'all' }" @click="showFilterMenu = !showFilterMenu">
         <Icon icon="solar:filter-outline" width="18" />
       </button>
     </div>
@@ -1305,6 +1305,12 @@ onUnmounted(() => {
 .mobile-filter-btn:hover {
   background: rgba(255, 255, 255, 0.06);
   color: #e2e0e8;
+}
+
+.mobile-filter-btn.active {
+  color: #a78bfa;
+  background: rgba(124, 58, 237, 0.1);
+  border-color: rgba(124, 58, 237, 0.2);
 }
 
 /* ─── Mobile Filter Menu ─── */

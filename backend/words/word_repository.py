@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.orm import joinedload
+from sqlalchemy import nulls_last
 from sqlmodel import Session, func, or_, select
 
 from logging_client import logger
@@ -96,7 +97,18 @@ class WordRepository:
                 statement = statement.where(Word.id.in_(subquery))
 
         # Aplicar ordenamiento
-        if sort == "newest":
+        if is_favorite:
+            # Favoritos por fecha de marcado (más reciente primero), NULLs al final
+            statement = statement.order_by(nulls_last(Word.favorited_at.desc()))
+        elif learning_state == 'mastered':
+            # Mastered por fecha de aprendizaje (más reciente primero), NULLs al final
+            statement = (
+                statement
+                .join(WordStatistics)
+                .where(WordStatistics.type == ContentType.EXAMPLE)
+                .order_by(nulls_last(WordStatistics.learned_at.desc()))
+            )
+        elif sort == "newest":
             statement = statement.order_by(Word.created_at.desc())
         elif sort == "oldest":
             statement = statement.order_by(Word.created_at.asc())
@@ -218,7 +230,7 @@ class WordRepository:
         if not stat:
             return False
 
-        return stat.learning_state.value == "learned"
+        return stat.learning_state == LearningState.LEARNED or stat.learning_state == LearningState.REVIEW
 
     def create(self, user_id: int, word_data: Dict[str, Any]) -> Word:
         """Crea una nueva palabra"""
@@ -267,6 +279,10 @@ class WordRepository:
             return None
 
         word.is_favorite = not word.is_favorite
+        if word.is_favorite:
+            word.favorited_at = datetime.now(timezone.utc)
+        else:
+            word.favorited_at = None
         self.session.add(word)
         self.session.commit()
         self.session.refresh(word)
@@ -296,6 +312,9 @@ class WordRepository:
             return False
 
         for stat in statistics:
+            # Solo establecer learned_at si no estaba en LEARNED o REVIEW antes
+            if stat.learning_state not in [LearningState.LEARNED, LearningState.REVIEW]:
+                stat.learned_at = datetime.now(timezone.utc)
             stat.learning_state = LearningState.LEARNED
             self.session.add(stat)
 

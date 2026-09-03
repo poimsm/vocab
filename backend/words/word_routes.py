@@ -410,14 +410,18 @@ def mark_word_as_learned(
 
     if not success:
         logger.warning(f"[mark_word_as_learned] No statistics found for word {word_id}")
-        return {"status": "warning", "message": "No statistics to update"}
+        return {"status": "warning", "message": "No statistics to update", "is_learned": False}
 
     logger.debug(f"[mark_word_as_learned] Word {word_id} marked as learned")
+
+    # Verificar el estado actualizado
+    is_learned = word_repo.is_learned(word_id, ContentType.EXAMPLE)
 
     return {
         "status": "ok",
         "message": "Palabra marcada como aprendida",
-        "word_id": word_id
+        "word_id": word_id,
+        "is_learned": is_learned
     }
 
 

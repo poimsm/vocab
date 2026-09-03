@@ -152,9 +152,14 @@ class LearningTracker:
         statistics.current_cycle_seen += 1
         statistics.last_seen_at = datetime.now(timezone.utc)
 
+        old_learning_state = statistics.learning_state
         statistics.learning_state = self.calculate_learning_state(
             statistics
         )
+
+        # Establecer learned_at cuando se alcanza LEARNED por primera vez
+        if statistics.learning_state == LearningState.LEARNED and old_learning_state != LearningState.LEARNED and old_learning_state != LearningState.REVIEW:
+            statistics.learned_at = datetime.now(timezone.utc)
 
         self.session.add(statistics)
         self.session.commit()
