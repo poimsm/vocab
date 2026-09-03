@@ -1,12 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 from typing import List
+from sqlalchemy import func
+from sqlmodel import select
 
 from db import get_db
 from logging_client import logger
 from auth.repository import get_current_user
-from models import User
+from models import User, Word, WordStatistics, LearningState, ContentType
 from decorators import log_endpoint
+from ai import generate_natural_pairs_from_words
 from collocation.collocation_schemas import (
     CollocationItem,
     CollocationListResponse,
@@ -14,6 +17,7 @@ from collocation.collocation_schemas import (
     CollocationToggleRequest
 )
 from collocation.collocation_repository import CollocationRepository
+from words.word_repository import WordRepository
 
 
 router = APIRouter()
@@ -171,6 +175,127 @@ def generate_initial_collocations(
     return {
         "status": "created",
         "count": len(collocations),
+        "items": [
+            CollocationItem(id=c.id, phrase=c.phrase, is_marked=c.is_marked)
+            for c in collocations
+        ]
+    }
+
+
+@router.post("/generate")
+@log_endpoint
+def generate_collocations(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Genera collocations automáticas basadas en palabras vistas del usuario.
+
+    Estrategia:
+    - Obtiene máximo 15 palabras que el usuario ya haya visto (no NEW)
+    - Preferencia por palabras en progreso (LEARNING, REINFORCING, SPACING, ALMOST_LEARNED)
+    - Si faltan palabras, completa con LEARNED/REVIEW
+    - Usa round-robin para distribuir collocations entre palabras
+    - Si se agotaron palabras nuevas, repite sobre las existentes
+    """
+    collocation_repo = CollocationRepository(db)
+
+    # Obtener palabras vistas (excluyendo NEW)
+    in_progress_states = [
+        LearningState.LEARNING,
+        LearningState.REINFORCING,
+        LearningState.SPACING,
+        LearningState.ALMOST_LEARNED,
+        LearningState.LEARNED,
+        LearningState.REVIEW
+    ]
+
+    # Obtener palabras en progreso primero
+    in_progress_words = db.exec(
+        select(Word)
+        .join(WordStatistics)
+        .where(
+            Word.user_id == current_user.id,
+            Word.is_active == True,
+            WordStatistics.type == ContentType.EXAMPLE,
+            WordStatistics.learning_state.in_(in_progress_states)
+        )
+        .distinct(Word.id)
+    ).all()
+
+    logger.info(f"Found {len(in_progress_words)} in-progress words for user {current_user.id}")
+
+    # Si no hay palabras en progreso, intenta obtener NEW words
+    selected_words = list(in_progress_words)
+    if len(selected_words) < 15:
+        remaining_needed = 15 - len(selected_words)
+        new_words = db.exec(
+            select(Word)
+            .join(WordStatistics)
+            .where(
+                Word.user_id == current_user.id,
+                Word.is_active == True,
+                WordStatistics.type == ContentType.EXAMPLE,
+                WordStatistics.learning_state == LearningState.NEW
+            )
+            .distinct(Word.id)
+            .limit(remaining_needed)
+        ).all()
+        selected_words.extend(new_words)
+        logger.info(f"Added {len(new_words)} NEW words to reach minimum")
+
+    # Limitar a máximo 15
+    selected_words = selected_words[:15]
+
+    if not selected_words:
+        logger.warning(f"No words available for user {current_user.id}")
+        return {
+            "status": "no_words",
+            "message": "No words available to generate collocations",
+            "count": 0,
+            "items": []
+        }
+
+    logger.info(f"Selected {len(selected_words)} words for collocation generation")
+
+    # Generar pares naturales usando IA
+    pairs = generate_natural_pairs_from_words(selected_words)
+
+    if not pairs:
+        logger.warning(f"AI failed to generate pairs for user {current_user.id}")
+        return {
+            "status": "generation_failed",
+            "message": "Failed to generate natural word pairs",
+            "count": 0,
+            "items": []
+        }
+
+    logger.info(f"Generated {len(pairs)} natural pairs")
+
+    # Crear collocations usando round-robin
+    # Estrategia: distribuir pares entre palabras, repitiendo palabras si es necesario
+    collocations_to_create = []
+    word_index = 0
+    selected_word_ids = [w.id for w in selected_words]
+
+    for pair in pairs:
+        # Round-robin: ciclar entre palabras seleccionadas
+        word_id = selected_word_ids[word_index % len(selected_word_ids)]
+
+        collocation_data = {
+            "phrase": pair.get("text", ""),
+            "word_id": word_id
+        }
+        collocations_to_create.append(collocation_data)
+        word_index += 1
+
+    # Crear todas las collocations
+    collocations = collocation_repo.create_many(current_user.id, collocations_to_create)
+    logger.info(f"Created {len(collocations)} collocations for user {current_user.id}")
+
+    return {
+        "status": "created",
+        "count": len(collocations),
+        "words_used": len(selected_words),
         "items": [
             CollocationItem(id=c.id, phrase=c.phrase, is_marked=c.is_marked)
             for c in collocations

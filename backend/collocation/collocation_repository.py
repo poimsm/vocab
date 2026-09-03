@@ -17,7 +17,7 @@ class CollocationRepository:
                 Collocation.user_id == user_id,
                 Collocation.is_active == True
             )
-            .order_by(Collocation.id)
+            .order_by(Collocation.created_at.desc())
         ).all()
 
     def get_by_id(self, collocation_id: int, user_id: int) -> Optional[Collocation]:
@@ -128,4 +128,4 @@ class CollocationRepository:
         elif status == "not_marked":
             query = query.where(Collocation.is_marked == False)
 
-        return self.session.exec(query.order_by(Collocation.id)).all()
+        return self.session.exec(query.order_by(Collocation.created_at.desc())).all()

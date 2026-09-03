@@ -639,6 +639,7 @@ onMounted(() => {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  align-items: center;
   gap: 16px;
 }
 
@@ -784,6 +785,10 @@ onMounted(() => {
   .mark-checkbox {
     width: 36px;
     height: 36px;
+  }
+
+  .favorite-card-wrapper {
+    align-items: flex-start;    
   }
 }
 </style>
