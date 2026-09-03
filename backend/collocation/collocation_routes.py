@@ -368,13 +368,11 @@ def generate_collocations(
                 new_collocations = collocation_repo.create_many(current_user.id, collocations_to_create)
                 logger.info(f"Created {len(new_collocations)} collocations")
 
-                # Tomar una collocation por palabra a generar y marcarlas como en uso
-                for word in words_to_generate:
-                    word_collocations = [c for c in new_collocations if c.word_id == word.id]
-                    if word_collocations:
-                        collocation_repo.mark_as_in_use(word_collocations[0].id)
-                        result_collocations.append(word_collocations[0])
-                        logger.info(f"Created and marked collocation {word_collocations[0].id} for word {word.id}")
+                # Marcar TODAS las nuevas collocations como en uso
+                for collocation in new_collocations:
+                    collocation_repo.mark_as_in_use(collocation.id)
+                    result_collocations.append(collocation)
+                    logger.info(f"Marked collocation {collocation.id} as in use")
         else:
             logger.warning(f"AI failed to generate pairs for {len(words_to_generate)} words")
 

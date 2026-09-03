@@ -121,15 +121,17 @@ class CollocationRepository:
         user_id: int,
         status: str = "all"  # "all", "marked", "not_marked"
     ) -> List[Collocation]:
-        """Obtiene collocations del usuario con filtro opcional de estado.
+        """Obtiene collocations en uso del usuario con filtro opcional de estado.
 
+        Solo devuelve collocations con is_in_use = True.
         Ordena por:
-        1. in_use_at DESC (más reciente primero, NULL al final)
+        1. in_use_at DESC (más reciente primero)
         2. created_at DESC (para items sin in_use_at)
         """
         query = select(Collocation).where(
             Collocation.user_id == user_id,
-            Collocation.is_active == True
+            Collocation.is_active == True,
+            Collocation.is_in_use == True
         )
 
         if status == "marked":
