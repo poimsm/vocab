@@ -290,33 +290,8 @@ def generate_collocations(
 
     logger.info(f"Found {len(in_progress_words)} in-progress words for user {current_user.id}")
 
-    # Si no hay palabras en progreso, intenta obtener NEW words
-    selected_words = list(in_progress_words)
-    if len(selected_words) < 15:
-        remaining_needed = 15 - len(selected_words)
-        new_words = db.exec(
-            select(Word)
-            .join(WordStatistics)
-            .where(
-                Word.user_id == current_user.id,
-                Word.is_active == True,
-                WordStatistics.type == ContentType.EXAMPLE,
-                WordStatistics.learning_state == LearningState.NEW
-            )
-            .distinct(Word.id)
-            .limit(remaining_needed)
-        ).all()
-        selected_words.extend(new_words)
-        logger.info(f"Added {len(new_words)} NEW words to reach minimum")
-
-    # Revolver la lista para variar las palabras seleccionadas
-    random.shuffle(selected_words)
-
-    # Limitar a máximo 15
-    selected_words = selected_words[:15]
-
-    if not selected_words:
-        logger.warning(f"No words available for user {current_user.id}")
+    if not in_progress_words:
+        logger.warning(f"No in-progress words available for user {current_user.id}")
         return {
             "status": "no_words",
             "message": "No words available to generate collocations",
@@ -324,68 +299,82 @@ def generate_collocations(
             "items": []
         }
 
-    logger.info(f"Selected {len(selected_words)} words for collocation generation")
+    # Revolver y seleccionar máximo 15 palabras
+    selected_words = list(in_progress_words)
+    random.shuffle(selected_words)
+    selected_words = selected_words[:15]
 
-    # Para cada palabra, obtener collocation disponible o generar nuevas
+    logger.info(f"Selected {len(selected_words)} random words for collocation generation")
+
+    # Procesar cada palabra: obtener disponible o generar nueva
     result_collocations = []
     words_to_generate = []
+    word_to_generate_map = {}  # Mapeo para asociar palabras con sus índices
 
-    for word in selected_words:
+    for idx, word in enumerate(selected_words):
         # Buscar collocation disponible
         available_collocation = collocation_repo.get_available_collocation_for_word(current_user.id, word.id)
 
         if available_collocation:
             # Marcar como en uso y agregar al resultado
             collocation_repo.mark_as_in_use(available_collocation.id)
-            result_collocations.append(available_collocation)
+            result_collocations.append((idx, available_collocation))
             logger.info(f"Found available collocation {available_collocation.id} for word {word.id}")
         else:
             # Esta palabra necesita generación de nuevas collocations
             words_to_generate.append(word)
+            word_to_generate_map[word.id] = idx
+
+    logger.info(f"Found {len(result_collocations)} available collocations, need to generate for {len(words_to_generate)} words")
 
     # Generar nuevas collocations para palabras que no tienen disponibles
     if words_to_generate:
-        logger.info(f"Generating new collocations for {len(words_to_generate)} words")
         response = generate_natural_pairs_from_words(words_to_generate)
 
         if response and response.get("results"):
             logger.info(f"Generated pairs for {len(response['results'])} words")
 
-            # Crear collocations desde la respuesta (que tiene estructura word_id -> pairs)
-            collocations_to_create = []
-
+            # Crear collocations desde la respuesta
             for result in response["results"]:
                 word_id = result.get("word_id")
                 pairs = result.get("pairs", [])
 
-                # Crear una collocation por cada pair para esta palabra
-                for pair in pairs:
-                    collocation_data = {
-                        "phrase": pair.get("text", ""),
-                        "word_id": word_id,
-                        "text_form": pair.get("text_form", "")
-                    }
-                    collocations_to_create.append(collocation_data)
+                if not pairs:
+                    continue
 
-            # Crear todas las collocations
-            if collocations_to_create:
-                new_collocations = collocation_repo.create_many(current_user.id, collocations_to_create)
-                logger.info(f"Created {len(new_collocations)} collocations")
+                # Crear solo la primera collocation para esta palabra
+                pair = pairs[0]
+                collocation_data = {
+                    "phrase": pair.get("text", ""),
+                    "word_id": word_id,
+                    "text_form": pair.get("text_form", "")
+                }
 
-                # Marcar TODAS las nuevas collocations como en uso
-                for collocation in new_collocations:
-                    collocation_repo.mark_as_in_use(collocation.id)
-                    result_collocations.append(collocation)
-                    logger.info(f"Marked collocation {collocation.id} as in use")
+                # Crear collocation
+                new_collocation = collocation_repo.create(
+                    user_id=current_user.id,
+                    phrase=collocation_data["phrase"],
+                    word_id=collocation_data["word_id"],
+                    text_form=collocation_data["text_form"]
+                )
+
+                # Marcar como en uso
+                collocation_repo.mark_as_in_use(new_collocation.id)
+                idx = word_to_generate_map[word_id]
+                result_collocations.append((idx, new_collocation))
+                logger.info(f"Created and marked collocation {new_collocation.id} for word {word_id}")
         else:
-            logger.warning(f"AI failed to generate pairs for {len(words_to_generate)} words")
+            logger.warning(f"AI failed to generate pairs")
 
-    logger.info(f"Returning {len(result_collocations)} collocations for user {current_user.id}")
+    # Ordenar por índice original para mantener el orden de las palabras seleccionadas
+    result_collocations.sort(key=lambda x: x[0])
+    final_collocations = [c for _, c in result_collocations]
+
+    logger.info(f"Returning {len(final_collocations)} collocations for user {current_user.id}")
 
     items = []
-    for c in result_collocations:
+    for c in final_collocations:
         segments = collocation_repo.get_text_segments(c)
-        logger.debug(f"Generated collocation {c.id}: phrase='{c.phrase}', text_form='{c.text_form}', segments={segments}")
         items.append(
             CollocationItem(
                 id=c.id,
@@ -397,8 +386,8 @@ def generate_collocations(
         )
 
     return {
-        "status": "created" if result_collocations else "no_collocations",
-        "count": len(result_collocations),
+        "status": "created" if final_collocations else "no_collocations",
+        "count": len(final_collocations),
         "words_used": len(selected_words),
         "items": items
     }
