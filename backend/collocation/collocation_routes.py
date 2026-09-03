@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session
 from typing import List
 from sqlalchemy import func
@@ -23,27 +23,48 @@ from words.word_repository import WordRepository
 router = APIRouter()
 
 
-@router.get("/list", response_model=CollocationListResponse)
+@router.get("/list", response_model=dict)
 @log_endpoint
 def get_collocations(
     status: str = "all",
+    page: int = Query(1, ge=1),
+    limit: int = Query(15, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Obtiene las collocations del usuario actual.
+    """Obtiene las collocations del usuario actual con paginación.
 
     Parameters:
     - status: "all" (default), "marked", "not_marked"
+    - page: página actual (default: 1)
+    - limit: items por página (default: 15, máximo: 100)
     """
     repository = CollocationRepository(db)
-    collocations = repository.get_user_collocations_filtered(current_user.id, status)
+
+    # Obtener total de collocations
+    all_collocations = repository.get_user_collocations_filtered(current_user.id, status)
+    total = len(all_collocations)
+
+    # Calcular offset y aplicar paginación
+    offset = (page - 1) * limit
+    paginated_collocations = all_collocations[offset:offset + limit]
 
     items = [
         CollocationItem(id=c.id, phrase=c.phrase, is_marked=c.is_marked)
-        for c in collocations
+        for c in paginated_collocations
     ]
 
-    return CollocationListResponse(items=items, total=len(items))
+    # Calcular total de páginas
+    pages = (total + limit - 1) // limit
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": pages,
+        "status": "ok"
+    }
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)

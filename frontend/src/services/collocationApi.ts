@@ -9,16 +9,26 @@ export interface Collocation {
 export interface CollocationListResponse {
   items: Collocation[]
   total: number
+  page: number
+  limit: number
+  pages: number
+  status: string
 }
 
 export const collocationApi = {
   /**
-   * Fetch all collocations for the user
+   * Fetch collocations for the user with pagination
    * @param status - Filter: 'all', 'marked', or 'not_marked'
+   * @param page - Page number (default: 1)
+   * @param limit - Items per page (default: 15)
    */
-  async getCollocations(status: 'all' | 'marked' | 'not_marked' = 'all'): Promise<CollocationListResponse> {
+  async getCollocations(
+    status: 'all' | 'marked' | 'not_marked' = 'all',
+    page: number = 1,
+    limit: number = 15
+  ): Promise<CollocationListResponse> {
     const response = await apiClient.get('/collocations/list', {
-      params: { status }
+      params: { status, page, limit }
     })
     return response.data
   },
@@ -69,6 +79,20 @@ export const collocationApi = {
     items?: Collocation[]
   }> {
     const response = await apiClient.post('/collocations/generate-initial')
+    return response.data
+  },
+
+  /**
+   * Generate collocations automatically based on user's words
+   */
+  async generate(): Promise<{
+    status: 'created' | 'no_words' | 'generation_failed'
+    message?: string
+    count: number
+    words_used?: number
+    items?: Collocation[]
+  }> {
+    const response = await apiClient.post('/collocations/generate')
     return response.data
   },
 
