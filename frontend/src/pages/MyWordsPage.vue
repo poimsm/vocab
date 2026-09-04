@@ -25,6 +25,7 @@ interface Word {
   synonyms: string[]
   sourceText?: string
   status?: 'pending' | 'ready'
+  isExisting?: boolean
 }
 
 // ─── State ───
@@ -263,9 +264,41 @@ async function addWordApi() {
     const response = await api.post('/words/single', { text })
     const data = response.data
 
-    // Handle bad words error
+    // Handle error
     if (data.status === 'error') {
       addError.value = data.message
+      return
+    }
+
+    // Handle existing word
+    if (data.status === 'existing') {
+      const existingWord = data.word
+      const newWord: Word = {
+        id: existingWord.id,
+        word: existingWord.main,
+        definition: existingWord.meaning || 'N/A',
+        level: existingWord.level,
+        category: existingWord.context || existingWord.type,
+        frequency: existingWord.frequency || 'common',
+        isFavorite: existingWord.is_favorite,
+        isLearned: existingWord.is_learned,
+        addedAt: new Date(existingWord.created_at).toISOString().split('T')[0] ?? '',
+        totalExamples: existingWord.total_examples || 0,
+        type: existingWord.type,
+        examples: existingWord.examples || [],
+        synonyms: existingWord.synonyms || [],
+        sourceText: existingWord.source_text,
+        status: 'ready',
+        isExisting: true
+      }
+
+      // Add to the beginning of the list
+      words.value.unshift(newWord)
+      totalWords.value++
+
+      addSuccess.value = 'Esta palabra ya está en tu lista.'
+      newWordText.value = ''
+      closeAdd()
       return
     }
 
@@ -287,7 +320,8 @@ async function addWordApi() {
         type: 'pending',
         examples: [],
         synonyms: [],
-        status: 'pending'
+        status: 'pending',
+        isExisting: false
       }
 
       // Add to the beginning of the list
@@ -611,6 +645,9 @@ onUnmounted(() => {
                 </span>
                 <span v-if="word.status === 'pending'" class="word-pending-badge">
                   Pending
+                </span>
+                <span v-if="word.isExisting" class="word-existing-badge">
+                  Already Added
                 </span>
               </div>
               <p class="word-definition">{{ word.definition }}</p>
@@ -1612,8 +1649,23 @@ onUnmounted(() => {
   text-transform: uppercase;
 }
 
+.word-existing-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(168, 85, 247, 0.15);
+  color: #a855f7;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
 @media (max-width: 768px) {
-  .word-pending-badge {
+  .word-pending-badge,
+  .word-existing-badge {
     font-size: 12px;
   }
 }
@@ -1987,6 +2039,7 @@ onUnmounted(() => {
 .detail-actions {
   display: flex;
   gap: 10px;
+  margin-bottom: 30px;
 }
 
 .detail-action-btn {

@@ -192,6 +192,13 @@ class WordRepository:
             .options(joinedload(Word.statistics))
         ).first()
 
+    def get_by_main_word(self, user_id: int, main_word: str) -> Optional[Word]:
+        """Obtiene una palabra existente por main_word para un usuario"""
+        return self.session.exec(
+            select(Word)
+            .where(Word.user_id == user_id, Word.main == main_word, Word.is_active == True)
+        ).first()
+
     def get_explore_examples_count(self, word_id: int) -> int:
         """Cuenta ejemplos EXPLORE para una palabra"""
         return self.session.exec(

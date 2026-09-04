@@ -191,7 +191,7 @@ def get_word(
     }
 
 
-@router.post("/single", status_code=status.HTTP_202_ACCEPTED, response_model=dict)
+@router.post("/single", response_model=dict)
 @log_endpoint
 def create_single_word(
     request_data: CreateWordFromTextRequest = Body(...),
@@ -209,14 +209,19 @@ def create_single_word(
         "text": "Texto libre donde aparece la palabra a aprender"
     }
 
-    Flujo:
+    Respuesta:
+    - status: "existing" - palabra ya existe, retorna detalles completos
+    - status: "queued" - nueva palabra, task encolada en background
+    - status: "error" - error en validación
+
+    Flujo para palabra nueva:
     1. Recibir texto libre
     2. Disparar task Celery en background (no espera)
     3. Retornar task_id inmediatamente
     4. Task Celery: extrae info con AI, crea palabra, genera ejemplos
     """
 
-    logger.info(f"[create_single_word] User {current_user.id}: Queuing word creation")
+    logger.info(f"[create_single_word] User {current_user.id}: Processing word creation")
     logger.debug(f"[create_single_word] Text: {request_data.text}")
 
     text = request_data.text.strip()
@@ -238,7 +243,59 @@ def create_single_word(
         }
 
     try:
-        # Disparar task Celery en background (retorna inmediatamente)
+        # Extraer palabra del texto
+        extracted = ai.extract_learning_intent([text])
+
+        if not extracted or len(extracted) == 0:
+            logger.warning(f"[create_single_word] Could not extract word from text for user {current_user.id}")
+            return {
+                "status": "error",
+                "message": "No pudimos extraer una palabra del texto proporcionado"
+            }
+
+        main_word = extracted[0].get("main")
+
+        if not main_word:
+            logger.warning(f"[create_single_word] No main word extracted for user {current_user.id}")
+            return {
+                "status": "error",
+                "message": "No pudimos extraer una palabra del texto proporcionado"
+            }
+
+        # Verificar si la palabra ya existe
+        word_repo = WordRepository(db)
+        existing_word = word_repo.get_by_main_word(current_user.id, main_word)
+
+        if existing_word:
+            logger.info(f"[create_single_word] Word '{main_word}' already exists for user {current_user.id}")
+
+            # Retornar detalles de la palabra existente
+            explore_examples_count = word_repo.get_explore_examples_count(existing_word.id)
+            initial_examples = word_repo.get_initial_examples(existing_word.id)
+            is_learned = word_repo.is_learned(existing_word.id, ContentType.EXAMPLE)
+
+            return {
+                "status": "existing",
+                "message": "Esta palabra ya existe en tu lista",
+                "word": {
+                    "id": existing_word.id,
+                    "main": TextFormatter.capitalize(existing_word.main),
+                    "meaning": TextFormatter.capitalize(existing_word.meaning),
+                    "synonyms": TextFormatter.capitalize(existing_word.synonyms),
+                    "type": existing_word.type,
+                    "frequency": existing_word.frequency,
+                    "level": WordLevel.to_str(existing_word.level),
+                    "context": TextFormatter.capitalize(existing_word.context),
+                    "source_text": existing_word.source_text,
+                    "is_favorite": existing_word.is_favorite,
+                    "is_learned": is_learned,
+                    "created_at": existing_word.created_at,
+                    "total_examples": explore_examples_count,
+                    "examples": initial_examples
+                }
+            }
+
+        # Palabra no existe, enqueue task
         task = WordGenerator.create_single(current_user.id, text)
 
         logger.info(f"[create_single_word] Task {task.id} queued for user {current_user.id}")
@@ -250,10 +307,10 @@ def create_single_word(
         }
 
     except Exception as e:
-        logger.error(f"[create_single_word] Error queuing task: {e}", exc_info=True)
+        logger.error(f"[create_single_word] Error processing word: {e}", exc_info=True)
         return {
             "status": "error",
-            "message": f"Error al encolar la tarea: {str(e)}"
+            "message": f"Error al procesar la palabra: {str(e)}"
         }
 
 
