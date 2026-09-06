@@ -1,5 +1,6 @@
 from lemminflect import getAllInflections
 import re
+from difflib import SequenceMatcher
 
 # Intenta cargar NLTK para lematización, fallback a diccionario si no está disponible
 try:
@@ -132,6 +133,34 @@ def _get_lemma(word: str) -> str:
     return word
 
 
+def _levenshtein_ratio(s1: str, s2: str) -> float:
+    """
+    Calcula la similitud entre dos strings usando Levenshtein.
+    Intenta usar python-Levenshtein si está disponible (más rápido),
+    fallback a difflib.SequenceMatcher de lo contrario.
+
+    Retorna: valor entre 0.0 (completamente diferente) y 1.0 (idéntico)
+    """
+    try:
+        import Levenshtein
+        return Levenshtein.ratio(s1, s2)
+    except ImportError:
+        return SequenceMatcher(None, s1, s2).ratio()
+
+
+def _get_bonus_for_suffix(word: str) -> float:
+    """
+    Retorna un bonus de similitud si la palabra termina en sufijos comunes.
+    Esto ayuda a detectar variaciones como: jump -> jumping, jump -> jumped, quiet -> quietly
+
+    Retorna: 0.15 para ly/ing/ed, 0.0 de otro modo
+    """
+    word_lower = word.lower()
+    if word_lower.endswith(('ly', 'ing', 'ed')):
+        return 0.15
+    return 0.0
+
+
 def approximate_text_form(example_text: str, suggested_text_form: str) -> str:
     """
     Aproxima la forma correcta del text_form basada en cómo aparece en el texto del ejemplo.
@@ -228,5 +257,32 @@ def approximate_text_form(example_text: str, suggested_text_form: str) -> str:
             if len(found_positions) == 1:
                 return found_positions[0][2]
 
-    # 3. Fallback: devolver la sugerencia original
+    # 3. Intentar con Levenshtein: buscar la palabra más parecida en el texto
+    words_in_text = re.findall(r'\b\w+\b', text_lower)
+    if words_in_text:
+        best_match_word = None
+        best_score = 0.0
+
+        for text_word in words_in_text:
+            # Calcular similitud de Levenshtein
+            similarity = _levenshtein_ratio(suggested_lower, text_word)
+
+            # Agregar bonus por sufijo común (ly, ing, ed)
+            bonus = _get_bonus_for_suffix(text_word)
+            score = similarity + bonus
+
+            if score > best_score:
+                best_score = score
+                best_match_word = text_word
+
+        # Si encontramos un match con buena similitud, usarlo
+        # Threshold: 0.65 asegura que sea bastante parecido
+        if best_match_word and best_score > 0.65:
+            # Encontrar la palabra en el texto original para obtener mayúsculas correctas
+            pattern = r'\b' + re.escape(best_match_word) + r'\b'
+            match = re.search(pattern, text_lower)
+            if match:
+                return example_text[match.start():match.end()]
+
+    # 4. Fallback final: devolver la sugerencia original
     return suggested_text_form
