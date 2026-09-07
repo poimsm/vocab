@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict, Any
 from sqlmodel import Session, select
-from sqlalchemy import desc
+from sqlalchemy import desc, case
 from models import Collocation
 
 
@@ -124,9 +124,15 @@ class CollocationRepository:
         """Obtiene collocations en uso del usuario con filtro opcional de estado.
 
         Solo devuelve collocations con is_in_use = True.
-        Ordena por:
-        1. in_use_at DESC (más reciente primero)
-        2. created_at DESC (para items sin in_use_at)
+
+        Cuando status="all":
+            Ordena por:
+            1. is_marked ASC (no marcadas primero, luego marcadas)
+            2. in_use_at DESC (más reciente primero)
+            3. created_at DESC (para items sin in_use_at)
+
+        Cuando status="marked" o "not_marked":
+            Ordena solo por in_use_at e created_at
         """
         query = select(Collocation).where(
             Collocation.user_id == user_id,
@@ -139,12 +145,20 @@ class CollocationRepository:
         elif status == "not_marked":
             query = query.where(Collocation.is_marked == False)
 
-        return self.session.exec(
-            query.order_by(
+        # Solo ordena por is_marked cuando status="all"
+        if status == "all":
+            order_clauses = [
+                case((Collocation.is_marked == False, 0), (Collocation.is_marked == True, 1), else_=2),
                 desc(Collocation.in_use_at),
                 Collocation.created_at.desc()
-            )
-        ).all()
+            ]
+        else:
+            order_clauses = [
+                desc(Collocation.in_use_at),
+                Collocation.created_at.desc()
+            ]
+
+        return self.session.exec(query.order_by(*order_clauses)).all()
 
     def get_available_collocation_for_word(self, user_id: int, word_id: int) -> Optional[Collocation]:
         """Obtiene una collocation disponible (is_in_use=False) para una palabra específica."""

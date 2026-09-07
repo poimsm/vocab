@@ -40,6 +40,8 @@ def get_collocations(
     - status: "all" (default), "marked", "not_marked"
     - page: página actual (default: 1)
     - limit: items por página (default: 15, máximo: 100)
+
+    Returns unmarked collocations first, then marked ones.
     """
     repository = CollocationRepository(db)
 

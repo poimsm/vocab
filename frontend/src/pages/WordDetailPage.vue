@@ -118,7 +118,7 @@ onMounted(() => {
       </div>
 
       <!-- Info Grid -->
-      <div class="info-grid">
+      <div class="info-grid" style="display:none">
         <div class="info-card" v-if="word.type">
           <span class="info-label">Type</span>
           <span class="info-value">{{ word.type }}</span>
