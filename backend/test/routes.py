@@ -289,6 +289,7 @@ def fix_example_words(dry_run: bool = True, db: Session = Depends(get_db)):
         unchanged = 0
         errors = 0
         changes = []
+        unchanged_details = [] if dry_run else None  # Solo en dry_run para debugging
 
         for example_word, example, word in rows:
             try:
@@ -313,6 +314,15 @@ def fix_example_words(dry_run: bool = True, db: Session = Depends(get_db)):
                     updated += 1
                 else:
                     unchanged += 1
+                    # En dry_run, mostrar algunos ejemplos de palabras sin cambios (para debugging)
+                    if dry_run and len(unchanged_details) < 5:
+                        unchanged_details.append({
+                            "example_word_id": f"{example_word.example_id}:{example_word.word_id}",
+                            "word_main": word.main,
+                            "text_form": example_word.text_form,
+                            "calculated_text_form": new_text_form,
+                            "example_text": example.text
+                        })
 
             except Exception as e:
                 logger.error(
@@ -328,7 +338,7 @@ def fix_example_words(dry_run: bool = True, db: Session = Depends(get_db)):
                 f"[fix_example_words] Updated {updated} ExampleWords in database"
             )
 
-        return {
+        result = {
             "status": "ok",
             "dry_run": dry_run,
             "total": total,
@@ -337,6 +347,12 @@ def fix_example_words(dry_run: bool = True, db: Session = Depends(get_db)):
             "errors": errors,
             "changes": changes if dry_run or updated <= 100 else changes[:100]  # Limitar a 100 para no sobrecargar
         }
+
+        # En dry_run, agregar algunos ejemplos de palabras sin cambios para debugging
+        if dry_run and unchanged_details:
+            result["unchanged_samples"] = unchanged_details
+
+        return result
 
     except Exception as e:
         logger.error(f"[fix_example_words] Error: {e}", exc_info=True)
