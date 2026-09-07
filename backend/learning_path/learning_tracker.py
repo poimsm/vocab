@@ -170,15 +170,6 @@ class LearningTracker:
     ) -> LearningState:
         """
         Determina el estado actual de aprendizaje con spaced repetition.
-
-        Flujo de estados:
-        - NEW (0 veces): Palabra recién creada
-        - LEARNING (1 vez): Fijación inicial en memoria
-        - REINFORCING (2-3 veces): Refuerzo moderado
-        - SPACING (4-5 veces): Fase de espaciamiento prolongado
-        - ALMOST_LEARNED (6 veces): Casi aprendida
-        - LEARNED (7+ veces): Aprendida, lista para revisión ocasional
-        - REVIEW: Estado sticky, se mantiene indefinidamente
         """
 
         if statistics.times_seen == 0:
@@ -190,13 +181,13 @@ class LearningTracker:
         if statistics.times_seen in [1]:
             return LearningState.LEARNING
 
-        if statistics.times_seen in [2, 3, 4]:
+        if statistics.times_seen in [2, 3]:
             return LearningState.REINFORCING
 
-        if statistics.times_seen in [5]:
+        if statistics.times_seen in [4]:
             return LearningState.SPACING
 
-        if statistics.times_seen in [6]:
+        if statistics.times_seen in [5]:
             return LearningState.ALMOST_LEARNED
 
         return LearningState.LEARNED
