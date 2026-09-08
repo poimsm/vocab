@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import api from '@/utils/api'
 import LoadingCard from '@/components/LoadingCard.vue'
@@ -7,6 +8,8 @@ import FavoritesView from '@/components/FavoritesView.vue'
 import WordDetailPanel from '@/components/WordDetailPanel.vue'
 import MobileWordDetail from '@/components/MobileWordDetail.vue'
 import ExtractedWordsModal from '@/components/ExtractedWordsModal.vue'
+
+const router = useRouter()
 
 // ─── Types ───
 interface TargetWord {
@@ -303,9 +306,10 @@ async function toggleExampleFav() {
 
 // ─── Methods ───
 function handleWordClick(word: TargetWord) {
-  fetchWordDetail(word.id)
   if (window.innerWidth <= 768) {
-    isMobileDetailOpen.value = true
+    router.push(`/words/${word.id}`)
+  } else {
+    fetchWordDetail(word.id)
   }
 }
 
@@ -447,11 +451,12 @@ function copyFallback(text: string) {
 }
 
 function handleFavoritesWordClick(word: TargetWord) {
-  comingFromFavorites.value = true
-  handleWordClick(word)
-  // Solo cerrar el modal en mobile (donde el detalle es fullscreen)
   if (window.innerWidth <= 768) {
     showFavoritesModal.value = false
+    router.push(`/words/${word.id}`)
+  } else {
+    comingFromFavorites.value = true
+    handleWordClick(word)
   }
 }
 

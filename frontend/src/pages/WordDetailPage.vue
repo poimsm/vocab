@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { wordApi, type WordDetail } from '@/services/wordApi'
@@ -11,14 +11,20 @@ const isLoading = ref(true)
 const error = ref<string | null>(null)
 const isSavingFavorite = ref(false)
 const isSavingLearned = ref(false)
+const showExplanation = ref(false)
 
-const wordId = parseInt(route.params.id as string)
+// Mock AI explanation - will be replaced with actual API call
+const getAIExplanation = () => {
+  return `This word refers to the quality of being able to adapt or adjust to new conditions. It encompasses flexibility in thinking, resilience when facing challenges, and the capacity to learn and evolve. Often used in personal growth and professional contexts.`
+}
+
+const wordId = computed(() => parseInt(route.params.id as string))
 
 const loadWord = async () => {
   try {
     isLoading.value = true
     error.value = null
-    word.value = await wordApi.getWordDetail(wordId)
+    word.value = await wordApi.getWordDetail(wordId.value)
   } catch (err: any) {
     error.value = err.message || 'Failed to load word'
     console.error('Error loading word:', err)
@@ -31,7 +37,7 @@ const toggleFavorite = async () => {
   if (!word.value) return
   isSavingFavorite.value = true
   try {
-    const result = await wordApi.toggleFavorite(wordId)
+    const result = await wordApi.toggleFavorite(wordId.value)
     word.value.is_favorite = result.is_favorite
   } catch (err) {
     console.error('Error toggling favorite:', err)
@@ -45,7 +51,7 @@ const markAsLearned = async () => {
   if (!word.value) return
   isSavingLearned.value = true
   try {
-    const result = await wordApi.markAsLearned(wordId)
+    const result = await wordApi.markAsLearned(wordId.value)
     word.value.is_learned = result.is_learned
   } catch (err) {
     console.error('Error marking as learned:', err)
@@ -63,6 +69,10 @@ const speak = () => {
 }
 
 onMounted(() => {
+  loadWord()
+})
+
+watch(wordId, () => {
   loadWord()
 })
 </script>
@@ -175,17 +185,30 @@ onMounted(() => {
 
           <!-- Right: Sidebar -->
           <aside class="desktop-sidebar">
-            <!-- Learned Toggle -->
-            <div class="learned-toggle-card">
-              <label class="learned-toggle">
-                <input
-                  type="checkbox"
-                  :checked="word.is_learned"
-                  @change="markAsLearned"
-                  :disabled="isSavingLearned"
-                />
-                <span class="toggle-label">Already know this word?</span>
-              </label>
+            <!-- Learned Toggle & AI Explanation Row -->
+            <div class="actions-row">
+              <!-- Learned Toggle -->
+              <div class="learned-toggle-card">
+                <label class="learned-toggle">
+                  <input
+                    type="checkbox"
+                    :checked="word.is_learned"
+                    @change="markAsLearned"
+                    :disabled="isSavingLearned"
+                  />
+                  <span class="toggle-label">Know it?</span>
+                </label>
+              </div>
+
+              <!-- AI Explanation Button -->
+              <button
+                @click="showExplanation = true"
+                class="explanation-card-btn"
+                title="Get AI explanation"
+              >
+                <Icon icon="solar:lightbulb-linear" width="18" />
+                <span class="btn-text">Explain</span>
+              </button>
             </div>
 
             <!-- Synonyms -->
@@ -293,8 +316,48 @@ onMounted(() => {
               <span class="toggle-label">Already know this word?</span>
             </label>
           </div>
+
+          <!-- Mobile AI Explanation -->
+          <div class="mobile-explanation-card">
+            <button
+              @click="showExplanation = !showExplanation"
+              class="mobile-explanation-btn"
+            >
+              <Icon icon="solar:lightbulb-linear" width="20" />
+              <span>{{ showExplanation ? 'Hide' : 'AI Explanation' }}</span>
+            </button>
+            <div v-if="showExplanation" class="mobile-explanation-content">
+              {{ getAIExplanation() }}
+            </div>
+          </div>
         </div>
       </main>
+
+      <!-- Explanation Modal (Desktop Only) -->
+      <div
+        v-if="showExplanation"
+        class="modal-overlay desktop-only"
+        @click="showExplanation = false"
+      >
+        <div class="modal-content" @click.stop>
+          <div class="modal-header">
+            <h3 class="modal-title">
+              <Icon icon="solar:lightbulb-bold" width="24" />
+              Word Explanation
+            </h3>
+            <button
+              @click="showExplanation = false"
+              class="modal-close-btn"
+              aria-label="Close modal"
+            >
+              <Icon icon="solar:close-circle-linear" width="24" />
+            </button>
+          </div>
+          <div class="modal-body">
+            {{ getAIExplanation() }}
+          </div>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -797,16 +860,31 @@ onMounted(() => {
 }
 
 /* ═══════════════════════════════════════════
+   ACTIONS ROW (LEARNED + EXPLANATION)
+   ═══════════════════════════════════════════ */
+.actions-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  margin-top: 30px;
+}
+
+.actions-row > * {
+  flex: 1;
+}
+
+/* ═══════════════════════════════════════════
    LEARNED TOGGLE
    ═══════════════════════════════════════════ */
 .learned-toggle-card {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 14px;
-  padding: 16px 20px;
-  margin-bottom: 24px;
+  padding: 14px 16px;
   transition: all 0.3s ease;
-  margin-top: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .learned-toggle-card:hover {
@@ -816,14 +894,16 @@ onMounted(() => {
 .learned-toggle {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   cursor: pointer;
   user-select: none;
+  width: 100%;
+  justify-content: center;
 }
 
 .learned-toggle input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   cursor: pointer;
   accent-color: #4ade80;
   flex-shrink: 0;
@@ -835,15 +915,80 @@ onMounted(() => {
 }
 
 .toggle-label {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 500;
   color: #b4b1c6;
   transition: color 0.2s ease;
+  white-space: nowrap;
 }
 
 .learned-toggle input[type="checkbox"]:checked ~ .toggle-label {
   color: #4ade80;
   font-weight: 600;
+}
+
+/* ═══════════════════════════════════════════
+   AI EXPLANATION
+   ═══════════════════════════════════════════ */
+.explanation-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  padding: 0;
+  transition: all 0.3s ease;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+}
+
+.explanation-card:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.explanation-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 12px;
+  border: none;
+  background: transparent;
+  color: #a78bfa;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.explanation-btn:hover {
+  background: rgba(167, 139, 250, 0.05);
+  border-bottom-color: rgba(167, 139, 250, 0.2);
+}
+
+.explanation-btn:active {
+  transform: scale(0.98);
+}
+
+.explanation-content {
+  padding: 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #b4b1c6;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ═══════════════════════════════════════════
@@ -997,9 +1142,175 @@ onMounted(() => {
   font-size: 17px;
 }
 
+/* Mobile AI Explanation */
+.mobile-explanation-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 0;
+  margin-top: 16px;
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.mobile-explanation-card:active {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.mobile-explanation-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border: none;
+  background: transparent;
+  color: #a78bfa;
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  border-bottom: 1px solid rgba(167, 139, 250, 0.1);
+}
+
+.mobile-explanation-btn:active {
+  background: rgba(167, 139, 250, 0.05);
+}
+
+.mobile-explanation-content {
+  padding: 16px;
+  font-size: 18px;
+  line-height: 1.6;
+  color: #b4b1c6;
+  animation: slideDown 0.3s ease;
+}
+
+/* ═══════════════════════════════════════════
+   EXPLANATION MODAL (DESKTOP)
+   ═══════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+  backdrop-filter: blur(2px);
+  padding: 20px;
+}
+
+.modal-content {
+  background: #2d2a3e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  animation: slideUp 0.3s ease;
+  flex-shrink: 0;
+  margin: auto;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  position: sticky;
+  top: 0;
+  background: #2d2a3e;
+}
+
+.modal-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #a78bfa;
+  margin: 0;
+}
+
+.modal-close-btn {
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: transparent;
+  color: #9c99ab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.modal-close-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e0e8;
+}
+
+.modal-close-btn:active {
+  transform: scale(0.95);
+}
+
+.modal-body {
+  padding: 24px;
+  font-size: 15px;
+  line-height: 1.8;
+  color: #b4b1c6;
+}
+
+/* Simplify explanation card styling */
+.explanation-card-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #a78bfa;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.explanation-card-btn:hover {
+  background: rgba(167, 139, 250, 0.1);
+  border-color: rgba(167, 139, 250, 0.2);
+}
+
+.explanation-card-btn:active {
+  transform: scale(0.98);
+}
+
 /* ═══════════════════════════════════════════
    ANIMATIONS
    ═══════════════════════════════════════════ */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 @keyframes fadeIn {
   from { opacity: 0; transform: scale(0.96); }
   to   { opacity: 1; transform: scale(1); }
