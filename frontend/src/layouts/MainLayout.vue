@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -7,6 +7,8 @@ import { useAuthStore } from '@/stores/auth'
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+
+const hideLayout = computed(() => route.meta.hideLayout as boolean)
 
 const sidebarCollapsed = ref(false)
 
@@ -38,9 +40,9 @@ const modules = [
 </script>
 
 <template>
-  <div class="layout" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
-    <!-- Desktop Sidebar (Solo visible si el usuario está autenticado) -->
-    <aside v-if="authStore.isAuthenticated" class="sidebar">
+  <div class="layout" :class="{ 'sidebar-collapsed': sidebarCollapsed, 'hide-layout': hideLayout }">
+    <!-- Desktop Sidebar (Solo visible si el usuario está autenticado y no en hideLayout) -->
+    <aside v-if="authStore.isAuthenticated && !hideLayout" class="sidebar">
       <div class="sidebar-top" :class="{ 'sidebar-top-expanded': !sidebarCollapsed }">
         <div class="logo">
           <div class="logo-bear">
@@ -101,8 +103,8 @@ const modules = [
     </aside>
 
     <div class="main">
-      <!-- Mobile Navigation (Solo visible si el usuario está autenticado) -->
-      <div v-if="authStore.isAuthenticated" class="mobile-nav">
+      <!-- Mobile Navigation (Solo visible si el usuario está autenticado y no en hideLayout) -->
+      <div v-if="authStore.isAuthenticated && !hideLayout" class="mobile-nav">
         <router-link
           v-for="module in modules"
           :key="module.id"
@@ -423,5 +425,22 @@ const modules = [
     flex: 1;
     overflow: auto;
   }
+}
+
+/* ─── Hide Layout Mode (for full-screen pages like WordDetailPage) ─── */
+.layout.hide-layout {
+  display: block;
+}
+
+.layout.hide-layout .main {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.layout.hide-layout .content {
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 </style>

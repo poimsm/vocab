@@ -81,7 +81,7 @@ const router = createRouter({
       path: '/words/:id',
       name: 'word-detail',
       component: WordDetailPage,
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true, hideLayout: true }
     }
   ]
 })
