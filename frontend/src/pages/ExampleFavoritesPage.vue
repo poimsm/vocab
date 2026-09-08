@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { useExampleFavoritesStore } from '@/stores/exampleFavorites'
@@ -21,9 +21,10 @@ const favoritesStore = useExampleFavoritesStore()
 // State
 const favoritesContentRef = ref<HTMLElement | null>(null)
 const markingExample = ref<number | null>(null)
-const showFilterMenu = ref(false)
 const showFilterBar = ref(true)
 const isInitialLoad = ref(true)
+const showDone = ref(false)
+const showRandom = ref(false)
 
 // Flag para evitar reiniciar cuando se hace scroll
 let isUserChangingFilter = false
@@ -59,8 +60,6 @@ function handleFavoritesScroll(event: Event) {
   }
 
   // ── Auto-hiding header logic ──
-  if (showFilterMenu.value) return
-
   if (scrollTop < 10) {
     showFilterBar.value = true
     resetScrollTracking()
@@ -136,29 +135,33 @@ function resetScrollToTop() {
   sessionStorage.removeItem('exampleFavoritesNavigatingAway')
 }
 
-function changeFilter(newFilter: 'all' | 'marked' | 'not_marked') {
-  isUserChangingFilter = true
-  favoritesStore.setFilter(newFilter)
-  if (typeof window !== 'undefined' && window.innerWidth <= 768) {
-    showFilterMenu.value = false
+function toggleDone() {
+  if (showRandom.value) {
+    showRandom.value = false
   }
+  showDone.value = !showDone.value
+  isUserChangingFilter = true
+  fetchFavoritesWithMode()
 }
 
-// When filter changes, reset pagination and reload
-watch(
-  () => favoritesStore.favoritesFilter,
-  () => {
-    if (!isUserChangingFilter) return
-
-    showFilterBar.value = true
-    scrollAccumulatedDown = 0
-    scrollAccumulatedUp = 0
-    favoritesStore.fetchFavorites(1, favoritesStore.favoritesFilter)
-
-    isInitialLoad.value = false
-    isUserChangingFilter = false
+function toggleRandom() {
+  if (showDone.value) {
+    showDone.value = false
   }
-)
+  showRandom.value = !showRandom.value
+  isUserChangingFilter = true
+  fetchFavoritesWithMode()
+}
+
+function fetchFavoritesWithMode() {
+  showFilterBar.value = true
+  scrollAccumulatedDown = 0
+  scrollAccumulatedUp = 0
+  const sortBy = showDone.value ? 'done' : showRandom.value ? 'random' : 'not_marked_first'
+  favoritesStore.fetchFavoritesWithMode(1, sortBy)
+  isInitialLoad.value = false
+  isUserChangingFilter = false
+}
 
 
 onMounted(async () => {
@@ -176,7 +179,7 @@ onMounted(async () => {
     resetScrollToTop()
     isInitialLoad.value = true
     try {
-      await favoritesStore.fetchFavorites(1, 'all')
+      await favoritesStore.fetchFavoritesWithMode(1, 'not_marked_first')
     } catch (e) {
       console.error('Error loading favorites:', e)
     }
@@ -187,9 +190,9 @@ onMounted(async () => {
 </script>
 
 <template>
-  <!-- Example Favorites Page -->
   <div class="favorites-page">
-    <div class="favorites-header" :class="{ 'is-hidden': !showFilterBar }">
+    <!-- ═══ Mobile App Header ═══ -->
+    <div class="mobile-header mobile-only" :class="{ 'is-hidden': !showFilterBar }">
       <button class="back-btn" @click="goBack" title="Go back">
         <Icon icon="solar:arrow-left-linear" width="24" />
       </button>
@@ -197,82 +200,72 @@ onMounted(async () => {
       <div style="width: 40px"></div>
     </div>
 
-    <!-- Filter Buttons (Desktop) -->
-    <div class="favorites-filter">
-      <button
-        class="filter-btn"
-        :class="{ active: favoritesStore.favoritesFilter === 'all' }"
-        @click="changeFilter('all')"
-      >
-        All
-      </button>
-      <button
-        class="filter-btn"
-        :class="{ active: favoritesStore.favoritesFilter === 'marked' }"
-        @click="changeFilter('marked')"
-      >
-        Marked
-      </button>
-      <button
-        class="filter-btn"
-        :class="{ active: favoritesStore.favoritesFilter === 'not_marked' }"
-        @click="changeFilter('not_marked')"
-      >
-        Not Marked
-      </button>
-    </div>
+    <!-- ═══ Desktop Layout ═══ -->
+    <div class="desktop-wrapper desktop-only">
+      <!-- Desktop Nav -->
+      <nav class="desktop-nav">
+        <button @click="goBack" class="nav-back-link">
+          <Icon icon="solar:arrow-left-linear" width="16" />
+          Back to list
+        </button>
+      </nav>
 
-    <!-- Filter Menu (Mobile) -->
-    <div
-      class="favorites-filter-mobile"
-      :class="{ 'is-hidden': !showFilterBar }"
-    >
-      <button class="filter-menu-btn" @click="showFilterMenu = !showFilterMenu" title="Filter">
-        <Icon icon="solar:filter-linear" width="20" />
-        <span class="filter-label">{{ favoritesStore.favoritesFilter === 'all' ? 'All' : favoritesStore.favoritesFilter === 'marked' ? 'Marked' : 'Not Marked' }}</span>
-        <Icon
-          icon="solar:alt-arrow-down-linear"
-          width="16"
-          class="filter-arrow"
-          :class="{ 'is-open': showFilterMenu }"
-        />
-      </button>
-      <div v-if="showFilterMenu" class="filter-dropdown">
+      <!-- Desktop Header -->
+      <header class="desktop-hero">
+        <h1 class="desktop-title">Favorite Examples</h1>
+        <p class="desktop-subtitle">
+          {{ favoritesStore.displayedExamples.length }}
+          {{ favoritesStore.displayedExamples.length === 1 ? 'example' : 'examples' }}
+          saved
+        </p>
+      </header>
+
+      <!-- Desktop Filters -->
+      <div class="desktop-filters">
         <button
-          class="filter-option"
-          :class="{ active: favoritesStore.favoritesFilter === 'all' }"
-          @click="changeFilter('all')"
+          class="filter-chip"
+          :class="{ active: !showDone && !showRandom }"
+          @click="showDone = false; showRandom = false; fetchFavoritesWithMode()"
         >
+          <Icon icon="solar:list-linear" width="14" />
           All
         </button>
         <button
-          class="filter-option"
-          :class="{ active: favoritesStore.favoritesFilter === 'marked' }"
-          @click="changeFilter('marked')"
+          class="filter-chip"
+          :class="{ active: showDone }"
+          @click="toggleDone"
+          title="Show only marked items"
         >
-          Marked
+          <Icon icon="solar:check-circle-bold" width="14" />
+          Done
         </button>
         <button
-          class="filter-option"
-          :class="{ active: favoritesStore.favoritesFilter === 'not_marked' }"
-          @click="changeFilter('not_marked')"
+          class="filter-chip"
+          :class="{ active: showRandom }"
+          @click="toggleRandom"
+          title="Randomize order"
         >
-          Not Marked
+          <Icon icon="solar:shuffle-linear" width="14" />
+          Random
         </button>
       </div>
-    </div>
 
-    <div ref="favoritesContentRef" class="favorites-content" @scroll="handleFavoritesScroll">
-      <div v-if="favoritesStore.favoritesLoading && favoritesStore.favoriteExamples.length === 0" class="loading-state">
-        <div class="spinner"></div>
-        <p>Loading favorites...</p>
-      </div>
+      <!-- Desktop Content -->
+      <div class="desktop-content" @scroll="handleFavoritesScroll">
+        <div v-if="favoritesStore.favoritesLoading && favoritesStore.favoriteExamples.length === 0" class="loading-state">
+          <div class="spinner"></div>
+          <p>Loading favorites...</p>
+        </div>
 
-      <div v-else-if="favoritesStore.displayedExamples.length > 0" class="favorites-items">
-        <div v-for="example in favoritesStore.displayedExamples" :key="example.id" class="favorite-card" :class="{ marked: example.is_marked }">
-          <div class="favorite-card-wrapper">
+        <div v-else-if="favoritesStore.displayedExamples.length > 0" class="examples-list">
+          <div
+            v-for="example in favoritesStore.displayedExamples"
+            :key="example.id"
+            class="example-row"
+            :class="{ marked: example.is_marked }"
+          >
             <button
-              class="mark-checkbox"
+              class="check-btn"
               @click="toggleMarkedExample(example.id)"
               :disabled="markingExample === example.id"
               :title="example.is_marked ? 'Unmark' : 'Mark as reviewed'"
@@ -280,16 +273,16 @@ onMounted(async () => {
               <Icon
                 v-if="example.is_marked"
                 icon="solar:check-circle-bold"
-                width="24"
+                width="22"
                 class="checked"
               />
               <Icon
                 v-else
                 icon="mdi:checkbox-blank-outline"
-                width="24"
+                width="22"
               />
             </button>
-            <div class="favorite-card-text" :class="{ 'line-through': example.is_marked }">
+            <div class="example-text" :class="{ 'line-through': example.is_marked }">
               <template v-for="(segment, idx) in example.text" :key="idx">
                 <span v-if="segment.is_highlighted && segment.target_word" class="word-highlight"
                   @click="handleWordClick(segment.target_word)">
@@ -300,57 +293,159 @@ onMounted(async () => {
             </div>
           </div>
         </div>
+
+        <div v-else-if="favoritesStore.favoriteExamples.length > 0" class="empty-state">
+          <Icon icon="solar:filter-search-linear" width="40" class="empty-icon" />
+          <p>No matching examples</p>
+        </div>
+
+        <div v-else class="empty-state">
+          <Icon icon="solar:heart-slash-linear" width="40" class="empty-icon" />
+          <p>No favorite examples yet</p>
+        </div>
+
+        <div v-if="favoritesStore.favoritesLoading && favoritesStore.favoriteExamples.length > 0" class="loading-more">
+          <div class="spinner-small"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Mobile Layout ═══ -->
+    <div class="mobile-wrapper mobile-only">
+      <!-- Mobile Filters -->
+      <div class="mobile-filters" :class="{ 'is-hidden': !showFilterBar }">
+        <button
+          class="filter-btn"
+          :class="{ active: showDone }"
+          @click="toggleDone"
+          title="Show only marked items"
+        >
+          <Icon icon="solar:check-circle-bold" width="18" />
+          Done
+        </button>
+        <button
+          class="filter-btn"
+          :class="{ active: showRandom }"
+          @click="toggleRandom"
+          title="Randomize order"
+        >
+          <Icon icon="solar:shuffle-linear" width="18" />
+          Random
+        </button>
       </div>
 
-      <div v-else-if="favoritesStore.favoriteExamples.length > 0" class="empty-filtered">
-        <p>No {{ favoritesStore.favoritesFilter }} examples</p>
-      </div>
+      <!-- Mobile Content -->
+      <div ref="favoritesContentRef" class="mobile-content" @scroll="handleFavoritesScroll">
+        <div v-if="favoritesStore.favoritesLoading && favoritesStore.favoriteExamples.length === 0" class="loading-state">
+          <div class="spinner"></div>
+          <p>Loading favorites...</p>
+        </div>
 
-      <div v-else class="empty-favorites">
-        <p>No favorite examples yet</p>
-      </div>
+        <div v-else-if="favoritesStore.displayedExamples.length > 0" class="favorites-items">
+          <div
+            v-for="example in favoritesStore.displayedExamples"
+            :key="example.id"
+            class="favorite-card"
+            :class="{ marked: example.is_marked }"
+          >
+            <div class="favorite-card-wrapper">
+              <button
+                class="mark-checkbox"
+                @click="toggleMarkedExample(example.id)"
+                :disabled="markingExample === example.id"
+                :title="example.is_marked ? 'Unmark' : 'Mark as reviewed'"
+              >
+                <Icon
+                  v-if="example.is_marked"
+                  icon="solar:check-circle-bold"
+                  width="24"
+                  class="checked"
+                />
+                <Icon
+                  v-else
+                  icon="mdi:checkbox-blank-outline"
+                  width="24"
+                />
+              </button>
+              <div class="favorite-card-text" :class="{ 'line-through': example.is_marked }">
+                <template v-for="(segment, idx) in example.text" :key="idx">
+                  <span v-if="segment.is_highlighted && segment.target_word" class="word-highlight"
+                    @click="handleWordClick(segment.target_word)">
+                    {{ segment.text }}
+                  </span>
+                  <span v-else>{{ segment.text }}</span>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
 
-      <div v-if="favoritesStore.favoritesLoading && favoritesStore.favoriteExamples.length > 0" class="loading-more">
-        <div class="spinner-small"></div>
+        <div v-else-if="favoritesStore.favoriteExamples.length > 0" class="empty-filtered">
+          <p>No matching examples</p>
+        </div>
+
+        <div v-else class="empty-favorites">
+          <p>No favorite examples yet</p>
+        </div>
+
+        <div v-if="favoritesStore.favoritesLoading && favoritesStore.favoriteExamples.length > 0" class="loading-more">
+          <div class="spinner-small"></div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+* {
+  box-sizing: border-box;
+}
+
 .favorites-page {
-  display: flex;
-  flex-direction: column;
   height: 100vh;
   width: 100%;
   background: #2d2a3e;
   color: #e2e0e8;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   overflow: hidden;
 }
 
-/* ─── Header ─── */
-.favorites-header {
+/* ═══════════════════════════════════════════
+   UTILITIES: show/hide by breakpoint
+   ═══════════════════════════════════════════ */
+.desktop-only {
+  display: none !important;
+}
+
+@media (min-width: 769px) {
+  .desktop-only {
+    display: block !important;
+  }
+  .mobile-only {
+    display: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   MOBILE HEADER
+   ═══════════════════════════════════════════ */
+.mobile-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 24px;
+  padding: 16px 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  flex-shrink: 0;
   background: #2d2a3e;
-  position: relative;
-  z-index: 20;
-  transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1),
-              box-shadow 0.35s ease;
-  will-change: transform;
+  transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-.favorites-header.is-hidden {
+.mobile-header.is-hidden {
   display: none;
 }
 
-.favorites-header h2 {
+.mobile-header h2 {
   margin: 0;
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
   flex: 1;
   text-align: center;
@@ -366,33 +461,48 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 8px;
   transition: all 0.2s ease;
 }
 
 .back-btn:hover {
   color: #e2e0e8;
+  background: rgba(255, 255, 255, 0.05);
 }
 
-/* ─── Favorites Filter (Desktop) ─── */
-.favorites-filter {
+/* ═══════════════════════════════════════════
+   MOBILE FILTERS
+   ═══════════════════════════════════════════ */
+.mobile-filters {
   display: flex;
   gap: 8px;
-  padding: 16px 24px;
+  padding: 12px 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   flex-shrink: 0;
   flex-wrap: wrap;
+  background: #2d2a3e;
+  transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.mobile-filters.is-hidden {
+  display: none;
 }
 
 .filter-btn {
-  padding: 6px 14px;
-  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.05);
   color: #9c99ab;
-  font-size: 12px;
+  font-size: 14.5px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  white-space: nowrap;
+  font-family: inherit;
 }
 
 .filter-btn:hover {
@@ -406,124 +516,19 @@ onMounted(async () => {
   color: #a78bfa;
 }
 
-/* ─── Favorites Filter (Mobile) ─── */
-.favorites-filter-mobile {
-  display: none;
-  position: relative;
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  flex-shrink: 0;
-  will-change: transform, opacity;
-  transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1),
-              opacity 0.35s ease,
-              box-shadow 0.35s ease;
-  background: rgba(45, 42, 62, 0.92);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
-  z-index: 10;
-}
-
-.favorites-filter-mobile.is-hidden {
-  display: none;
-}
-
-.filter-menu-btn {
+/* ═══════════════════════════════════════════
+   MOBILE CONTENT
+   ═══════════════════════════════════════════ */
+.mobile-wrapper {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
-  color: #9c99ab;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  width: 100%;
-  -webkit-tap-highlight-color: transparent;
+  flex-direction: column;
+  height: 100%;
 }
 
-.filter-menu-btn:active {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
-  transform: scale(0.995);
-}
-
-.filter-label {
-  flex: 1;
-  text-align: left;
-}
-
-.filter-arrow {
-  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-  color: #9c99ab;
-}
-
-.filter-arrow.is-open {
-  transform: rotate(180deg);
-}
-
-.filter-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 16px;
-  right: 16px;
-  margin-top: 8px;
-  background: #3d3a52;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  overflow: hidden;
-  z-index: 1000;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  animation: dropdownReveal 0.25s cubic-bezier(0.32, 0.72, 0, 1);
-}
-
-@keyframes dropdownReveal {
-  from {
-    opacity: 0;
-    transform: translateY(-6px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.filter-option {
-  display: block;
-  width: 100%;
-  padding: 14px 16px;
-  border: none;
-  background: transparent;
-  color: #9c99ab;
-  font-size: 15px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  text-align: left;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  -webkit-tap-highlight-color: transparent;
-}
-
-.filter-option:last-child {
-  border-bottom: none;
-}
-
-.filter-option:active {
-  background: rgba(255, 255, 255, 0.05);
-  color: #e2e0e8;
-}
-
-.filter-option.active {
-  background: rgba(167, 139, 250, 0.15);
-  color: #a78bfa;
-}
-
-.favorites-content {
+.mobile-content {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -532,7 +537,7 @@ onMounted(async () => {
   -webkit-overflow-scrolling: touch;
 }
 
-.favorites-content::-webkit-scrollbar {
+.mobile-content::-webkit-scrollbar {
   display: none;
 }
 
@@ -559,9 +564,7 @@ onMounted(async () => {
 .favorite-card-wrapper {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
 
 .favorite-card-text {
@@ -588,7 +591,6 @@ onMounted(async () => {
   color: #7c7a8a;
 }
 
-/* ─── Mark Checkbox ─── */
 .mark-checkbox {
   flex-shrink: 0;
   width: 40px;
@@ -602,6 +604,7 @@ onMounted(async () => {
   justify-content: center;
   transition: all 0.2s ease;
   border-radius: 8px;
+  margin-top: 2px;
 }
 
 .mark-checkbox:hover:not(:disabled) {
@@ -618,21 +621,194 @@ onMounted(async () => {
   color: #bfb0f7;
 }
 
-.empty-favorites,
-.empty-filtered {
+/* ═══════════════════════════════════════════
+   DESKTOP LAYOUT
+   ═══════════════════════════════════════════ */
+.desktop-wrapper {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px 32px 40px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Desktop Nav */
+.desktop-nav {
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.nav-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #9c99ab;
+  background: none;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.nav-back-link:hover {
+  color: #e2e0e8;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Desktop Hero */
+.desktop-hero {
+  margin-bottom: 20px;
+  flex-shrink: 0;
+}
+
+.desktop-title {
+  font-size: 32px;
+  font-weight: 800;
+  color: #f5f3ff;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.5px;
+}
+
+.desktop-subtitle {
+  font-size: 14px;
+  color: #9c99ab;
+  margin: 0;
+  font-weight: 500;
+}
+
+/* Desktop Filters */
+.desktop-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.filter-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #9c99ab;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.filter-chip:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #d1d5db;
+}
+
+.filter-chip.active {
+  background: rgba(167, 139, 250, 0.12);
+  border-color: rgba(167, 139, 250, 0.35);
+  color: #a78bfa;
+}
+
+/* Desktop Content */
+.desktop-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-right: 8px;
+}
+
+.examples-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.example-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 18px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.2s ease;
+}
+
+.example-row:last-child {
+  border-bottom: none;
+}
+
+.example-row.marked {
+  opacity: 0.55;
+}
+
+.example-row.marked .example-text {
+  color: #7c7a8a;
+}
+
+.check-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: #9c99ab;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 200px;
-  color: #9c99ab;
+  transition: all 0.2s ease;
+  border-radius: 8px;
+  margin-top: 2px;
+}
+
+.check-btn:hover:not(:disabled) {
+  color: #a78bfa;
+  background: rgba(167, 139, 250, 0.1);
+}
+
+.check-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.check-btn .checked {
+  color: #bfb0f7;
+}
+
+.example-text {
+  flex: 1;
   font-size: 16px;
+  line-height: 1.75;
+  color: #c4c2d4;
+  word-break: break-word;
+  padding-top: 4px;
 }
 
-.empty-favorites p,
-.empty-filtered p {
-  margin: 0;
+.example-text .word-highlight {
+  color: #c4b5fd;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s ease;
 }
 
+.example-text .word-highlight:hover {
+  color: #a78bfa;
+  text-decoration: underline;
+}
+
+/* ═══════════════════════════════════════════
+   SHARED STATES
+   ═══════════════════════════════════════════ */
 .loading-state {
   flex: 1;
   display: flex;
@@ -640,6 +816,7 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   gap: 16px;
+  min-height: 300px;
 }
 
 .spinner {
@@ -661,9 +838,7 @@ onMounted(async () => {
 }
 
 @keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  to { transform: rotate(360deg); }
 }
 
 .loading-more {
@@ -673,42 +848,73 @@ onMounted(async () => {
   padding: 24px;
 }
 
+.empty-state,
+.empty-filtered,
+.empty-favorites {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  gap: 12px;
+  color: #9c99ab;
+  font-size: 15px;
+}
+
+.empty-state p,
+.empty-filtered p,
+.empty-favorites p {
+  margin: 0;
+}
+
+.empty-icon {
+  color: #6b6880;
+  opacity: 0.6;
+}
+
+/* ═══════════════════════════════════════════
+   SCROLLBAR (desktop only)
+   ═══════════════════════════════════════════ */
+.desktop-content::-webkit-scrollbar {
+  width: 6px;
+}
+.desktop-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+.desktop-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+.desktop-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE TWEAKS
+   ═══════════════════════════════════════════ */
 @media (max-width: 768px) {
-  .favorites-filter {
-    display: none;
+  .favorite-card-text {
+    font-size: 17px;
+  }
+}
+
+@media (max-width: 480px) {
+  .mobile-header h2 {
+    font-size: 18px;
   }
 
-  .favorites-filter-mobile {
-    display: block;
-  }
-
-  .favorites-header {
+  .mobile-content {
     padding: 16px;
-  }
-
-  .favorites-header h2 {
-    font-size: 20px;
-  }
-
-  .favorites-content {
-    padding: 16px;
-  }
-
-  .favorite-card {
-    padding: 16px 0;
   }
 
   .favorite-card-text {
-    font-size: 19px !important;
+    font-size: 16px;
+    line-height: 1.7;
   }
 
   .mark-checkbox {
     width: 36px;
     height: 36px;
-  }
-
-  .favorite-card-wrapper {
-    align-items: flex-start;
   }
 }
 </style>

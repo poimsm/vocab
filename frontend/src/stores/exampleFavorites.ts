@@ -31,17 +31,13 @@ export const useExampleFavoritesStore = defineStore('exampleFavorites', () => {
   const favoritesTotalPages = ref(1)
   const favoritesFilter = ref<'all' | 'marked' | 'not_marked'>('all')
   const favoritesLoading = ref(false)
+  const lastSortBy = ref<'done' | 'random' | 'not_marked_first'>('not_marked_first')
 
   const FAVORITES_LIMIT = 10
 
   const displayedExamples = computed(() => {
-    if (favoritesFilter.value === 'all') {
-      return favoriteExamples.value
-    } else if (favoritesFilter.value === 'marked') {
-      return favoriteExamples.value.filter(ex => ex.is_marked)
-    } else {
-      return favoriteExamples.value.filter(ex => !ex.is_marked)
-    }
+    // Ya no filtramos en frontend, el backend maneja el ordenamiento y filtrado
+    return favoriteExamples.value
   })
 
   const hasData = computed(() => favoriteExamples.value.length > 0)
@@ -82,9 +78,42 @@ export const useExampleFavoritesStore = defineStore('exampleFavorites', () => {
     }
   }
 
+  async function fetchFavoritesWithMode(page: number = 1, sortBy: 'done' | 'random' | 'not_marked_first' = 'not_marked_first') {
+    if (favoritesLoading.value) return
+
+    favoritesLoading.value = true
+    lastSortBy.value = sortBy
+
+    try {
+      const params: any = {
+        page,
+        limit: FAVORITES_LIMIT,
+        sort_by: sortBy
+      }
+
+      const response = await api.get('/examples/favorites', { params })
+
+      if (response.data && response.data.status === 'ok') {
+        if (page === 1) {
+          favoriteExamples.value = response.data.items || []
+        } else {
+          favoriteExamples.value.push(...(response.data.items || []))
+        }
+        favoritesTotalPages.value = response.data.pages || 1
+        favoritesPage.value = page
+      }
+    } catch (e: any) {
+      console.error('Failed to load favorite examples:', e)
+      throw e
+    } finally {
+      favoritesLoading.value = false
+    }
+  }
+
   function nextPage() {
     if (favoritesPage.value < favoritesTotalPages.value) {
-      fetchFavorites(favoritesPage.value + 1, favoritesFilter.value)
+      // Usar el nuevo método con el último sortBy usado
+      fetchFavoritesWithMode(favoritesPage.value + 1, lastSortBy.value)
     }
   }
 
@@ -112,6 +141,7 @@ export const useExampleFavoritesStore = defineStore('exampleFavorites', () => {
     favoritesPage.value = 1
     favoritesTotalPages.value = 1
     favoritesFilter.value = 'all'
+    lastSortBy.value = 'not_marked_first'
   }
 
   return {
@@ -122,7 +152,9 @@ export const useExampleFavoritesStore = defineStore('exampleFavorites', () => {
     favoritesFilter,
     favoritesLoading,
     hasData,
+    lastSortBy,
     fetchFavorites,
+    fetchFavoritesWithMode,
     nextPage,
     toggleMarked,
     setFilter,

@@ -357,14 +357,18 @@ class ExampleRepository:
         logger.debug(f"[ExampleRepository] Example {example_id} is_marked toggled to {example.is_marked}")
         return example.is_marked
 
-    def get_examples(self, page: int = 1, limit: int = 15, is_marked: bool | None = None) -> dict:
+    def get_examples(self, page: int = 1, limit: int = 15, is_marked: bool | None = None, sort_by: str = 'not_marked_first') -> dict:
         """
         Obtiene ejemplos favoritos con paginación.
 
         Args:
             page: Número de página
             limit: Items por página
-            is_marked: Filtrar por estado de marcado (True/False/None para sin filtro)
+            is_marked: Filtrar por estado de marcado (True/False/None para sin filtro) - DEPRECATED en favor de sort_by
+            sort_by: Modo de ordenamiento ('done', 'random', 'not_marked_first')
+                - 'done': Solo favoritos marcados, ordenados por fecha
+                - 'not_marked_first': Todos los favoritos, primero no marcados, luego marcados
+                - 'random': Solo NO marcados en orden aleatorio
 
         Retorna un diccionario con:
         - items: List de ejemplos
@@ -375,7 +379,15 @@ class ExampleRepository:
         """
         # Construir condiciones de filtro
         filters = [Example.is_favorite == True]
-        if is_marked is not None:
+
+        # Si se usa sort_by='done', filtrar solo marcados
+        if sort_by == 'done':
+            filters.append(Example.is_marked == True)
+        # Si se usa sort_by='random', filtrar solo NO marcados
+        elif sort_by == 'random':
+            filters.append(Example.is_marked == False)
+        # Si se proporciona is_marked explícitamente (por compatibilidad), usarlo
+        elif is_marked is not None:
             filters.append(Example.is_marked == is_marked)
 
         # Contar total de ejemplos favoritos
@@ -388,17 +400,30 @@ class ExampleRepository:
         offset = (page - 1) * limit
         pages = (total + limit - 1) // limit if total > 0 else 1
 
-        # Obtener ejemplos ordenados por fecha de favorito (más reciente primero)
-        # Los NULL van al final
+        # Construir query base
+        query = select(Example).where(*filters)
+
+        # Aplicar ordenamiento según sort_by
+        if sort_by == 'random':
+            # Ordenamiento aleatorio
+            from sqlalchemy import func as sa_func
+            query = query.order_by(sa_func.random())
+        elif sort_by == 'not_marked_first':
+            # Primero no marcados, luego marcados, dentro de cada grupo por fecha (más reciente primero)
+            query = query.order_by(
+                Example.is_marked.asc(),  # False (0) antes que True (1)
+                nulls_last(Example.favorited_at.desc())
+            )
+        else:  # 'done' o default
+            # Solo por fecha (más reciente primero)
+            query = query.order_by(nulls_last(Example.favorited_at.desc()))
+
+        # Aplicar paginación
         examples = self.session.exec(
-            select(Example)
-            .where(*filters)
-            .order_by(nulls_last(Example.favorited_at.desc()))
-            .offset(offset)
-            .limit(limit)
+            query.offset(offset).limit(limit)
         ).all()
 
-        logger.debug(f"[ExampleRepository] Retrieved {len(examples)} favorite examples (page {page}, total {total}, is_marked={is_marked})")
+        logger.debug(f"[ExampleRepository] Retrieved {len(examples)} favorite examples (page {page}, total {total}, sort_by={sort_by})")
 
         return {
             "items": examples,

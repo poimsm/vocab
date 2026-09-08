@@ -30,37 +30,30 @@ const emit = defineEmits<Emits>()
 
 // State
 const favoriteExamples = ref<FavoriteExample[]>([])
-const displayedExamples = ref<FavoriteExample[]>([])
 const favoritesLoading = ref(false)
 const favoritesPage = ref(1)
 const favoritesTotalPages = ref(1)
-const favoritesFilter = ref<'all' | 'marked' | 'not_marked'>('all')
 const markingExample = ref<number | null>(null)
-const showFilterMenu = ref(false)
 const showFilterBar = ref(true)
 const isInitialLoad = ref(true)
+const showDone = ref(false)
+const showRandom = ref(false)
+const lastSortBy = ref<'done' | 'random' | 'not_marked_first'>('not_marked_first')
 
 const FAVORITES_LIMIT = 10
 
 // Flag para evitar reiniciar cuando se hace scroll
 let isUserChangingFilter = false
 
-// ─── Scroll tracking (non-reactive for performance) ───
-let scrollLastY = 0
-let scrollAccumulatedDown = 0
-let scrollAccumulatedUp = 0
-let scrollLastDirection: 'up' | 'down' | null = null
+const displayedExamples = computed(() => {
+  return favoriteExamples.value
+})
 
-// Actualizar listado mostrado cuando se cambia el filtro
-function updateDisplayedExamples() {
-  if (favoritesFilter.value === 'all') {
-    displayedExamples.value = favoriteExamples.value
-  } else if (favoritesFilter.value === 'marked') {
-    displayedExamples.value = favoriteExamples.value.filter(ex => ex.is_marked)
-  } else {
-    displayedExamples.value = favoriteExamples.value.filter(ex => !ex.is_marked)
-  }
-}
+// ─── Scroll tracking robusto (sin jitter) ───
+let lastScrollTop = 0
+let scrollTopWhenVisible = 0
+let scrollTopWhenHidden = 0
+let ticking = false
 
 // Methods
 async function fetchFavorites() {
@@ -71,29 +64,17 @@ async function fetchFavorites() {
   try {
     const params: any = {
       page: favoritesPage.value,
-      limit: FAVORITES_LIMIT
+      limit: FAVORITES_LIMIT,
+      sort_by: lastSortBy.value
     }
 
-    // Agregar filtro is_marked si está activo
-    if (favoritesFilter.value === 'marked') {
-      params.is_marked = true
-    } else if (favoritesFilter.value === 'not_marked') {
-      params.is_marked = false
-    }
-
-    const response = await api.get('/examples/favorites', {
-      params
-    })
+    const response = await api.get('/examples/favorites', { params })
 
     if (response.data && response.data.status === 'ok') {
       if (favoritesPage.value === 1) {
-        // Cargar inicialmente: actualizar todo y recalcular filtro
         favoriteExamples.value = response.data.items || []
-        updateDisplayedExamples()
       } else {
-        // Infinite scroll: solo concatenar sin recalcular filtro
         favoriteExamples.value.push(...(response.data.items || []))
-        displayedExamples.value.push(...(response.data.items || []))
       }
       favoritesTotalPages.value = response.data.pages || 1
     }
@@ -112,67 +93,68 @@ function nextFavoritesPage() {
 }
 
 function resetScrollTracking() {
-  scrollLastY = 0
-  scrollAccumulatedDown = 0
-  scrollAccumulatedUp = 0
-  scrollLastDirection = null
+  lastScrollTop = 0
+  scrollTopWhenVisible = 0
+  scrollTopWhenHidden = 0
   showFilterBar.value = true
 }
 
 function handleFavoritesScroll(event: Event) {
-  const target = event.target as HTMLElement
-  const scrollTop = target.scrollTop
-  const clientHeight = target.clientHeight
-  const scrollHeight = target.scrollHeight
+  if (ticking) return
+  ticking = true
 
-  // ── Infinite scroll ──
-  if (scrollHeight - (scrollTop + clientHeight) < 200) {
-    if (favoritesPage.value < favoritesTotalPages.value && !favoritesLoading.value) {
-      nextFavoritesPage()
+  requestAnimationFrame(() => {
+    const target = event.target as HTMLElement
+    const scrollTop = target.scrollTop
+    const clientHeight = target.clientHeight
+    const scrollHeight = target.scrollHeight
+
+    // Guardar posición del scroll
+    sessionStorage.setItem('exampleFavoritesScroll', String(scrollTop))
+
+    // Infinite scroll
+    if (scrollHeight - (scrollTop + clientHeight) < 200) {
+      if (favoritesPage.value < favoritesTotalPages.value && !favoritesLoading.value) {
+        nextFavoritesPage()
+      }
     }
-  }
 
-  // ── Auto-hiding header logic ──
-  // Never hide while filter menu is open
-  if (showFilterMenu.value) return
-
-  // Always show when at top
-  if (scrollTop < 10) {
-    showFilterBar.value = true
-    resetScrollTracking()
-    return
-  }
-
-  const delta = scrollTop - scrollLastY
-  if (Math.abs(delta) < 2) {
-    // Ignore micro-jitter
-    return
-  }
-
-  const direction = delta > 0 ? 'down' : 'up'
-
-  // Reset accumulated opposite direction immediately
-  if (direction !== scrollLastDirection) {
-    scrollAccumulatedDown = 0
-    scrollAccumulatedUp = 0
-  }
-
-  if (direction === 'up') {
-    scrollAccumulatedUp += Math.abs(delta)
-    // Native apps show header IMMEDIATELY when scrolling up (low threshold)
-    if (scrollAccumulatedUp > 6) {
+    // ── Auto-hide con histéresis ──
+    // Siempre mostrar en el tope
+    if (scrollTop < 10) {
       showFilterBar.value = true
+      scrollTopWhenVisible = scrollTop
+      lastScrollTop = scrollTop
+      ticking = false
+      return
     }
-  } else {
-    scrollAccumulatedDown += delta
-    // Hide only after meaningful scroll down (prevents micro-scroll hides)
-    if (scrollAccumulatedDown > 55) {
-      showFilterBar.value = false
-    }
-  }
 
-  scrollLastY = scrollTop
-  scrollLastDirection = direction
+    const delta = scrollTop - lastScrollTop
+
+    // Ignorar micro-movimientos (< 3px)
+    if (Math.abs(delta) < 3) {
+      lastScrollTop = scrollTop
+      ticking = false
+      return
+    }
+
+    if (delta > 0 && showFilterBar.value) {
+      // Scrolleando hacia abajo: ocultar solo si bajamos > 50px desde que se mostró
+      if (scrollTop - scrollTopWhenVisible > 50) {
+        showFilterBar.value = false
+        scrollTopWhenHidden = scrollTop
+      }
+    } else if (delta < 0 && !showFilterBar.value) {
+      // Scrolleando hacia arriba: mostrar solo si subimos > 30px desde que se ocultó
+      if (scrollTopWhenHidden - scrollTop > 30) {
+        showFilterBar.value = true
+        scrollTopWhenVisible = scrollTop
+      }
+    }
+
+    lastScrollTop = scrollTop
+    ticking = false
+  })
 }
 
 async function toggleMarkedExample(exampleId: number) {
@@ -196,48 +178,55 @@ async function toggleMarkedExample(exampleId: number) {
 
 function closeModal() {
   emit('update:modelValue', false)
-  // No limpiar datos para mantener la posición cuando se reabre
 }
 
 function handleWordClick(word: any) {
   emit('word-click', word)
 }
 
-// Cambiar filtro solo cuando el usuario hace click (no por scroll)
-function changeFilter(newFilter: 'all' | 'marked' | 'not_marked') {
-  isUserChangingFilter = true
-  favoritesFilter.value = newFilter
-  if (typeof window !== 'undefined' && window.innerWidth <= 768) {
-    showFilterMenu.value = false
+function toggleDone() {
+  if (showRandom.value) {
+    showRandom.value = false
   }
+  showDone.value = !showDone.value
+  isUserChangingFilter = true
+  applyModeChange()
 }
 
-// When filter changes, show header so user sees content changed
-watch(favoritesFilter, () => {
-  // Solo reiniciar si el usuario cambió el filtro manualmente
-  if (!isUserChangingFilter) return
+function toggleRandom() {
+  if (showDone.value) {
+    showDone.value = false
+  }
+  showRandom.value = !showRandom.value
+  isUserChangingFilter = true
+  applyModeChange()
+}
+
+function applyModeChange() {
+  const sortBy = showDone.value ? 'done' : showRandom.value ? 'random' : 'not_marked_first'
+  lastSortBy.value = sortBy
 
   showFilterBar.value = true
-  scrollAccumulatedDown = 0
-  scrollAccumulatedUp = 0
+  scrollTopWhenVisible = 0
+  scrollTopWhenHidden = 0
   favoritesPage.value = 1
   favoriteExamples.value = []
-  displayedExamples.value = []
   fetchFavorites()
 
   isUserChangingFilter = false
-})
+}
 
 watch(
   () => props.modelValue,
   (newValue) => {
     if (newValue) {
-      // Si ya tiene datos, solo resetear el scroll
       if (favoriteExamples.value.length > 0) {
         resetScrollTracking()
       } else {
-        // Si no tiene datos, traer desde cero
         favoritesPage.value = 1
+        lastSortBy.value = 'not_marked_first'
+        showDone.value = false
+        showRandom.value = false
         isInitialLoad.value = true
         resetScrollTracking()
         fetchFavorites()
@@ -252,6 +241,9 @@ watch(
 onMounted(() => {
   if (props.modelValue) {
     favoritesPage.value = 1
+    lastSortBy.value = 'not_marked_first'
+    showDone.value = false
+    showRandom.value = false
     isInitialLoad.value = true
     resetScrollTracking()
     fetchFavorites()
@@ -263,77 +255,37 @@ onMounted(() => {
 </script>
 
 <template>
-  <!-- Favorites View (Fullscreen) -->
   <div v-show="modelValue" class="favorites-view">
-    <div class="favorites-header" :class="{ 'is-hidden': !showFilterBar }">
-      <h2>Favorite Examples</h2>
-      <button class="close-favorites-btn" @click="closeModal" title="Close">
-        <Icon icon="solar:close-linear" width="28" />
-      </button>
-    </div>
+    <!-- Header Bar (grid animation = zero jitter) -->
+    <div class="header-bar" :class="{ 'is-hidden': !showFilterBar }">
+      <div class="header-inner">
+        <div class="favorites-header">
+          <h2>Favorite Examples</h2>
+          <button class="close-favorites-btn" @click="closeModal" title="Close">
+            <Icon icon="solar:close-linear" width="28" />
+          </button>
+        </div>
 
-    <!-- Filter Buttons (Desktop) -->
-    <div class="favorites-filter">
-      <button
-        class="filter-btn"
-        :class="{ active: favoritesFilter === 'all' }"
-        @click="changeFilter('all')"
-      >
-        All
-      </button>
-      <button
-        class="filter-btn"
-        :class="{ active: favoritesFilter === 'marked' }"
-        @click="changeFilter('marked')"
-      >
-        Marked
-      </button>
-      <button
-        class="filter-btn"
-        :class="{ active: favoritesFilter === 'not_marked' }"
-        @click="changeFilter('not_marked')"
-      >
-        Not Marked
-      </button>
-    </div>
-
-    <!-- Filter Menu (Mobile) -->
-    <div
-      class="favorites-filter-mobile"
-      :class="{ 'is-hidden': !showFilterBar }"
-    >
-      <button class="filter-menu-btn" @click="showFilterMenu = !showFilterMenu" title="Filter">
-        <Icon icon="solar:filter-linear" width="20" />
-        <span class="filter-label">{{ favoritesFilter === 'all' ? 'All' : favoritesFilter === 'marked' ? 'Marked' : 'Not Marked' }}</span>
-        <Icon
-          icon="solar:alt-arrow-down-linear"
-          width="16"
-          class="filter-arrow"
-          :class="{ 'is-open': showFilterMenu }"
-        />
-      </button>
-      <div v-if="showFilterMenu" class="filter-dropdown">
-        <button
-          class="filter-option"
-          :class="{ active: favoritesFilter === 'all' }"
-          @click="changeFilter('all')"
-        >
-          All
-        </button>
-        <button
-          class="filter-option"
-          :class="{ active: favoritesFilter === 'marked' }"
-          @click="changeFilter('marked')"
-        >
-          Marked
-        </button>
-        <button
-          class="filter-option"
-          :class="{ active: favoritesFilter === 'not_marked' }"
-          @click="changeFilter('not_marked')"
-        >
-          Not Marked
-        </button>
+        <div class="favorites-filter">
+          <button
+            class="filter-btn"
+            :class="{ active: showDone }"
+            @click="toggleDone"
+            title="Show only marked items"
+          >
+            <Icon icon="solar:check-circle-bold" width="16" />
+            Done
+          </button>
+          <button
+            class="filter-btn"
+            :class="{ active: showRandom }"
+            @click="toggleRandom"
+            title="Randomize order"
+          >
+            <Icon icon="solar:shuffle-linear" width="16" />
+            Random
+          </button>
+        </div>
       </div>
     </div>
 
@@ -344,7 +296,12 @@ onMounted(() => {
       </div>
 
       <div v-else-if="displayedExamples.length > 0" class="favorites-items">
-        <div v-for="example in displayedExamples" :key="example.id" class="favorite-card" :class="{ marked: example.is_marked }">
+        <div
+          v-for="example in displayedExamples"
+          :key="example.id"
+          class="favorite-card"
+          :class="{ marked: example.is_marked }"
+        >
           <div class="favorite-card-wrapper">
             <button
               class="mark-checkbox"
@@ -366,8 +323,11 @@ onMounted(() => {
             </button>
             <div class="favorite-card-text" :class="{ 'line-through': example.is_marked }">
               <template v-for="(segment, idx) in example.text" :key="idx">
-                <span v-if="segment.is_highlighted && segment.target_word" class="word-highlight"
-                  @click="handleWordClick(segment.target_word)">
+                <span
+                  v-if="segment.is_highlighted && segment.target_word"
+                  class="word-highlight"
+                  @click="handleWordClick(segment.target_word)"
+                >
                   {{ segment.text }}
                 </span>
                 <span v-else>{{ segment.text }}</span>
@@ -378,7 +338,7 @@ onMounted(() => {
       </div>
 
       <div v-else-if="favoriteExamples.length > 0" class="empty-filtered">
-        <p>No {{ favoritesFilter }} examples</p>
+        <p>No matching examples</p>
       </div>
 
       <div v-else class="empty-favorites">
@@ -393,6 +353,10 @@ onMounted(() => {
 </template>
 
 <style scoped>
+* {
+  box-sizing: border-box;
+}
+
 .favorites-view {
   display: flex;
   flex-direction: column;
@@ -400,35 +364,48 @@ onMounted(() => {
   width: 100%;
   background: #2d2a3e;
   color: #e2e0e8;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   overflow: hidden;
 }
 
-/* ─── Header: capa superior opaca para ocultar el filtro detrás ─── */
+/* ═══════════════════════════════════════════
+   HEADER BAR — grid animation (zero jitter)
+   ═══════════════════════════════════════════ */
+.header-bar {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.4s cubic-bezier(0.32, 0.72, 0, 1),
+              opacity 0.3s ease;
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+.header-bar.is-hidden {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.header-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ─── Header ─── */
 .favorites-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 24px;
+  padding: 20px 24px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  flex-shrink: 0;
-  /* Fondo sólido que opaca TODO lo que pase por detrás */
   background: #2d2a3e;
-  position: relative;
-  z-index: 20;
-  /* Smooth hide/show */
-  transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1),
-              box-shadow 0.35s ease;
-  will-change: transform;
-}
-
-.favorites-header.is-hidden {
-  display: none;
 }
 
 .favorites-header h2 {
   margin: 0;
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
 }
 
 .close-favorites-btn {
@@ -441,33 +418,40 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 10px;
   transition: all 0.2s ease;
 }
 
 .close-favorites-btn:hover {
   color: #e2e0e8;
+  background: rgba(255, 255, 255, 0.06);
 }
 
-/* ─── Favorites Filter (Desktop) ─── */
+/* ─── Favorites Filter ─── */
 .favorites-filter {
   display: flex;
   gap: 8px;
-  padding: 16px 24px;
+  padding: 14px 24px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  flex-shrink: 0;
   flex-wrap: wrap;
+  background: #2d2a3e;
 }
 
 .filter-btn {
-  padding: 6px 14px;
-  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.05);
   color: #9c99ab;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  white-space: nowrap;
+  font-family: inherit;
 }
 
 .filter-btn:hover {
@@ -481,123 +465,9 @@ onMounted(() => {
   color: #a78bfa;
 }
 
-/* ─── Favorites Filter (Mobile) ─── */
-.favorites-filter-mobile {
-  display: none;
-  position: relative;
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  flex-shrink: 0;
-  /* GPU-accelerated smooth hide/show */
-  will-change: transform, opacity;
-  transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1),
-              opacity 0.35s ease,
-              box-shadow 0.35s ease;
-  /* Glassmorphism native feel */
-  background: rgba(45, 42, 62, 0.92);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
-  /* Z-index menor que el header: se desliza DETRÁS de él */
-  z-index: 10;
-}
-
-.favorites-filter-mobile.is-hidden {
-  display: none;
-}
-
-.filter-menu-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
-  color: #9c99ab;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  width: 100%;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.filter-menu-btn:active {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
-  transform: scale(0.995);
-}
-
-.filter-label {
-  flex: 1;
-  text-align: left;
-}
-
-.filter-arrow {
-  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-  color: #9c99ab;
-}
-
-.filter-arrow.is-open {
-  transform: rotate(180deg);
-}
-
-.filter-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 16px;
-  right: 16px;
-  margin-top: 8px;
-  background: #3d3a52;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  overflow: hidden;
-  z-index: 1000;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  animation: dropdownReveal 0.25s cubic-bezier(0.32, 0.72, 0, 1);
-}
-
-@keyframes dropdownReveal {
-  from {
-    opacity: 0;
-    transform: translateY(-6px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.filter-option {
-  display: block;
-  width: 100%;
-  padding: 14px 16px;
-  border: none;
-  background: transparent;
-  color: #9c99ab;
-  font-size: 15px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  text-align: left;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  -webkit-tap-highlight-color: transparent;
-}
-
-.filter-option:last-child {
-  border-bottom: none;
-}
-
-.filter-option:active {
-  background: rgba(255, 255, 255, 0.05);
-  color: #e2e0e8;
-}
-
-.filter-option.active {
-  background: rgba(167, 139, 250, 0.15);
-  color: #a78bfa;
-}
-
+/* ═══════════════════════════════════════════
+   CONTENT
+   ═══════════════════════════════════════════ */
 .favorites-content {
   flex: 1;
   overflow-y: auto;
@@ -605,14 +475,24 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  /* Momentum scrolling for iOS */
   -webkit-overflow-scrolling: touch;
 }
 
 .favorites-content::-webkit-scrollbar {
-  display: none;
+  width: 6px;
+}
+
+.favorites-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.favorites-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+
+.favorites-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .favorites-items {
@@ -624,7 +504,7 @@ onMounted(() => {
 .favorite-card {
   padding: 16px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  transition: all 0.2s ease;
+  transition: opacity 0.2s ease;
 }
 
 .favorite-card:last-child {
@@ -632,15 +512,13 @@ onMounted(() => {
 }
 
 .favorite-card.marked {
-  opacity: 0.6;
+  opacity: 0.55;
 }
 
 .favorite-card-wrapper {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
 
 .favorite-card-text {
@@ -664,7 +542,6 @@ onMounted(() => {
 }
 
 .favorite-card-text.line-through {
-  /* text-decoration: line-through; */
   color: #7c7a8a;
 }
 
@@ -682,6 +559,7 @@ onMounted(() => {
   justify-content: center;
   transition: all 0.2s ease;
   border-radius: 8px;
+  margin-top: 2px;
 }
 
 .mark-checkbox:hover:not(:disabled) {
@@ -695,9 +573,12 @@ onMounted(() => {
 }
 
 .mark-checkbox .checked {
-  color:#bfb0f7;
+  color: #bfb0f7;
 }
 
+/* ═══════════════════════════════════════════
+   STATES
+   ═══════════════════════════════════════════ */
 .empty-favorites,
 .empty-filtered {
   display: flex;
@@ -720,6 +601,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   gap: 16px;
+  min-height: 300px;
 }
 
 .spinner {
@@ -741,9 +623,7 @@ onMounted(() => {
 }
 
 @keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  to { transform: rotate(360deg); }
 }
 
 .loading-more {
@@ -753,42 +633,49 @@ onMounted(() => {
   padding: 24px;
 }
 
+/* ═══════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════ */
 @media (max-width: 768px) {
-  .favorites-filter {
-    display: none;
-  }
-
-  .favorites-filter-mobile {
-    display: block;
-  }
-
   .favorites-header {
-    padding: 16px;
+    padding: 16px 20px;
   }
 
   .favorites-header h2 {
     font-size: 20px;
   }
 
+  .favorites-filter {
+    padding: 12px 20px;
+  }
+
+  .filter-btn {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+
   .favorites-content {
-    padding: 16px;
+    padding: 16px 20px;
   }
 
   .favorite-card {
-    padding: 16px 0;
+    padding: 14px 0;
   }
 
   .favorite-card-text {
-    font-size: 19px !important;
+    font-size: 18px;
+    line-height: 1.75;
   }
 
   .mark-checkbox {
     width: 36px;
     height: 36px;
   }
+}
 
-  .favorite-card-wrapper {
-    align-items: flex-start;    
+@media (max-width: 480px) {
+  .favorite-card-text {
+    font-size: 17px;
   }
 }
 </style>
