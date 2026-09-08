@@ -19,30 +19,17 @@ interface Collocation {
 
 const router = useRouter()
 
-const original = ref<Collocation[]>([])
-const displayedCollocations = ref<Collocation[]>([])
+const collocations = ref<Collocation[]>([])
 const isLoading = ref(true)
 const isLoadingMore = ref(false)
 const error = ref<string | null>(null)
-const filterStatus = ref<'all' | 'marked' | 'not_marked'>('all')
+const showOnlyMarked = ref(false)
 const isSavingStatus = ref<number | null>(null)
 const isGenerating = ref(false)
 const generateError = ref<string | null>(null)
 const currentPage = ref(1)
 const totalPages = ref(1)
 const ITEMS_PER_PAGE = 15
-
-const collocations = computed(() => displayedCollocations.value)
-
-const updateDisplayedCollocations = () => {
-  if (filterStatus.value === 'all') {
-    displayedCollocations.value = original.value
-  } else if (filterStatus.value === 'marked') {
-    displayedCollocations.value = original.value.filter(c => c.is_marked)
-  } else {
-    displayedCollocations.value = original.value.filter(c => !c.is_marked)
-  }
-}
 
 const toggleMarked = async (collocation: Collocation) => {
   const newStatus = !collocation.is_marked
@@ -52,7 +39,7 @@ const toggleMarked = async (collocation: Collocation) => {
     const updated = await collocationApi.toggleMarked(collocation.id, newStatus)
 
     // Update local state - item se queda visible en el filtro actual, no se remueve
-    const item = original.value.find(c => c.id === collocation.id)
+    const item = collocations.value.find(c => c.id === collocation.id)
     if (item) {
       item.is_marked = updated.is_marked
     }
@@ -70,11 +57,10 @@ const handleWordClick = (wordId: number | null) => {
   }
 }
 
-const changeFilter = (newFilter: 'all' | 'marked' | 'not_marked') => {
-  filterStatus.value = newFilter
+const toggleFilter = () => {
+  showOnlyMarked.value = !showOnlyMarked.value
   currentPage.value = 1
-  original.value = []
-  displayedCollocations.value = []
+  collocations.value = []
   loadCollocations()
 }
 
@@ -87,9 +73,7 @@ const generateMoreCollocations = async () => {
 
     if (result.status === 'created' && result.items) {
       // Add new items at the beginning (since they're sorted by created_at DESC)
-      original.value.unshift(...result.items)
-      // Update displayed items with new collocations
-      updateDisplayedCollocations()
+      collocations.value.unshift(...result.items)
     } else if (result.status === 'no_words') {
       generateError.value = 'No words available to generate collocations. Please add some words first.'
     } else {
@@ -107,17 +91,15 @@ const loadCollocations = async () => {
   try {
     isLoading.value = true
     error.value = null
-    const response = await collocationApi.getCollocations(filterStatus.value, currentPage.value, ITEMS_PER_PAGE)
+    const statusFilter = showOnlyMarked.value ? 'marked' : 'all'
+    const response = await collocationApi.getCollocations(statusFilter, currentPage.value, ITEMS_PER_PAGE)
 
     if (currentPage.value === 1) {
-      original.value = response.items
+      collocations.value = response.items
     } else {
-      original.value.push(...response.items)
+      collocations.value.push(...response.items)
     }
     totalPages.value = response.pages
-
-    // Update displayed items with the loaded data
-    updateDisplayedCollocations()
   } catch (err: any) {
     error.value = err.message || 'Failed to load collocations'
     console.error('Error loading collocations:', err)
@@ -136,9 +118,9 @@ const loadMoreCollocations = async () => {
   currentPage.value++
 
   try {
-    const response = await collocationApi.getCollocations(filterStatus.value, currentPage.value, ITEMS_PER_PAGE)
-    original.value.push(...response.items)
-    updateDisplayedCollocations()
+    const statusFilter = showOnlyMarked.value ? 'marked' : 'all'
+    const response = await collocationApi.getCollocations(statusFilter, currentPage.value, ITEMS_PER_PAGE)
+    collocations.value.push(...response.items)
   } catch (err: any) {
     console.error('Error loading more collocations:', err)
     currentPage.value-- // Revert page number on error
@@ -168,10 +150,6 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('scroll', handleWindowScroll)
 })
-
-onMounted(() => {
-  loadCollocations()
-})
 </script>
 
 <template>
@@ -189,7 +167,7 @@ onMounted(() => {
     </div>
 
     <!-- Empty State -->
-    <div v-else-if="original.length === 0" class="empty-state">
+    <div v-else-if="collocations.length === 0" class="empty-state">
       <Icon icon="fluent-emoji:smiling-face" width="48" />
       <p>No collocations yet. Create some to get started!</p>
       <button @click="generateMoreCollocations" class="generate-btn" :disabled="isGenerating">
@@ -224,17 +202,15 @@ onMounted(() => {
 
       <!-- Filter -->
       <div class="filter-section">
-        <div class="filter-group">
-          <button
-            v-for="option in ['all', 'marked', 'not_marked']"
-            :key="option"
-            class="filter-btn"
-            :class="{ active: filterStatus === option }"
-            @click="changeFilter(option as any)"
-          >
-            {{ option === 'all' ? 'All' : option === 'marked' ? 'Marked' : 'Not Marked' }}
-          </button>
-        </div>
+        <button
+          class="filter-toggle"
+          :class="{ active: showOnlyMarked }"
+          @click="toggleFilter"
+          :title="showOnlyMarked ? 'Showing marked collocations' : 'Showing all collocations'"
+        >
+          <Icon icon="solar:star-bold" width="16" />
+          <span>{{ showOnlyMarked ? 'Done' : 'Done' }}</span>
+        </button>
       </div>
 
       <!-- Cards List with Infinite Scroll -->
@@ -496,30 +472,28 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.filter-group {
+.filter-toggle {
   display: flex;
+  align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
-}
-
-.filter-btn {
-  padding: 6px 12px;
+  padding: 8px 14px;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.05);
   color: #9c99ab;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
-.filter-btn:hover {
+.filter-toggle:hover {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.2);
 }
 
-.filter-btn.active {
+.filter-toggle.active {
   background: rgba(167, 139, 250, 0.15);
   border-color: rgba(167, 139, 250, 0.4);
   color: #a78bfa;
@@ -718,7 +692,7 @@ onMounted(() => {
     gap: 0px;
   }
 
-  .filter-btn {
+  .filter-toggle {
     font-size: 15px;
   }
 }

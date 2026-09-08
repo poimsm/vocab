@@ -107,9 +107,11 @@ class CollocationRepository:
 
     def toggle_marked(self, collocation_id: int, user_id: int, is_marked: bool) -> Optional[Collocation]:
         """Actualiza el estado de marcado de una colocación."""
+        from datetime import datetime, timezone
         collocation = self.get_by_id(collocation_id, user_id)
         if collocation:
             collocation.is_marked = is_marked
+            collocation.updated_at = datetime.now(timezone.utc)
             self.session.add(collocation)
             self.session.commit()
             self.session.refresh(collocation)
@@ -128,11 +130,11 @@ class CollocationRepository:
         Cuando status="all":
             Ordena por:
             1. is_marked ASC (no marcadas primero, luego marcadas)
-            2. in_use_at DESC (más reciente primero)
-            3. created_at DESC (para items sin in_use_at)
+            2. updated_at DESC (más reciente primero)
+            3. created_at DESC (como fallback)
 
         Cuando status="marked" o "not_marked":
-            Ordena solo por in_use_at e created_at
+            Ordena por updated_at DESC y created_at DESC
         """
         query = select(Collocation).where(
             Collocation.user_id == user_id,
@@ -149,13 +151,13 @@ class CollocationRepository:
         if status == "all":
             order_clauses = [
                 case((Collocation.is_marked == False, 0), (Collocation.is_marked == True, 1), else_=2),
-                desc(Collocation.in_use_at),
-                Collocation.created_at.desc()
+                desc(Collocation.updated_at),
+                desc(Collocation.created_at)
             ]
         else:
             order_clauses = [
-                desc(Collocation.in_use_at),
-                Collocation.created_at.desc()
+                desc(Collocation.updated_at),
+                desc(Collocation.created_at)
             ]
 
         return self.session.exec(query.order_by(*order_clauses)).all()
@@ -181,6 +183,7 @@ class CollocationRepository:
         if collocation:
             collocation.is_in_use = True
             collocation.in_use_at = datetime.now(timezone.utc)
+            collocation.updated_at = datetime.now(timezone.utc)
             self.session.add(collocation)
             self.session.commit()
             self.session.refresh(collocation)
