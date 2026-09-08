@@ -15,6 +15,7 @@ export interface WordDetail {
   created_at: string
   total_examples: number
   examples: string[]
+  explanation?: string | null
 }
 
 export const wordApi = {
@@ -44,6 +45,18 @@ export const wordApi = {
     is_learned: boolean
   }> {
     const response = await apiClient.patch(`/words/words/${wordId}/learned`)
+    return response.data
+  },
+
+  /**
+   * Get AI explanation for a word
+   */
+  async getWordExplanation(wordId: number): Promise<{
+    status: string
+    word_id: number
+    explanation: string
+  }> {
+    const response = await apiClient.post(`/words/words/${wordId}/explain`)
     return response.data
   }
 }

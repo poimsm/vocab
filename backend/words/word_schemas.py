@@ -50,6 +50,7 @@ class WordDetail(BaseModel):
     created_at: datetime
     total_examples: int
     examples: List[str]
+    explanation: Optional[str] = None
 
 
 class WordResponse(BaseModel):

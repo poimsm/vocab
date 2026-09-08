@@ -112,6 +112,7 @@ class Word(SQLModel, table=True):
     is_active: bool = Field(default=True)
     is_boosted: bool = Field(default=False)
     boosted_at: Optional[datetime] = Field(default=None)
+    explanation: Optional[str] = Field(default=None, max_length=500)
     user_id: Optional[int] = Field(default=None, foreign_key="users.id")
     user: User = Relationship(back_populates="words")
 

@@ -893,3 +893,26 @@ Format:
     except json.JSONDecodeError:
         print("Error parsing JSON:\n", content)
         return None
+
+
+def explain_word(word: str) -> str:
+    logger.info("explain_word")
+
+    prompt = """
+explain this word "{word}", use 50 words, talk like a kid
+"""
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        temperature=0.7,
+        messages=[
+            {
+                "role": "user",
+                "content": prompt.format(
+                    word=word
+                )
+            }
+        ],
+    )
+
+    return response.choices[0].message.content.strip()

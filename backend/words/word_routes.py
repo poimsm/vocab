@@ -187,7 +187,8 @@ def get_word(
         "is_learned": is_learned,
         "created_at": word.created_at,
         "total_examples": explore_examples_count,
-        "examples": initial_examples
+        "examples": initial_examples,
+        "explanation": word.explanation
     }
 
 
@@ -480,6 +481,51 @@ def mark_word_as_learned(
         "word_id": word_id,
         "is_learned": is_learned
     }
+
+
+@router.post("/words/{word_id}/explain")
+@log_endpoint
+def explain_word_endpoint(
+    word_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Genera y almacena explicación de una palabra"""
+    logger.info(f"[explain_word_endpoint] User {current_user.id}: Explaining word {word_id}")
+
+    word_repo = WordRepository(db)
+    word = word_repo.get(db, word_id)
+
+    if not word or word.user_id != current_user.id:
+        logger.warning(f"[explain_word_endpoint] Word {word_id} not found")
+        raise HTTPException(status_code=404, detail="Palabra no encontrada")
+
+    try:
+        # Generar explicación usando AI
+        explanation_json = ai.explain_vocabulary(word.main)
+
+        # Parsear JSON response
+        import json
+        explanation_data = json.loads(explanation_json)
+        explanation_text = explanation_data.get("explanation", "")
+
+        # Almacenar en la palabra
+        word.explanation = explanation_text
+        db.add(word)
+        db.commit()
+        db.refresh(word)
+
+        logger.info(f"[explain_word_endpoint] Word {word_id} explanation generated and stored")
+
+        return {
+            "status": "ok",
+            "word_id": word_id,
+            "explanation": explanation_text
+        }
+
+    except Exception as e:
+        logger.error(f"[explain_word_endpoint] Error generating explanation for word {word_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error generating explanation: {str(e)}")
 
 
 @router.delete("/words/{word_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -12,10 +12,28 @@ const error = ref<string | null>(null)
 const isSavingFavorite = ref(false)
 const isSavingLearned = ref(false)
 const showExplanation = ref(false)
+const isExplaining = ref(false)
 
-// Mock AI explanation - will be replaced with actual API call
-const getAIExplanation = () => {
-  return `This word refers to the quality of being able to adapt or adjust to new conditions. It encompasses flexibility in thinking, resilience when facing challenges, and the capacity to learn and evolve. Often used in personal growth and professional contexts.`
+const getAIExplanation = async () => {
+  if (!word.value) return
+
+  isExplaining.value = true
+  try {
+    const result = await wordApi.getWordExplanation(word.value.id)
+    word.value.explanation = result.explanation
+  } catch (err) {
+    console.error('Error getting explanation:', err)
+    error.value = 'Failed to generate explanation'
+  } finally {
+    isExplaining.value = false
+  }
+}
+
+const toggleExplanation = () => {
+  if (!showExplanation.value && !word.value?.explanation) {
+    getAIExplanation()
+  }
+  showExplanation.value = !showExplanation.value
 }
 
 const wordId = computed(() => parseInt(route.params.id as string))
@@ -202,12 +220,18 @@ watch(wordId, () => {
 
               <!-- AI Explanation Button -->
               <button
-                @click="showExplanation = true"
+                @click="showExplanation = true; !word?.explanation && getAIExplanation()"
+                :disabled="isExplaining"
                 class="explanation-card-btn"
+                :class="{ 'is-loading': isExplaining }"
                 title="Get AI explanation"
               >
-                <Icon icon="solar:lightbulb-linear" width="18" />
-                <span class="btn-text">Explain</span>
+                <Icon
+                  :icon="isExplaining ? 'solar:spinner-linear' : 'solar:lightbulb-linear'"
+                  width="18"
+                  :class="{ 'spinner-icon': isExplaining }"
+                />
+                <span class="btn-text">{{ isExplaining ? 'Explaining...' : 'Explain' }}</span>
               </button>
             </div>
 
@@ -320,14 +344,29 @@ watch(wordId, () => {
           <!-- Mobile AI Explanation -->
           <div class="mobile-explanation-card">
             <button
-              @click="showExplanation = !showExplanation"
+              @click="toggleExplanation"
+              :disabled="isExplaining"
               class="mobile-explanation-btn"
+              :class="{ 'is-loading': isExplaining }"
             >
-              <Icon icon="solar:lightbulb-linear" width="20" />
-              <span>{{ showExplanation ? 'Hide' : 'AI Explanation' }}</span>
+              <Icon
+                :icon="isExplaining ? 'solar:spinner-linear' : 'solar:lightbulb-linear'"
+                width="20"
+                :class="{ 'spinner-icon': isExplaining }"
+              />
+              <span>{{ isExplaining ? 'Explaining...' : showExplanation ? 'Hide' : 'AI Explanation' }}</span>
             </button>
             <div v-if="showExplanation" class="mobile-explanation-content">
-              {{ getAIExplanation() }}
+              <div v-if="isExplaining" class="explanation-loading">
+                <div class="spinner-small"></div>
+                <p>Generating explanation...</p>
+              </div>
+              <div v-else-if="word?.explanation">
+                {{ word.explanation }}
+              </div>
+              <div v-else class="explanation-empty">
+                <p>No explanation yet. The explanation will appear here.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -354,7 +393,16 @@ watch(wordId, () => {
             </button>
           </div>
           <div class="modal-body">
-            {{ getAIExplanation() }}
+            <div v-if="isExplaining" class="explanation-loading">
+              <div class="spinner-small"></div>
+              <p>Generating explanation...</p>
+            </div>
+            <div v-else-if="word?.explanation">
+              {{ word.explanation }}
+            </div>
+            <div v-else class="explanation-empty">
+              <p>No explanation yet. The explanation will appear here.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -991,6 +1039,38 @@ watch(wordId, () => {
   }
 }
 
+.explanation-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  min-height: 100px;
+}
+
+.spinner-small {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(167, 139, 250, 0.2);
+  border-top-color: #a78bfa;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+.explanation-loading p {
+  color: #9c99ab;
+  font-size: 14px;
+  margin: 0;
+}
+
+.explanation-empty {
+  padding: 20px;
+  text-align: center;
+  color: #9c99ab;
+  font-size: 14px;
+}
+
 /* ═══════════════════════════════════════════
    DESKTOP LAYOUT (2 columns)
    ═══════════════════════════════════════════ */
@@ -1179,6 +1259,15 @@ watch(wordId, () => {
   background: rgba(167, 139, 250, 0.05);
 }
 
+.mobile-explanation-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mobile-explanation-btn.is-loading {
+  color: #a78bfa;
+}
+
 .mobile-explanation-content {
   padding: 16px;
   font-size: 18px;
@@ -1296,6 +1385,19 @@ watch(wordId, () => {
 
 .explanation-card-btn:active {
   transform: scale(0.98);
+}
+
+.explanation-card-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.explanation-card-btn.is-loading {
+  color: #a78bfa;
+}
+
+.spinner-icon {
+  animation: spin 1s linear infinite;
 }
 
 /* ═══════════════════════════════════════════
