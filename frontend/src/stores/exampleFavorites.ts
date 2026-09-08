@@ -65,7 +65,10 @@ export const useExampleFavoritesStore = defineStore('exampleFavorites', () => {
         if (page === 1) {
           favoriteExamples.value = response.data.items || []
         } else {
-          favoriteExamples.value.push(...(response.data.items || []))
+          // Filter out duplicates based on ID
+          const existingIds = new Set(favoriteExamples.value.map(ex => ex.id))
+          const newItems = (response.data.items || []).filter(item => !existingIds.has(item.id))
+          favoriteExamples.value.push(...newItems)
         }
         favoritesTotalPages.value = response.data.pages || 1
         favoritesPage.value = page
@@ -97,7 +100,10 @@ export const useExampleFavoritesStore = defineStore('exampleFavorites', () => {
         if (page === 1) {
           favoriteExamples.value = response.data.items || []
         } else {
-          favoriteExamples.value.push(...(response.data.items || []))
+          // Filter out duplicates based on ID
+          const existingIds = new Set(favoriteExamples.value.map(ex => ex.id))
+          const newItems = (response.data.items || []).filter(item => !existingIds.has(item.id))
+          favoriteExamples.value.push(...newItems)
         }
         favoritesTotalPages.value = response.data.pages || 1
         favoritesPage.value = page
