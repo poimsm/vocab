@@ -880,7 +880,7 @@ watch(wordId, () => {
   position: absolute;
   left: 0;
   top: 0;
-  color: #8b5cf6;
+  color: #8f76c6;
   font-weight: 700;
   font-size: 18px;
   line-height: 1.4;
