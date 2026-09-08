@@ -69,7 +69,8 @@ const markAsLearned = async () => {
   if (!word.value) return
   isSavingLearned.value = true
   try {
-    const result = await wordApi.markAsLearned(wordId.value)
+    const newStatus = !word.value.is_learned
+    const result = await wordApi.toggleLearned(wordId.value, newStatus)
     word.value.is_learned = result.is_learned
   } catch (err) {
     console.error('Error marking as learned:', err)

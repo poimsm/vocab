@@ -449,35 +449,52 @@ def toggle_favorite(
 
 @router.patch("/words/{word_id}/learned")
 @log_endpoint
-def mark_word_as_learned(
+def toggle_learned_status(
     word_id: int = Path(..., ge=1),
+    request_data: dict = Body(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Marca una palabra como aprendida"""
-    logger.info(f"[mark_word_as_learned] User {current_user.id}: Marking word {word_id} as learned")
+    """
+    Toggle learned status para una palabra.
+
+    Body esperado:
+    {
+        "is_learned": true/false
+    }
+    """
+    logger.info(f"[toggle_learned_status] User {current_user.id}: Toggling learned status for word {word_id}")
 
     word_repo = WordRepository(db)
     word = word_repo.get(db, word_id)
 
     if not word or word.user_id != current_user.id:
-        logger.warning(f"[mark_word_as_learned] Word {word_id} not found")
+        logger.warning(f"[toggle_learned_status] Word {word_id} not found")
         raise HTTPException(status_code=404, detail="Palabra no encontrada")
 
-    success = word_repo.mark_as_learned(word_id)
+    is_learned_target = request_data.get("is_learned", True)
 
-    if not success:
-        logger.warning(f"[mark_word_as_learned] No statistics found for word {word_id}")
-        return {"status": "warning", "message": "No statistics to update", "is_learned": False}
-
-    logger.debug(f"[mark_word_as_learned] Word {word_id} marked as learned")
+    if is_learned_target:
+        # Marcar como aprendida
+        success = word_repo.mark_as_learned(word_id)
+        if not success:
+            logger.warning(f"[toggle_learned_status] No statistics found for word {word_id}")
+            return {"status": "warning", "message": "No statistics to update", "is_learned": False}
+        logger.debug(f"[toggle_learned_status] Word {word_id} marked as learned")
+    else:
+        # Desmarcar como aprendida (cambiar learning_state de LEARNED a REINFORCING)
+        success = word_repo.mark_as_not_learned(word_id)
+        if not success:
+            logger.warning(f"[toggle_learned_status] Could not update statistics for word {word_id}")
+            return {"status": "warning", "message": "Could not update status", "is_learned": True}
+        logger.debug(f"[toggle_learned_status] Word {word_id} marked as not learned")
 
     # Verificar el estado actualizado
     is_learned = word_repo.is_learned(word_id, ContentType.EXAMPLE)
 
     return {
         "status": "ok",
-        "message": "Palabra marcada como aprendida",
+        "message": "Learned status updated",
         "word_id": word_id,
         "is_learned": is_learned
     }

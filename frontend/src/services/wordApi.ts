@@ -36,15 +36,17 @@ export const wordApi = {
   },
 
   /**
-   * Mark word as learned
+   * Toggle word learned status
    */
-  async markAsLearned(wordId: number): Promise<{
+  async toggleLearned(wordId: number, isLearned: boolean): Promise<{
     status: string
     message: string
     word_id: number
     is_learned: boolean
   }> {
-    const response = await apiClient.patch(`/words/words/${wordId}/learned`)
+    const response = await apiClient.patch(`/words/words/${wordId}/learned`, {
+      is_learned: isLearned
+    })
     return response.data
   },
 

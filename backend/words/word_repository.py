@@ -328,6 +328,27 @@ class WordRepository:
         self.session.commit()
         return True
 
+    def mark_as_not_learned(self, word_id: int) -> bool:
+        """Desmarca una palabra de LEARNED, cambiando a REINFORCING con times_seen=3"""
+        statistics = self.session.exec(
+            select(WordStatistics).where(WordStatistics.word_id == word_id)
+        ).all()
+
+        if not statistics:
+            return False
+
+        for stat in statistics:
+            # Si estaba en LEARNED o REVIEW, cambiar a REINFORCING
+            if stat.learning_state in [LearningState.LEARNED, LearningState.REVIEW]:
+                stat.learning_state = LearningState.REINFORCING
+                stat.times_seen = 3  # Resetear a rango REINFORCING (2-3)
+                stat.current_cycle_seen = 0  # Reiniciar ciclo actual
+                stat.learned_at = None  # Limpiar la fecha de aprendizaje
+            self.session.add(stat)
+
+        self.session.commit()
+        return True
+
     def get_total_favorites(self, user_id: int) -> int:
         """Obtiene el total de palabras favoritas del usuario"""
         return self.session.exec(
