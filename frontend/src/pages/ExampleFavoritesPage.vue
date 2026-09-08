@@ -900,7 +900,7 @@ onMounted(async () => {
 
 @media (max-width: 480px) {
   .mobile-header h2 {
-    font-size: 18px;
+    font-size: 19px;
   }
 
   .mobile-content {
@@ -908,7 +908,7 @@ onMounted(async () => {
   }
 
   .favorite-card-text {
-    font-size: 16px;
+    font-size: 18px;
     line-height: 1.7;
   }
 
