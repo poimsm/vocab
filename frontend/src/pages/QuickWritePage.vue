@@ -546,6 +546,13 @@ const revealWord = (word: string, e: Event) => {
   display: none;
 }
 
+.progress-indicator {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 32px;
+}
+
 @media (max-width: 768px) {
   .header-section {
     flex-direction: column;
@@ -565,14 +572,12 @@ const revealWord = (word: string, e: Event) => {
   .toggle-label {
     display: inline;
   }
+
+  .progress-indicator {
+    margin-bottom: 0;
+  }
 }
 
-.progress-indicator {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  margin-bottom: 32px;
-}
 
 .progress-dot {
   width: 8px;

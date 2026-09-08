@@ -483,7 +483,7 @@ async function randomize() {
   }
 
   .word-meaning {
-    font-size: 17px;
+    font-size: 18px !important;
     -webkit-line-clamp: 4;
   }
 
