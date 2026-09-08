@@ -2,6 +2,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import ExamplesPage from '@/pages/ExamplesPage.vue'
+import ExampleFavoritesPage from '@/pages/ExampleFavoritesPage.vue'
 import MyWordsPage from '@/pages/MyWordsPage.vue'
 import LoginPage from '@/pages/LoginPage.vue'
 import HomePage from '@/pages/HomePage.vue'
@@ -46,6 +47,12 @@ const router = createRouter({
       name: 'examples',
       component: ExamplesPage,
       meta: { requiresAuth: true }
+    },
+    {
+      path: '/examples/favorites',
+      name: 'example-favorites',
+      component: ExampleFavoritesPage,
+      meta: { requiresAuth: true, hideLayout: true }
     },
     {
       path: '/best-options',

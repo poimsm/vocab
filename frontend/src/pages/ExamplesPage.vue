@@ -460,6 +460,14 @@ function handleFavoritesWordClick(word: TargetWord) {
   }
 }
 
+function openFavoritesModal() {
+  if (window.innerWidth <= 768) {
+    router.push('/examples/favorites')
+  } else {
+    showFavoritesModal.value = true
+  }
+}
+
 onMounted(() => {
   fetchExamples()
   window.speechSynthesis?.getVoices()
@@ -505,7 +513,7 @@ onUnmounted(() => {
     <div v-else class="sentence-area" :class="{ 'panel-open': selectedWord && !isMobileDetailOpen }">
       <!-- Top Bar -->
       <div class="sentence-top-bar">
-        <button class="top-bar-btn favorites-btn" title="Favorite examples" style="border:0;" @click="showFavoritesModal = true">
+        <button class="top-bar-btn favorites-btn" title="Favorite examples" style="border:0;" @click="openFavoritesModal">
           <Icon icon="ph:list-heart-thin" width="32" />
         </button>
         <button class="top-bar-btn add-words-btn" title="Add words" style="border:0;" @click="showExtractedWordsModal = true">
