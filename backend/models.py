@@ -297,3 +297,28 @@ class Collocation(SQLModel, table=True):
     is_active: bool = Field(default=True, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class UserExampleSession(SQLModel, table=True):
+    """
+    Trackea la sesión actual de ejemplos del usuario.
+    Persiste el buffer, items visitados e items resueltos.
+    """
+    __tablename__: str = "user_example_sessions"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", nullable=False, index=True, unique=True)
+
+    # Buffer actual
+    buffer_queue_item_ids: str = Field(default="[]")  # JSON string de IDs del buffer
+    buffer_position: int = Field(default=0)  # Posición actual en el buffer
+
+    # Items visitados en esta sesión (mostrados al usuario)
+    visited_queue_item_ids: str = Field(default="[]")  # JSON string de IDs visitados
+
+    # Items resueltos en esta sesión (exposición registrada)
+    resolved_queue_item_ids: str = Field(default="[]")  # JSON string de IDs resueltos
+
+    # Metadata
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

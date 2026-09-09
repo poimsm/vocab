@@ -32,6 +32,8 @@ class ExploreExample(BaseModel):
 class ExploreResponse(BaseModel):
     """Schema de respuesta para el endpoint /explore de ejemplos"""
     examples: List[ExploreExample]
+    buffer_queue_item_ids: List[int] = []
+    buffer_position: int = 0
     status: str = "ok"
 
 

@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import api from '@/utils/api'
+import { useExamplesStore } from '@/stores/examples'
 import LoadingCard from '@/components/LoadingCard.vue'
 import FavoritesView from '@/components/FavoritesView.vue'
 import WordDetailPanel from '@/components/WordDetailPanel.vue'
@@ -10,32 +11,17 @@ import MobileWordDetail from '@/components/MobileWordDetail.vue'
 import ExtractedWordsModal from '@/components/ExtractedWordsModal.vue'
 
 const router = useRouter()
+const examplesStore = useExamplesStore()
 
-// ─── Types ───
 interface TargetWord {
   id: number
   main: string
   type: string
   meaning?: string
-  level?: number
+  level?: string | number
   is_boosted: boolean
   batch_id?: number
   is_favorite?: boolean
-}
-
-interface TextSegment {
-  text: string
-  is_highlighted: boolean
-  target_word?: TargetWord
-}
-
-interface ExampleItem {
-  queue_item_id: number
-  example_id: number
-  text: TextSegment[]
-  extracted_words: string[]
-  is_favorite?: boolean
-  is_marked?: boolean
 }
 
 interface WordDetail {
@@ -50,85 +36,112 @@ interface WordDetail {
   is_favorite?: boolean
 }
 
-// ─── State ───
-const examples = ref<ExampleItem[]>([])
-const currentIndex = ref(0)
-const generating = ref(false)
-const error = ref<string | null>(null)
-const noWords = ref(false)
-const isPolling = ref(false)
-const pollTimer = ref<ReturnType<typeof setTimeout> | null>(null)
-
+// ─── Local State ───
 const selectedWord = ref<WordDetail | null>(null)
 const isMobileDetailOpen = ref(false)
 const showExtractedWordsModal = ref(false)
 const showFavoritesModal = ref(false)
 const showCopiedToast = ref(false)
 const comingFromFavorites = ref(false)
+const pollTimer = ref<ReturnType<typeof setTimeout> | null>(null)
+const isComponentMounted = ref(false)  // Track if component is mounted
 
 const BATCH_SIZE = 4
 const POLL_INTERVAL = 3000
 const SPEECH_RATES = [0.9, 0.7]
 const currentSpeechRateIndex = ref(0)
+let pollAbortController: AbortController | null = null
+let pollActive = ref(false)  // Track if polling should continue
 
-// ─── Computed ───
-const currentExample = computed(() => {
-  if (examples.value.length === 0) return null
-  return examples.value[currentIndex.value]
-})
-
-const textSegments = computed(() => {
-  const ex = currentExample.value
-  if (!ex) return []
-  return ex.text
-})
-
-const canGoNext = computed(() => {
-  return currentIndex.value < examples.value.length - 1
-})
-
-const canGoPrev = computed(() => {
-  return currentIndex.value > 0
-})
-
-// ─── API Calls ───
-function resolveOnly(queueItemId: number) {
-  api.post('/examples/explore', {
-    actions: ['resolve'],
-    resolve_queue_item_id: queueItemId
-  }).catch(() => { })
-}
-
-async function resolveAndFetchNext(queueItemId: number) {
-  generating.value = true
-  error.value = null
-
-  try {
-    const response = await api.post('/examples/explore', {
-      actions: ['resolve', 'next'],
-      resolve_queue_item_id: queueItemId,
-      limit: BATCH_SIZE
-    })
-
-    const data = response.data
-
-    if (data.status === 'generating') {
-      startPolling()
-      return
-    }
-
-    if (data.status === 'no_words') {
-      generating.value = false
-      noWords.value = true
-      return
-    }
-
-    generating.value = false
-    loadExamples(data)
-  } catch (e: any) {
-    generating.value = false
-    error.value = e.response?.data?.message || e.message || 'Failed to fetch examples'
+// ─── Polling ───
+function startPolling() {
+  // Guard: Don't start if already polling
+  if (pollActive.value && pollAbortController) {
+    console.log('[startPolling] Already polling, ignoring duplicate start')
+    return
   }
+
+  console.log('[startPolling] Starting poll loop')
+  pollActive.value = true
+  pollAbortController = new AbortController()
+
+  const poll = () => {
+    // Stop immediately if polling was disabled
+    if (!pollActive.value) {
+      console.log('[poll] Polling disabled, stopping')
+      return
+    }
+
+    console.log('[poll] Scheduling next poll in', POLL_INTERVAL, 'ms')
+    pollTimer.value = setTimeout(async () => {
+      // Double-check before making request
+      if (!pollActive.value) {
+        console.log('[poll] Polling disabled before timeout, aborting')
+        return
+      }
+
+      try {
+        console.log('[poll] Making request with buffer:', examplesStore.bufferIds)
+        const response = await api.post('/examples/explore', {
+          actions: ['next'],
+          limit: BATCH_SIZE,
+          buffer_queue_item_ids: examplesStore.bufferIds,
+          buffer_position: examplesStore.currentIndex,
+        }, {
+          signal: pollAbortController?.signal
+        })
+
+        // Check again after response arrives
+        if (!pollActive.value) {
+          console.log('[poll] Polling disabled after response, ignoring')
+          return
+        }
+
+        console.log('[poll] Response status:', response.data.status)
+
+        if (response.data.status === 'generating') {
+          console.log('[poll] Still generating, scheduling next poll')
+          // Only schedule next poll if still active
+          if (pollActive.value) {
+            poll()
+          }
+          return
+        }
+
+        if (response.data.status === 'no_words') {
+          console.log('[poll] No words available')
+          examplesStore.setIsPolling(false)
+          examplesStore.setGenerating(false)
+          examplesStore.setNoWords(true)
+          pollActive.value = false
+          return
+        }
+
+        console.log('[poll] Content ready, loading examples')
+        examplesStore.setIsPolling(false)
+        examplesStore.setGenerating(false)
+        examplesStore.loadExamples(
+          response.data.examples || [],
+          response.data.buffer_queue_item_ids || [],
+          response.data.buffer_position ?? 0
+        )
+        pollActive.value = false
+      } catch (e: any) {
+        // Ignore abort errors (expected when component unmounts)
+        if (e.name === 'AbortError') {
+          console.log('[poll] Request aborted')
+          pollActive.value = false
+          return
+        }
+        console.error('[poll] Error:', e)
+        examplesStore.setIsPolling(false)
+        examplesStore.setGenerating(false)
+        examplesStore.setError(e.response?.data?.message || e.message || 'Failed to load examples')
+        pollActive.value = false
+      }
+    }, POLL_INTERVAL)
+  }
+  poll()
 }
 
 // ─── Text-to-Speech ───
@@ -164,111 +177,59 @@ function speakWord() {
 }
 
 function speakExample() {
-  const ex = currentExample.value
+  const ex = examplesStore.currentExample
   if (ex) {
     const fullText = ex.text.map(segment => segment.text).join('')
     speak(fullText)
   }
 }
 
-// ─── Polling ───
-function startPolling() {
-  if (isPolling.value) return
-  isPolling.value = true
-  generating.value = true
-
-  const poll = () => {
-    pollTimer.value = setTimeout(async () => {
-      try {
-        const response = await api.post('/examples/explore', {
-          actions: ['next'],
-          limit: BATCH_SIZE
-        })
-
-        if (response.data.status === 'generating') {
-          poll()
-          return
-        }
-
-        if (response.data.status === 'no_words') {
-          isPolling.value = false
-          generating.value = false
-          noWords.value = true
-          return
-        }
-
-        isPolling.value = false
-        generating.value = false
-        loadExamples(response.data)
-      } catch (e: any) {
-        isPolling.value = false
-        generating.value = false
-        error.value = e.response?.data?.message || e.message || 'Failed to load examples'
-      }
-    }, POLL_INTERVAL)
-  }
-  poll()
-}
-
 function stopPolling() {
+  console.log('[stopPolling] Stopping poll loop IMMEDIATELY')
+  // Disable polling flag FIRST - this will stop all poll() calls
+  pollActive.value = false
+
+  // Cancel any in-flight requests
+  if (pollAbortController) {
+    console.log('[stopPolling] Aborting HTTP requests')
+    pollAbortController.abort()
+    pollAbortController = null
+  }
+
+  // Clear pending timeout
   if (pollTimer.value) {
+    console.log('[stopPolling] Clearing pending timeout:', pollTimer.value)
     clearTimeout(pollTimer.value)
     pollTimer.value = null
   }
-  isPolling.value = false
-}
 
-function loadExamples(data: any) {
-  const rawExamples = data.examples || []
-  const newExamples: ExampleItem[] = rawExamples.map((item: any) => ({
-    queue_item_id: item.queue_item_id,
-    example_id: item.example_id,
-    text: item.text || [],
-    extracted_words: item.extracted_words || [],
-    is_favorite: item.is_favorite || false,
-    is_marked: item.is_marked || false
-  }))
-
-  if (newExamples.length > 0 && newExamples[0]) {
-    examples.value = newExamples
-    currentIndex.value = 0
-  }
+  examplesStore.setIsPolling(false)
+  console.log('[stopPolling] Poll loop stopped')
 }
 
 async function fetchExamples() {
-  if (generating.value && !isPolling.value) return
-  generating.value = true
-  noWords.value = false
-  error.value = null
+  console.log('[fetchExamples] Called. generating:', examplesStore.generating, 'isPolling:', examplesStore.isPolling)
+
+  if (examplesStore.generating && !examplesStore.isPolling) {
+    console.warn('[fetchExamples] Already generating, returning')
+    return
+  }
 
   try {
-    const response = await api.post('/examples/explore', {
-      actions: ['next'],
-      limit: BATCH_SIZE
-    })
+    console.log('[fetchExamples] Awaiting store.fetchExamples...')
+    await examplesStore.fetchExamples(BATCH_SIZE)
 
-    const data = response.data
-
-    if (data.status === 'generating') {
-      startPolling()
-      return
-    }
-
-    if (data.status === 'no_words') {
-      generating.value = false
-      noWords.value = true
-      return
-    }
-
-    generating.value = false
-    loadExamples(data)
+    console.log('[fetchExamples] Store returned. isPolling:', examplesStore.isPolling)
+    // Note: Polling is started from onMounted or refreshExample, not from here
   } catch (e: any) {
-    generating.value = false
-    error.value = e.response?.data?.message || e.message || 'Failed to generate examples'
+    console.error('[fetchExamples] Error:', e)
+    examplesStore.setGenerating(false)
+    examplesStore.setError(e.response?.data?.message || e.message || 'Failed to generate examples')
   }
 }
 
 async function fetchWordDetail(wordId: number) {
+  console.log('[fetchWordDetail] Fetching details for word id:', wordId)
   try {
     const response = await api.get(`/words/words/${wordId}`)
     const data = response.data
@@ -284,20 +245,22 @@ async function fetchWordDetail(wordId: number) {
       synonyms: data.synonyms || [],
       is_favorite: data.is_favorite || false
     }
+    console.log('[fetchWordDetail] Word detail loaded:', selectedWord.value.word)
   } catch (e) {
+    console.error('[fetchWordDetail] Error:', e)
     alert('Could not load word detail')
   }
 }
 
 async function toggleExampleFav() {
-  const ex = currentExample.value
+  const ex = examplesStore.currentExample
   if (!ex) return
 
   try {
     const response = await api.patch(`/examples/${ex.example_id}/toggle-favorite`)
 
     if (response.data && response.data.is_favorite !== undefined) {
-      ex.is_favorite = response.data.is_favorite
+      examplesStore.updateExampleFavorite(response.data.is_favorite)
     }
   } catch (e) {
     alert('Failed to toggle favorite')
@@ -306,6 +269,7 @@ async function toggleExampleFav() {
 
 // ─── Methods ───
 function handleWordClick(word: TargetWord) {
+  console.log('[handleWordClick] Clicked word:', word.main, 'id:', word.id, 'isMobile:', window.innerWidth <= 768)
   if (window.innerWidth <= 768) {
     router.push(`/words/${word.id}`)
   } else {
@@ -314,6 +278,7 @@ function handleWordClick(word: TargetWord) {
 }
 
 function closeWordDetail() {
+  console.log('[closeWordDetail] Closing word detail panel')
   selectedWord.value = null
   if (comingFromFavorites.value) {
     showFavoritesModal.value = true
@@ -322,6 +287,7 @@ function closeWordDetail() {
 }
 
 function closeMobileDetail() {
+  console.log('[closeMobileDetail] Closing mobile detail')
   isMobileDetailOpen.value = false
   selectedWord.value = null
   if (comingFromFavorites.value) {
@@ -333,11 +299,16 @@ function closeMobileDetail() {
 async function handleToggleKnown() {
   if (!selectedWord.value) return
 
+  console.log('[handleToggleKnown] Marking word as learned:', selectedWord.value.id)
+
   try {
     await api.patch(`/words/words/${selectedWord.value.id}/learned`)
+    console.log('[handleToggleKnown] Word marked as learned, syncing buffer and fetching examples...')
     closeMobileDetail()
-    fetchExamples()
+    // Sync buffer (remove learned words) and fetch examples in one atomic call
+    await examplesStore.syncAndFetchNext(BATCH_SIZE)
   } catch (e: any) {
+    console.error('[handleToggleKnown] Error:', e)
     alert('Failed to mark word as learned')
   }
 }
@@ -345,38 +316,57 @@ async function handleToggleKnown() {
 async function handleToggleFavorite() {
   if (!selectedWord.value) return
 
+  console.log('[handleToggleFavorite] Toggling favorite for word:', selectedWord.value.word)
+
   try {
     await api.patch(`words/words/${selectedWord.value.id}/favorite`)
     if (selectedWord.value) {
       selectedWord.value.is_favorite = !selectedWord.value.is_favorite
+      console.log('[handleToggleFavorite] Updated, is_favorite:', selectedWord.value.is_favorite)
     }
   } catch (e: any) {
+    console.error('[handleToggleFavorite] Error:', e)
     alert('Failed to toggle favorite')
   }
 }
 
 async function refreshExample() {
-  const currentEx = currentExample.value
+  const currentEx = examplesStore.currentExample
   if (!currentEx) return
 
-  if (canGoNext.value) {
-    resolveOnly(currentEx.queue_item_id)
-    currentIndex.value++
+  console.log('[refreshExample] Current index:', examplesStore.currentIndex, 'total:', examplesStore.examples.length)
+
+  const isLastItem = examplesStore.currentIndex >= examplesStore.examples.length - 1
+
+  if (examplesStore.canGoNext) {
+    console.log('[refreshExample] Can go next, navigating with sync+resolve')
+    examplesStore.nextExample()  // Update position FIRST
+    await examplesStore.navigateExample(currentEx.queue_item_id, false, BATCH_SIZE)  // Unified navigation
     selectedWord.value = null
     isMobileDetailOpen.value = false
     currentSpeechRateIndex.value = 0
     return
   }
 
-  await resolveAndFetchNext(currentEx.queue_item_id)
+  // At end of buffer, use navigateExample with isLastItem=true (includes next)
+  console.log('[refreshExample] At end of buffer, navigating with sync+resolve+next')
+  await examplesStore.navigateExample(currentEx.queue_item_id, true, BATCH_SIZE)
+  if (examplesStore.isPolling) {
+    startPolling()
+  }
   selectedWord.value = null
   isMobileDetailOpen.value = false
   currentSpeechRateIndex.value = 0
 }
 
-function prevExample() {
-  if (canGoPrev.value) {
-    currentIndex.value--
+async function prevExample() {
+  console.log('[prevExample] Attempting previous, canGoPrev:', examplesStore.canGoPrev, 'index:', examplesStore.currentIndex)
+  if (examplesStore.canGoPrev) {
+    examplesStore.prevExample()
+    console.log('[prevExample] Moved to index:', examplesStore.currentIndex)
+
+    await examplesStore.syncPosition()  // Sync position with backend
+
     selectedWord.value = null
     isMobileDetailOpen.value = false
     currentSpeechRateIndex.value = 0
@@ -384,13 +374,17 @@ function prevExample() {
 }
 
 async function nextExample() {
-  if (canGoNext.value) {
-    const currentEx = currentExample.value
+  console.log('[nextExample] Attempting next, canGoNext:', examplesStore.canGoNext, 'index:', examplesStore.currentIndex)
+  if (examplesStore.canGoNext) {
+    const currentEx = examplesStore.currentExample
+
+    examplesStore.nextExample()  // Update position FIRST
+    console.log('[nextExample] Moved to index:', examplesStore.currentIndex)
+
     if (currentEx) {
-      resolveOnly(currentEx.queue_item_id)
+      await examplesStore.navigateExample(currentEx.queue_item_id, false, BATCH_SIZE)  // Unified navigation with sync+resolve
     }
 
-    currentIndex.value++
     selectedWord.value = null
     isMobileDetailOpen.value = false
     currentSpeechRateIndex.value = 0
@@ -407,7 +401,7 @@ function showToast() {
 }
 
 function copyExample() {
-  const ex = currentExample.value
+  const ex = examplesStore.currentExample
   if (!ex) return
   const fullText = ex.text.map(segment => segment.text).join('')
 
@@ -468,12 +462,60 @@ function openFavoritesModal() {
   }
 }
 
-onMounted(() => {
-  fetchExamples()
+onMounted(async () => {
+  console.log('[ExamplesPage] Mounted')
+  isComponentMounted.value = true
+
+  try {
+    // Restaurar sesión guardada y cargar ejemplos en UNA sola llamada atómica
+    // Backend intenta restaurar buffer de sesión guardada si no se proporciona
+    // Acción: "resume" (chequea visitados + carga nuevo buffer si todos fueron visitados + obtiene ejemplos)
+    console.log('[ExamplesPage] Resuming session and loading examples via explore endpoint')
+
+    const exploreResponse = await api.post('/examples/explore', {
+      actions: ['resume'],
+      limit: BATCH_SIZE,
+      buffer_queue_item_ids: [],  // Empty - backend will restore from saved session
+      buffer_position: 0,
+    })
+
+    // Check if component is still mounted before processing response
+    if (!isComponentMounted.value) {
+      console.log('[ExamplesPage] Component unmounted, ignoring response')
+      return
+    }
+
+    const { examples, buffer_queue_item_ids: bufferIds, buffer_position: bufferPos, status: exploreStatus } = exploreResponse.data
+
+    // Actualizar store con buffer restaurado
+    examplesStore.setBufferData(bufferIds, bufferPos)
+
+    // Procesar respuesta según estado
+    if (examples.length > 0) {
+      examplesStore.loadExamples(examples, bufferIds, bufferPos)
+      // Establecer currentIndex DESPUÉS de loadExamples para que no sea sobrescrito
+      examplesStore.setCurrentIndex(bufferPos)
+    } else if (exploreStatus === 'generating') {
+      examplesStore.setGenerating(true)
+      startPolling()
+    } else if (exploreStatus === 'no_words') {
+      examplesStore.setNoWords(true)
+    }
+  } catch (e) {
+    console.error('[ExamplesPage] Error:', e)
+    // Only reset if component is still mounted
+    if (isComponentMounted.value) {
+      examplesStore.resetBuffer()
+      await fetchExamples()
+    }
+  }
+
   window.speechSynthesis?.getVoices()
 })
 
 onUnmounted(() => {
+  console.log('[ExamplesPage] Unmounting - setting isComponentMounted to false')
+  isComponentMounted.value = false
   stopPolling()
 })
 </script>
@@ -489,22 +531,22 @@ onUnmounted(() => {
   <!-- Main Examples View -->
   <div v-if="!showFavoritesModal && !comingFromFavorites" class="examples-view" :class="{ 'panel-open': selectedWord && !isMobileDetailOpen }">
     <!-- Loading / Generating State -->
-    <LoadingCard v-if="generating && examples.length === 0" message="Generating..." />
+    <LoadingCard v-if="examplesStore.generating && examplesStore.examples.length === 0" message="Generating..." />
 
     <!-- No Words State -->
-    <div v-else-if="noWords" class="empty-state">
+    <div v-else-if="examplesStore.noWords" class="empty-state">
       <p>No more words to review</p>
       <button class="retry-btn" @click="fetchExamples">Try Again</button>
     </div>
 
     <!-- Error State -->
-    <div v-else-if="error" class="error-state">
-      <p>{{ error }}</p>
+    <div v-else-if="examplesStore.error" class="error-state">
+      <p>{{ examplesStore.error }}</p>
       <button class="retry-btn" @click="fetchExamples">Retry</button>
     </div>
 
     <!-- Empty State -->
-    <div v-else-if="!currentExample" class="empty-state">
+    <div v-else-if="!examplesStore.currentExample" class="empty-state">
       <p>No examples available</p>
       <button class="retry-btn" @click="fetchExamples">Generate</button>
     </div>
@@ -523,7 +565,7 @@ onUnmounted(() => {
 
       <div class="sentence-wrapper">
         <p class="sentence-text">
-          <template v-for="(segment, idx) in textSegments" :key="idx">
+          <template v-for="(segment, idx) in examplesStore.textSegments" :key="idx">
             <span v-if="segment.is_highlighted && segment.target_word" class="word-highlight"
               @click="handleWordClick(segment.target_word)">
               {{ segment.text }}
@@ -538,20 +580,20 @@ onUnmounted(() => {
 
       <!-- Progress indicator -->
       <div class="progress-bar">
-        <div v-for="(_, i) in examples" :key="i" class="progress-dot"
-          :class="{ active: i === currentIndex, passed: i < currentIndex }" />
+        <div v-for="(_, i) in examplesStore.examples" :key="i" class="progress-dot"
+          :class="{ active: i === examplesStore.currentIndex, passed: i < examplesStore.currentIndex }" />
       </div>
 
       <div class="action-buttons">
-        <button class="action-btn" @click="toggleExampleFav" title="Favorite" :class="{ favorited: currentExample?.is_favorite }">
-          <Icon v-if="currentExample?.is_favorite" icon="solar:heart-bold" width="22" />
+        <button class="action-btn" @click="toggleExampleFav" title="Favorite" :class="{ favorited: examplesStore.currentExample?.is_favorite }">
+          <Icon v-if="examplesStore.currentExample?.is_favorite" icon="solar:heart-bold" width="22" />
           <Icon v-else icon="solar:heart-linear" width="22" />
         </button>
-        <button class="action-btn" @click="prevExample" :disabled="!canGoPrev" title="Previous">
+        <button class="action-btn" @click="prevExample" :disabled="!examplesStore.canGoPrev" title="Previous">
           <Icon icon="solar:arrow-left-linear" width="22" />
         </button>
-        <button class="action-btn" @click="refreshExample" :disabled="generating" title="Next / New">
-          <Icon v-if="generating" icon="solar:refresh-circle-linear" width="22" class="spinning" />
+        <button class="action-btn" @click="refreshExample" :disabled="examplesStore.generating" title="Next / New">
+          <Icon v-if="examplesStore.generating" icon="solar:refresh-circle-linear" width="22" class="spinning" />
           <Icon v-else icon="solar:arrow-right-linear" width="22" />
         </button>
         <button class="action-btn" @click="copyExample" title="Copy">
@@ -564,7 +606,7 @@ onUnmounted(() => {
   <!-- Extracted Words Modal -->
   <ExtractedWordsModal
     :modelValue="showExtractedWordsModal"
-    :words="currentExample?.extracted_words || []"
+    :words="examplesStore.currentExample?.extracted_words || []"
     @update:modelValue="v => showExtractedWordsModal = v"
   />
 

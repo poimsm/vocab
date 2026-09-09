@@ -507,20 +507,33 @@ class ContentPlanner:
         Retorna True si hay al menos una palabra en estado diferente a LEARNED.
         Retorna False si todas las palabras están en estado LEARNED.
         """
-        non_learned_count = self.session.exec(
-            select(func.count(WordStatistics.id))
+        from models import Word
+
+        # Get all non-learned statistics for this user and content type
+        stats = self.session.exec(
+            select(WordStatistics)
+            .join(Word, WordStatistics.word_id == Word.id)
             .where(
+                Word.user_id == user_id,
                 WordStatistics.type == content_type,
                 WordStatistics.learning_state != LearningState.LEARNED
             )
-        ).first() or 0
+        ).all()
 
+        non_learned_count = len(stats)
         has_words = non_learned_count > 0
 
-        logger.debug(
-            f"[ContentPlanner] has_non_learned_words for {content_type}: "
+        logger.info(
+            f"[ContentPlanner.has_non_learned_words] user_id={user_id}, content_type={content_type}, "
             f"count={non_learned_count}, has_words={has_words}"
         )
+
+        if stats:
+            learning_states = {}
+            for stat in stats:
+                state = stat.learning_state
+                learning_states[state] = learning_states.get(state, 0) + 1
+            logger.info(f"[ContentPlanner.has_non_learned_words] breakdown by state: {learning_states}")
 
         return has_words
 

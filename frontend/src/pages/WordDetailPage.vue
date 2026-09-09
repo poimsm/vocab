@@ -3,9 +3,11 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { wordApi, type WordDetail } from '@/services/wordApi'
+import { useExamplesStore } from '@/stores/examples'
 
 const route = useRoute()
 const router = useRouter()
+const examplesStore = useExamplesStore()
 const word = ref<WordDetail | null>(null)
 const isLoading = ref(true)
 const error = ref<string | null>(null)
@@ -40,12 +42,14 @@ const wordId = computed(() => parseInt(route.params.id as string))
 
 const loadWord = async () => {
   try {
+    console.log('[WordDetailPage.loadWord] Loading word id:', wordId.value)
     isLoading.value = true
     error.value = null
     word.value = await wordApi.getWordDetail(wordId.value)
+    console.log('[WordDetailPage.loadWord] Loaded:', word.value?.main, 'is_learned:', word.value?.is_learned)
   } catch (err: any) {
     error.value = err.message || 'Failed to load word'
-    console.error('Error loading word:', err)
+    console.error('[WordDetailPage.loadWord] Error:', err)
   } finally {
     isLoading.value = false
   }
@@ -67,13 +71,24 @@ const toggleFavorite = async () => {
 
 const markAsLearned = async () => {
   if (!word.value) return
+  console.log('[WordDetailPage.markAsLearned] Marking word as learned:', word.value.main, 'id:', word.value.id, 'current is_learned:', word.value.is_learned)
+
   isSavingLearned.value = true
   try {
     const newStatus = !word.value.is_learned
+    console.log('[WordDetailPage.markAsLearned] Toggling to:', newStatus)
     const result = await wordApi.toggleLearned(wordId.value, newStatus)
     word.value.is_learned = result.is_learned
+    console.log('[WordDetailPage.markAsLearned] Success! New status:', word.value.is_learned)
+
+    // If marking as learned, sync buffer in store to remove this word's examples
+    // When user returns to ExamplesPage, onMounted will restore and fetch fresh examples
+    if (result.is_learned) {
+      console.log('[WordDetailPage.markAsLearned] Syncing buffer in store...')
+      await examplesStore.syncBuffer(4)
+    }
   } catch (err) {
-    console.error('Error marking as learned:', err)
+    console.error('[WordDetailPage.markAsLearned] Error:', err)
     error.value = 'Failed to mark as learned'
   } finally {
     isSavingLearned.value = false
@@ -88,10 +103,12 @@ const speak = () => {
 }
 
 onMounted(() => {
+  console.log('[WordDetailPage] Mounted, loading word')
   loadWord()
 })
 
 watch(wordId, () => {
+  console.log('[WordDetailPage] Word ID changed, reloading')
   loadWord()
 })
 </script>
