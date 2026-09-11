@@ -63,6 +63,9 @@ const addSuccess = ref<string | null>(null)
 const showExplanation = ref(false)
 const isExplaining = ref(false)
 
+// ─── View Mode State ───
+const viewMode = ref<'list' | 'grid'>('list')
+
 // ─── Helpers ───
 const levelColor = (level: WordLevel | number) => {
   const s = typeof level === 'number' ? String(level) : (level || '').toString().toLowerCase()
@@ -573,6 +576,30 @@ onUnmounted(() => {
       >
         Mastered
       </button>
+
+      <!-- View Mode Toggle -->
+      <div class="view-mode-toggle">
+        <button
+          class="view-mode-btn"
+          :class="{ active: viewMode === 'list' }"
+          @click="viewMode = 'list'"
+          title="List view"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+        </button>
+        <button
+          class="view-mode-btn"
+          :class="{ active: viewMode === 'grid' }"
+          @click="viewMode = 'grid'"
+          title="Grid view"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+          </svg>
+        </button>
+      </div>
     </div>
 
     <!-- Mobile Search Panel -->
@@ -658,7 +685,7 @@ onUnmounted(() => {
     <!-- Desktop: Split View -->
     <div v-else class="words-content" :class="{ 'detail-open': selectedWord && !showMobileDetail }">
       <!-- Word List — NO internal scroll, flows naturally with the page -->
-      <div class="word-list">
+      <div class="word-list" :class="{ 'grid-view': viewMode === 'grid' }">
         <div
           v-for="word in words"
           :key="word.id"
@@ -1282,6 +1309,7 @@ onUnmounted(() => {
   gap: 6px;
   margin-bottom: 24px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 /* ─── Mobile Search Button ─── */
@@ -1529,6 +1557,39 @@ onUnmounted(() => {
   color: #6b6876;
 }
 
+/* ─── View Mode Toggle ─── */
+.view-mode-toggle {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.view-mode-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #9c99ab;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.view-mode-btn:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #e2e0e8;
+}
+
+.view-mode-btn.active {
+  background: rgba(155, 143, 181, 0.12);
+  border-color: rgba(155, 143, 181, 0.25);
+  color: #9b8fb5;
+}
+
 /* ─── Loading / Error ─── */
 .loading-state {
   display: flex;
@@ -1633,6 +1694,17 @@ onUnmounted(() => {
   gap: 8px;
   transition: all 0.3s ease;
   /* SIN max-height, SIN overflow-y — fluye naturalmente */
+}
+
+/* ─── Grid View ─── */
+.word-list.grid-view {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.word-list.grid-view.detail-open {
+  grid-template-columns: repeat(3, 1fr);
 }
 
 /* ─── Loading More ─── */
