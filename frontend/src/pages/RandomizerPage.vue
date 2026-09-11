@@ -238,7 +238,7 @@ async function randomize() {
   padding: 12px 28px;
   border-radius: 12px;
   border: none;
-  background: #7c3aed;
+  background: #6d47c9;
   color: white;
   font-size: 16px;
   font-weight: 600;
@@ -247,8 +247,7 @@ async function randomize() {
 }
 
 .randomize-btn:hover:not(:disabled) {
-  background: #6d28d9;
-  transform: translateY(-2px);
+  background: #5e3ab8;
 }
 
 .randomize-btn:disabled {
@@ -425,8 +424,8 @@ async function randomize() {
 }
 
 @keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.7); }
-  50% { box-shadow: 0 0 0 10px rgba(124, 58, 237, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(109, 71, 201, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(109, 71, 201, 0); }
 }
 
 @keyframes fadeInScale {

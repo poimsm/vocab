@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -9,6 +9,32 @@ const route = useRoute()
 const authStore = useAuthStore()
 
 const hideLayout = computed(() => route.meta.hideLayout as boolean)
+const mobileNavRef = ref<HTMLElement | null>(null)
+
+// Scroll to active tab when route changes
+watch(() => route.name, async () => {
+  await nextTick()
+  scrollToActiveTab()
+}, { immediate: true })
+
+function scrollToActiveTab() {
+  if (!mobileNavRef.value) return
+
+  const activeTab = mobileNavRef.value.querySelector('.mobile-tab.active')
+  if (!activeTab) return
+
+  // Calculate scroll position to center the active tab
+  const navWidth = mobileNavRef.value.clientWidth
+  const tabLeft = (activeTab as HTMLElement).offsetLeft
+  const tabWidth = (activeTab as HTMLElement).offsetWidth
+
+  const scrollPosition = tabLeft - (navWidth - tabWidth) / 2
+
+  mobileNavRef.value.scrollTo({
+    left: scrollPosition,
+    behavior: 'smooth'
+  })
+}
 
 const sidebarCollapsed = ref(false)
 
@@ -104,7 +130,7 @@ const modules = [
 
     <div class="main">
       <!-- Mobile Navigation (Solo visible si el usuario está autenticado y no en hideLayout) -->
-      <div v-if="authStore.isAuthenticated && !hideLayout" class="mobile-nav">
+      <div v-if="authStore.isAuthenticated && !hideLayout" ref="mobileNavRef" class="mobile-nav">
         <router-link
           v-for="module in modules"
           :key="module.id"
