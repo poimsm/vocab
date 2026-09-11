@@ -55,7 +55,7 @@ const modules = [
   { id: 'randomizer', label: 'Randomizer', icon: 'bi:dice-5', to: { name: 'randomizer' } },
   // { id: 'game-story', label: 'Game Story', icon: 'fluent:game-20-filled', to: { name: 'game-story' } },
   { id: 'quick-write', label: 'Quick Write', icon: 'solar:pen-bold', to: { name: 'quick-write' } },
-  { id: 'collocations', label: 'Word Combos', icon: 'oui:magnet', to: { name: 'collocations' } },
+  { id: 'collocations', label: 'Word Combos', icon: 'boxicons:burger-filled', to: { name: 'collocations' } },
   // { id: 'search', label: 'Search', icon: 'iconamoon:search-light', to: { name: 'home' } },
   // { id: 'explore', label: 'Explore', icon: 'material-symbols-light:explore-outline', to: { name: 'home' } },
   // { id: 'clusters', label: 'Clusters', icon: 'solar:widget-3-linear', to: { name: 'home' } },
@@ -320,8 +320,8 @@ const modules = [
 }
 
 .nav-item.active {
-  background: rgba(124, 58, 237, 0.15);
-  color: #a78bfa;
+  background: rgba(155, 143, 181, 0.12);
+  color: #9b8fb5;
 }
 
 .sidebar-footer {
@@ -437,8 +437,8 @@ const modules = [
   }
 
   .mobile-tab.active {
-    background: rgba(124, 58, 237, 0.2);
-    color: #a78bfa;
+    background: rgba(155, 143, 181, 0.18);
+    color: #9b8fb5;
   }
   
   .mobile-logout {
