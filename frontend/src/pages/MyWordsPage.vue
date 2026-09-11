@@ -827,7 +827,7 @@ onUnmounted(() => {
                   width="16"
                   :class="{ 'spinner-icon': isExplaining }"
                 />
-                <span>{{ isExplaining ? 'Explaining...' : 'AI Explanation' }}</span>
+                <span>{{ isExplaining ? 'Explaining...' : 'Explain' }}</span>
               </button>
               <button class="detail-action-btn danger" @click="deleteWord(selectedWord.id)">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

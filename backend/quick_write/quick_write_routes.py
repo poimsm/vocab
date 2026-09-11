@@ -30,20 +30,22 @@ def get_quick_writes(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     sort: str = Query("newest"),
+    status: str = Query("all", regex="^(all|completed)$"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Obtiene todos los ejercicios del usuario con paginación"""
-    logger.info(f"[get_quick_writes] User {current_user.id}: Fetching exercises (page={page}, limit={limit}, sort={sort})")
+    """Obtiene todos los ejercicios del usuario con paginación y filtro opcional"""
+    logger.info(f"[get_quick_writes] User {current_user.id}: Fetching exercises (page={page}, limit={limit}, sort={sort}, status={status})")
 
     repo = QuickWriteRepository(db)
-    data = repo.get_with_pagination(current_user.id, page, limit, sort)
+    data = repo.get_with_pagination(current_user.id, page, limit, sort, status)
 
     items = [QuickWriteResponse.model_validate(note) for note in data["items"]]
 
     return QuickWriteListResponse(
         items=items,
-        total=data["total"]
+        total=data["total"],
+        pages=data["pages"]
     )
 
 

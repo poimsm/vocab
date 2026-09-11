@@ -68,13 +68,17 @@ class QuickWriteRepository:
         user_id: int,
         page: int = 1,
         limit: int = 20,
-        sort: str = "newest"
+        sort: str = "newest",
+        status: str = "all"
     ) -> Dict[str, Any]:
-        """Obtiene ejercicios activos con paginación"""
+        """Obtiene ejercicios activos con paginación y filtro opcional"""
         statement = select(QuickWrite).where(
             QuickWrite.user_id == user_id,
             QuickWrite.is_active == True
         )
+
+        if status == "completed":
+            statement = statement.where(QuickWrite.original_content != None)
 
         if sort == "newest":
             statement = statement.order_by(QuickWrite.created_at.desc())
@@ -86,7 +90,8 @@ class QuickWriteRepository:
         total = self.session.exec(
             select(func.count()).select_from(QuickWrite).where(
                 QuickWrite.user_id == user_id,
-                QuickWrite.is_active == True
+                QuickWrite.is_active == True,
+                QuickWrite.original_content != None if status == "completed" else True
             )
         ).one()
 

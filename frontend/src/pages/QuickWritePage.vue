@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { quickWriteApi, type QuickWriteExercise } from '@/services/quickWriteApi'
 
@@ -10,7 +10,10 @@ interface LocalResponse {
 
 const prompts = ref<QuickWriteExercise[]>([])
 const isLoading = ref(false)
+const isLoadingMore = ref(false)
 const loadError = ref('')
+const isGenerating = ref(false)
+const generateError = ref<string | null>(null)
 
 const responses = ref<Map<number, LocalResponse>>(new Map())
 const corrections = ref<Map<number, string>>(new Map())
@@ -24,6 +27,11 @@ const revealedWords = ref<Set<string>>(new Set())
 const hideMaskingEnabled = ref(false)
 const isEditMode = ref(false)
 const isMobile = ref(window.innerWidth < 768)
+
+const currentPage = ref(1)
+const totalPages = ref(1)
+const ITEMS_PER_PAGE = 15
+const showOnlyCompleted = ref(false)
 
 // Load exercises on mount and setup
 onMounted(async () => {
@@ -40,6 +48,11 @@ onMounted(async () => {
     isMobile.value = window.innerWidth < 768
   }
   window.addEventListener('resize', handleResize)
+  window.addEventListener('scroll', handleWindowScroll)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', handleWindowScroll)
 })
 
 // Save masking preference to localStorage
@@ -52,8 +65,11 @@ const loadExercises = async () => {
   isLoading.value = true
   loadError.value = ''
   try {
-    const data = await quickWriteApi.getExercises(1, 100)
+    const statusFilter = showOnlyCompleted.value ? 'completed' : 'all'
+    const data = await quickWriteApi.getExercises(1, ITEMS_PER_PAGE, statusFilter)
     prompts.value = data.items
+    totalPages.value = data.pages
+    currentPage.value = 1
 
     // Populate responses and corrections from loaded data
     data.items.forEach(exercise => {
@@ -72,6 +88,89 @@ const loadExercises = async () => {
     console.error('Error loading exercises:', error)
   } finally {
     isLoading.value = false
+  }
+}
+
+const loadMoreExercises = async () => {
+  if (isLoadingMore.value || currentPage.value >= totalPages.value) {
+    return
+  }
+
+  isLoadingMore.value = true
+  currentPage.value++
+
+  try {
+    const statusFilter = showOnlyCompleted.value ? 'completed' : 'all'
+    const data = await quickWriteApi.getExercises(currentPage.value, ITEMS_PER_PAGE, statusFilter)
+    prompts.value.push(...data.items)
+
+    // Populate responses and corrections from loaded data
+    data.items.forEach(exercise => {
+      if (exercise.original_content) {
+        responses.value.set(exercise.id, {
+          id: exercise.id,
+          original_content: exercise.original_content
+        })
+      }
+      if (exercise.corrected_content && exercise.has_corrections) {
+        corrections.value.set(exercise.id, exercise.corrected_content)
+      }
+    })
+  } catch (error) {
+    console.error('Error loading more exercises:', error)
+    currentPage.value-- // Revert page number on error
+  } finally {
+    isLoadingMore.value = false
+  }
+}
+
+const handleWindowScroll = () => {
+  const scrollTop = window.scrollY
+  const clientHeight = window.innerHeight
+  const scrollHeight = document.documentElement.scrollHeight
+
+  // Si está cerca del final (200px), cargar más
+  if (scrollHeight - (scrollTop + clientHeight) < 200) {
+    if (currentPage.value < totalPages.value && !isLoadingMore.value) {
+      loadMoreExercises()
+    }
+  }
+}
+
+const toggleFilter = () => {
+  showOnlyCompleted.value = !showOnlyCompleted.value
+  currentPage.value = 1
+  prompts.value = []
+  responses.value.clear()
+  corrections.value.clear()
+  closeModal()
+  loadExercises()
+}
+
+const generateMoreExercises = async () => {
+  isGenerating.value = true
+  generateError.value = null
+
+  try {
+    const result = await quickWriteApi.generate()
+
+    if (result.status === 'generating') {
+      // Reload exercises after a short delay to get the newly generated ones
+      setTimeout(() => {
+        currentPage.value = 1
+        prompts.value = []
+        responses.value.clear()
+        corrections.value.clear()
+        loadExercises()
+      }, 1500)
+    } else {
+      generateError.value = 'Failed to generate exercises'
+    }
+  } catch (err: any) {
+    console.error('Error generating exercises:', err)
+    generateError.value = err.message || 'Failed to generate exercises'
+  } finally {
+    isGenerating.value = false
   }
 }
 
@@ -247,45 +346,48 @@ const revealWord = (word: string, e: Event) => {
 
 <template>
   <div class="quick-write-view">
-    <!-- Complete Screen -->
-    <transition name="fade">
-      <div v-if="isComplete" class="complete-overlay">
-        <div class="complete-card">
-          <div class="complete-header">
-            <Icon icon="solar:star-bold" width="52" />
-            <h2>All Done!</h2>
-          </div>
-
-          <div class="responses-grid">
-            <div v-for="prompt in prompts" :key="prompt.id" class="response-card">
-              <div class="card-emoji">{{ prompt.emoji }}</div>
-              <p class="card-prompt">{{ prompt.prompt }}</p>
-              <p class="card-response">{{ getPromptResponse(prompt.id) }}</p>
-            </div>
-          </div>
-
-          <button class="restart-btn" @click="restart">
-            <Icon icon="solar:restart-bold" width="18" />
-            Start Over
-          </button>
-        </div>
-      </div>
-    </transition>
-
     <!-- Prompts Grid -->
-    <div v-if="!isComplete" class="prompts-container">
+    <div class="prompts-container">
       <div class="header-section">
         <div class="header-left">
           <h1 class="title">Quick Write</h1>
           <p class="subtitle">{{ responses.size }}/{{ prompts.length }} completed</p>
         </div>
-        <button class="toggle-masking" :class="{ active: hideMaskingEnabled }" @click="hideMaskingEnabled = !hideMaskingEnabled" :title="hideMaskingEnabled ? 'Disable masking' : 'Enable masking'">
-          <Icon :icon="hideMaskingEnabled ? 'solar:eye-closed-linear' : 'solar:eye-linear'" width="20" />
-          <span class="toggle-label">{{ hideMaskingEnabled ? 'Hidden' : 'Visible' }}</span>
+        <div class="header-buttons">
+          <button class="generate-btn-header" @click="generateMoreExercises" :disabled="isGenerating" :title="isGenerating ? 'Generating...' : 'Generate more exercises'">
+            <Icon icon="solar:bolt-linear" width="20" />
+            <span v-if="!isGenerating">Generate</span>
+            <span v-else class="spinner-small"></span>
+          </button>
+          <button class="toggle-masking" :class="{ active: hideMaskingEnabled }" @click="hideMaskingEnabled = !hideMaskingEnabled" :title="hideMaskingEnabled ? 'Disable masking' : 'Enable masking'">
+            <Icon :icon="hideMaskingEnabled ? 'solar:eye-closed-linear' : 'solar:eye-linear'" width="20" />
+            <span class="toggle-label">{{ hideMaskingEnabled ? 'Hidden' : 'Visible' }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Generate Error Alert -->
+      <div v-if="generateError" class="generate-error-alert">
+        <p>{{ generateError }}</p>
+        <button @click="generateError = null" class="close-alert">
+          <Icon icon="solar:close-linear" width="16" />
         </button>
       </div>
 
-      <div class="progress-indicator">
+      <!-- Filter -->
+      <div class="filter-section">
+        <button
+          class="filter-toggle"
+          :class="{ active: showOnlyCompleted }"
+          @click="toggleFilter"
+          :title="showOnlyCompleted ? 'Showing completed exercises' : 'Showing all exercises'"
+        >
+          <Icon icon="solar:star-bold" width="16" />
+          <span>{{ showOnlyCompleted ? 'Done' : 'Done' }}</span>
+        </button>
+      </div>
+
+      <div class="progress-indicator" style="display:none">
         <div v-for="prompt in prompts" :key="prompt.id" class="progress-dot" :class="{ done: responses.has(prompt.id) }"></div>
       </div>
 
@@ -319,6 +421,12 @@ const revealWord = (word: string, e: Event) => {
           <div v-if="responses.has(prompt.id)" class="card-preview">
             {{ getPromptResponse(prompt.id).substring(0, 60) }}...
           </div>
+        </div>
+
+        <!-- Loading More Indicator -->
+        <div v-if="isLoadingMore" class="loading-more">
+          <div class="spinner-small"></div>
+          <p>Loading more...</p>
         </div>
       </div>
     </div>
@@ -506,6 +614,13 @@ const revealWord = (word: string, e: Event) => {
   flex: 1;
 }
 
+.header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
 .title {
   font-size: 32px;
   font-weight: 700;
@@ -517,6 +632,33 @@ const revealWord = (word: string, e: Event) => {
   font-size: 14px;
   color: #9c99ab;
   margin: 0;
+}
+
+.generate-btn-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  background: rgba(167, 139, 250, 0.1);
+  color: #a78bfa;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.generate-btn-header:hover:not(:disabled) {
+  background: rgba(167, 139, 250, 0.2);
+  border-color: rgba(167, 139, 250, 0.6);
+}
+
+.generate-btn-header:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .toggle-masking {
@@ -546,6 +688,104 @@ const revealWord = (word: string, e: Event) => {
   display: none;
 }
 
+.spinner-small {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(167, 139, 250, 0.3);
+  border-top-color: #a78bfa;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.generate-error-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: rgba(255, 100, 100, 0.1);
+  border: 1px solid rgba(255, 100, 100, 0.2);
+  margin-bottom: 16px;
+}
+
+.generate-error-alert p {
+  margin: 0;
+  font-size: 14px;
+  color: #ff6464;
+}
+
+.close-alert {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: #ff6464;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.close-alert:hover {
+  color: #ff8888;
+}
+
+.loading-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  color: #9c99ab;
+  font-size: 14px;
+  grid-column: 1 / -1;
+}
+
+.loading-more p {
+  margin: 0;
+}
+
+.filter-section {
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #9c99ab;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.filter-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.filter-toggle.active {
+  background: rgba(167, 139, 250, 0.15);
+  border-color: rgba(167, 139, 250, 0.4);
+  color: #a78bfa;
+}
+
 .progress-indicator {
   display: flex;
   gap: 8px;
@@ -557,10 +797,21 @@ const revealWord = (word: string, e: Event) => {
   .header-section {
     flex-direction: column;
     align-items: center;
-  }  
+  }
 
   .header-left {
     width: 100%;
+  }
+
+  .header-buttons {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .generate-btn-header {
+    width: 100%;
+    justify-content: center;
+    font-size: 15px;
   }
 
   .toggle-masking {

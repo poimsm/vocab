@@ -34,6 +34,7 @@ class QuickWriteResponse(BaseModel):
 class QuickWriteListResponse(BaseModel):
     items: list[QuickWriteResponse]
     total: int
+    pages: int = 1
 
 
 class GenerateQuickWriteRequest(BaseModel):

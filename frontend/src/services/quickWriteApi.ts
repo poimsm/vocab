@@ -16,15 +16,16 @@ export interface QuickWriteExercise {
 export interface QuickWriteListResponse {
   items: QuickWriteExercise[]
   total: number
+  pages: number
 }
 
 export const quickWriteApi = {
   /**
    * Fetch all quick write exercises for the user
    */
-  async getExercises(page: number = 1, limit: number = 100): Promise<QuickWriteListResponse> {
+  async getExercises(page: number = 1, limit: number = 100, status: string = 'all'): Promise<QuickWriteListResponse> {
     const response = await apiClient.get('/quick-write', {
-      params: { page, limit, sort: 'newest' }
+      params: { page, limit, sort: 'newest', status }
     })
     return response.data
   },
@@ -90,6 +91,18 @@ export const quickWriteApi = {
     }>
   }> {
     const response = await apiClient.post('/quick-write/check-grammar', { text })
+    return response.data
+  },
+
+  /**
+   * Generate new quick write exercises
+   */
+  async generate(): Promise<{
+    status: string
+    message: string
+    task_id?: string
+  }> {
+    const response = await apiClient.post('/quick-write/generate')
     return response.data
   }
 }
