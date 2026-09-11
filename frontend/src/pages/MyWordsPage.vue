@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import api from '@/utils/api'
+import { wordApi } from '@/services/wordApi'
 
 // ─── Types ───
 type WordLevel = 'Beginner' | 'Intermediate' | 'Advanced'
@@ -26,6 +27,7 @@ interface Word {
   sourceText?: string
   status?: 'pending' | 'ready'
   isExisting?: boolean
+  explanation?: string
 }
 
 // ─── State ───
@@ -56,6 +58,10 @@ const newWordText = ref('')
 const adding = ref(false)
 const addError = ref<string | null>(null)
 const addSuccess = ref<string | null>(null)
+
+// ─── Explanation State ───
+const showExplanation = ref(false)
+const isExplaining = ref(false)
 
 // ─── Helpers ───
 const levelColor = (level: WordLevel | number) => {
@@ -348,9 +354,9 @@ async function addWordApi() {
 async function deleteWordApi(id: number) {
   if (!confirm('Delete this word?')) return
   try {
-    await api.delete(`/words/words/${id}`)    
+    await api.delete(`/words/words/${id}`)
     words.value = words.value.filter(w => w.id !== id)
-    
+
     if (selectedWord.value?.id === id) {
       selectedWord.value = null
       showMobileDetail.value = false
@@ -358,6 +364,30 @@ async function deleteWordApi(id: number) {
   } catch (e) {
     alert('Failed to delete word')
   }
+}
+
+async function getAIExplanation() {
+  if (!selectedWord.value) return
+
+  isExplaining.value = true
+  try {
+    const result = await wordApi.getWordExplanation(selectedWord.value.id)
+    if (selectedWord.value) {
+      selectedWord.value.explanation = result.explanation
+    }
+  } catch (err) {
+    console.error('Error getting explanation:', err)
+    alert('Failed to generate explanation')
+  } finally {
+    isExplaining.value = false
+  }
+}
+
+function toggleExplanation() {
+  if (!showExplanation.value && !selectedWord.value?.explanation) {
+    getAIExplanation()
+  }
+  showExplanation.value = !showExplanation.value
 }
 
 // ─── Computed ───
@@ -383,6 +413,7 @@ function deleteWord(id: number) {
 
 function openDetail(word: Word) {
   fetchWordDetail(word.id)
+  showExplanation.value = false
   if (window.innerWidth <= 768) {
     showMobileDetail.value = true
   }
@@ -391,6 +422,7 @@ function openDetail(word: Word) {
 function closeDetail() {
   selectedWord.value = null
   showMobileDetail.value = false
+  showExplanation.value = false
 }
 
 function openAdd() {
@@ -785,12 +817,39 @@ onUnmounted(() => {
             </div>
 
             <div class="detail-actions">
+              <button
+                class="detail-action-btn explain"
+                @click="toggleExplanation"
+                :disabled="isExplaining"
+              >
+                <Icon
+                  :icon="isExplaining ? 'solar:spinner-linear' : 'solar:lightbulb-linear'"
+                  width="16"
+                  :class="{ 'spinner-icon': isExplaining }"
+                />
+                <span>{{ isExplaining ? 'Explaining...' : 'AI Explanation' }}</span>
+              </button>
               <button class="detail-action-btn danger" @click="deleteWord(selectedWord.id)">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                 </svg>
                 <span>Delete</span>
               </button>
+            </div>
+
+            <!-- Explanation Section -->
+            <div v-if="showExplanation" class="detail-explanation">
+              <h4 class="explanation-title">AI Explanation</h4>
+              <div v-if="isExplaining" class="explanation-loading">
+                <div class="spinner-small"></div>
+                <p>Generating explanation...</p>
+              </div>
+              <div v-else-if="selectedWord?.explanation" class="explanation-content">
+                {{ selectedWord.explanation }}
+              </div>
+              <div v-else class="explanation-empty">
+                <p>No explanation available.</p>
+              </div>
             </div>
           </div>
         </aside>
@@ -880,6 +939,32 @@ onUnmounted(() => {
             <ul class="examples-list">
               <li v-for="(ex, i) in selectedWord.examples" :key="i">{{ ex }}</li>
             </ul>
+          </div>
+
+          <button
+            class="mobile-explanation-btn"
+            @click="toggleExplanation"
+            :disabled="isExplaining"
+          >
+            <Icon
+              :icon="isExplaining ? 'solar:spinner-linear' : 'solar:lightbulb-linear'"
+              width="20"
+              :class="{ 'spinner-icon': isExplaining }"
+            />
+            <span>{{ isExplaining ? 'Explaining...' : showExplanation ? 'Hide' : 'AI Explanation' }}</span>
+          </button>
+
+          <div v-if="showExplanation" class="mobile-explanation-content">
+            <div v-if="isExplaining" class="explanation-loading">
+              <div class="spinner-small"></div>
+              <p>Generating explanation...</p>
+            </div>
+            <div v-else-if="selectedWord?.explanation">
+              {{ selectedWord.explanation }}
+            </div>
+            <div v-else class="explanation-empty">
+              <p>No explanation available.</p>
+            </div>
           </div>
 
           <button class="mobile-delete-btn" @click="deleteWord(selectedWord.id)">
@@ -2072,6 +2157,100 @@ onUnmounted(() => {
   background: rgba(239, 68, 68, 0.2);
 }
 
+.detail-action-btn.explain {
+  background: rgba(167, 139, 250, 0.1);
+  color: #a78bfa;
+}
+
+.detail-action-btn.explain:hover:not(:disabled) {
+  background: rgba(167, 139, 250, 0.2);
+}
+
+.detail-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.spinner-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Explanation Section ─── */
+.detail-explanation {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  animation: slideDown 0.3s ease;
+}
+
+.explanation-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #a78bfa;
+  margin: 0 0 12px 0;
+  letter-spacing: 0.5px;
+}
+
+.explanation-content {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #b4b1c6;
+}
+
+.explanation-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  min-height: 60px;
+}
+
+.spinner-small {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(167, 139, 250, 0.2);
+  border-top-color: #a78bfa;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+.explanation-loading p {
+  color: #9c99ab;
+  font-size: 13px;
+  margin: 0;
+}
+
+.explanation-empty {
+  text-align: center;
+  padding: 12px;
+  color: #9c99ab;
+  font-size: 13px;
+}
+
+.explanation-empty p {
+  margin: 0;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* ─── Empty State ─── */
 .empty-state {
   display: flex;
@@ -2695,6 +2874,50 @@ onUnmounted(() => {
 
 .mobile-delete-btn:hover {
   background: rgba(239, 68, 68, 0.2);
+}
+
+.mobile-explanation-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border: none;
+  background: rgba(167, 139, 250, 0.1);
+  color: #a78bfa;
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  border-bottom: 1px solid rgba(167, 139, 250, 0.1);
+  margin-bottom: 12px;
+  border-radius: 15px;
+}
+
+.mobile-explanation-btn:hover:not(:disabled) {
+  background: rgba(167, 139, 250, 0.15);
+}
+
+.mobile-explanation-btn:active:not(:disabled) {
+  background: rgba(167, 139, 250, 0.1);
+}
+
+.mobile-explanation-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mobile-explanation-content {
+  background: rgba(167, 139, 250, 0.05);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  font-size: 17px;
+  line-height: 1.6;
+  color: #b4b1c6;
+  animation: slideDown 0.3s ease;
 }
 
 /* ─── Transitions ─── */

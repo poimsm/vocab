@@ -1,5 +1,6 @@
 import csv
 import io
+import re
 from typing import List
 from logging_client import logger
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, status, Body
@@ -40,21 +41,18 @@ BAD_WORDS_SET = load_bad_words()
 def contains_bad_words(text: str) -> tuple[bool, str]:
     """
     Verifica si el texto contiene palabras prohibidas.
+    Solo detecta palabras completas (no substrings), usando límites de palabra.
 
     Retorna:
         (tiene_bad_words, palabra_encontrada)
     """
     text_lower = text.lower()
-    words_in_text = text_lower.split()
 
-    # Búsqueda exacta en palabras individuales
-    for word in words_in_text:
-        if word in BAD_WORDS_SET:
-            return True, word
-
-    # Búsqueda de bad words contenidas en el texto
+    # Búsqueda de palabras completas con límites de palabra
     for bad_word in BAD_WORDS_SET:
-        if bad_word in text_lower:
+        # Usar \b para límites de palabra (no funciona con caracteres especiales)
+        # Para palabras con caracteres especiales, hacer búsqueda literal
+        if re.search(r'\b' + re.escape(bad_word) + r'\b', text_lower):
             return True, bad_word
 
     return False, ""

@@ -20,6 +20,7 @@ from collocation.collocation_schemas import (
 )
 from collocation.collocation_repository import CollocationRepository
 from words.word_repository import WordRepository
+from examples.helpers import approximate_text_form
 
 
 router = APIRouter()
@@ -312,6 +313,7 @@ def generate_collocations(
     result_collocations = []
     words_to_generate = []
     word_to_generate_map = {}  # Mapeo para asociar palabras con sus índices
+    word_objects_map = {}  # Mapeo word_id -> Word object para acceder a word.main
 
     for idx, word in enumerate(selected_words):
         # Buscar collocation disponible
@@ -326,6 +328,7 @@ def generate_collocations(
             # Esta palabra necesita generación de nuevas collocations
             words_to_generate.append(word)
             word_to_generate_map[word.id] = idx
+            word_objects_map[word.id] = word
 
     logger.info(f"Found {len(result_collocations)} available collocations, need to generate for {len(words_to_generate)} words")
 
@@ -346,10 +349,20 @@ def generate_collocations(
 
                 # Crear solo la primera collocation para esta palabra
                 pair = pairs[0]
+                phrase_text = pair.get("text", "")
+
+                # Obtener el word object y usar approximate_text_form para calcular text_form correcto
+                word = word_objects_map.get(word_id)
+                if word:
+                    calculated_text_form = approximate_text_form(phrase_text, word.main)
+                else:
+                    # Fallback a la sugerencia de la IA si no encontramos la palabra
+                    calculated_text_form = pair.get("text_form", "")
+
                 collocation_data = {
-                    "phrase": pair.get("text", ""),
+                    "phrase": phrase_text,
                     "word_id": word_id,
-                    "text_form": pair.get("text_form", "")
+                    "text_form": calculated_text_form
                 }
 
                 # Crear collocation
@@ -364,7 +377,7 @@ def generate_collocations(
                 collocation_repo.mark_as_in_use(new_collocation.id)
                 idx = word_to_generate_map[word_id]
                 result_collocations.append((idx, new_collocation))
-                logger.info(f"Created and marked collocation {new_collocation.id} for word {word_id}")
+                logger.info(f"Created and marked collocation {new_collocation.id} for word {word_id} with text_form='{calculated_text_form}'")
         else:
             logger.warning(f"AI failed to generate pairs")
 

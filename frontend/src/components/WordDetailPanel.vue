@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { Icon } from '@iconify/vue'
-import api from '@/utils/api'
+import { wordApi } from '@/services/wordApi'
 
 interface WordDetail {
   id: number
@@ -13,6 +13,10 @@ interface WordDetail {
   examples: string[]
   synonyms: string[]
   is_favorite?: boolean
+  type?: string
+  created_at?: string
+  total_examples?: number
+  explanation?: string
 }
 
 interface Props {
@@ -24,27 +28,48 @@ interface Emits {
   (e: 'speak'): void
   (e: 'toggle-favorite'): void
   (e: 'toggle-known'): void
+  (e: 'delete'): void
 }
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
-const frequencySegments = computed(() => {
-  if (!props.word) return []
-  const freq = props.word.frequency
-  return [
-    { label: 'RARE', active: freq === 'rare', color: '#4ade80' },
-    { label: 'UNCOMMON', active: freq === 'uncommon' || freq === 'common', color: '#60a5fa' },
-    { label: 'COMMON', active: freq === 'common', color: '#a78bfa' }
-  ]
-})
+// Explanation state
+const showExplanation = ref(false)
+const isExplaining = ref(false)
 
-function handleToggleKnown() {
-  emit('toggle-known')
+// Color helpers
+const levelColor = (level: string | number) => {
+  const s = typeof level === 'number' ? String(level) : (level || '').toString().toLowerCase()
+  if (s === '1' || s === 'beginner') return '#4ade80'
+  if (s === '2' || s === 'intermediate') return '#60a5fa'
+  if (s === '3' || s === 'advanced') return '#f472b6'
+  return '#9c99ab'
 }
 
-function handleToggleFavorite() {
-  emit('toggle-favorite')
+const levelLabel = (level: string | number) => {
+  if (level === 1) return 'Beginner'
+  if (level === 2) return 'Intermediate'
+  if (level === 3) return 'Advanced'
+  const s = (level || '').toString().toLowerCase()
+  if (s === 'beginner') return 'Beginner'
+  if (s === 'intermediate') return 'Intermediate'
+  if (s === 'advanced') return 'Advanced'
+  return level?.toString() || '—'
+}
+
+const frequencyColor = (freq: string) => {
+  switch (freq) {
+    case 'rare': return '#4ade80'
+    case 'uncommon': return '#60a5fa'
+    case 'common': return '#a78bfa'
+    default: return '#9c99ab'
+  }
+}
+
+const frequencyLabel = (freq: string) => {
+  if (!freq) return ''
+  return freq.charAt(0).toUpperCase() + freq.slice(1)
 }
 
 function speak(text: string) {
@@ -68,78 +93,180 @@ function speak(text: string) {
   window.speechSynthesis.speak(utterance)
 }
 
+async function getAIExplanation() {
+  if (!props.word) return
+
+  isExplaining.value = true
+  try {
+    const result = await wordApi.getWordExplanation(props.word.id)
+    if (props.word) {
+      props.word.explanation = result.explanation
+    }
+  } catch (err) {
+    console.error('Error getting explanation:', err)
+  } finally {
+    isExplaining.value = false
+  }
+}
+
+function toggleExplanation() {
+  if (!showExplanation.value && !props.word?.explanation) {
+    getAIExplanation()
+  }
+  showExplanation.value = !showExplanation.value
+}
+
+function handleClose() {
+  showExplanation.value = false
+  emit('close')
+}
+
 function handleSpeak() {
   if (props.word) {
     speak(props.word.word)
+    emit('speak')
   }
 }
+
+function handleToggleFavorite() {
+  emit('toggle-favorite')
+}
+
+function handleToggleKnown() {
+  emit('toggle-known')
+}
+
+function handleDelete() {
+  emit('delete')
+}
+
+const formattedDate = computed(() => {
+  if (!props.word?.created_at) return '—'
+  return new Date(props.word.created_at).toLocaleDateString()
+})
 </script>
 
 <template>
   <transition name="slide-panel">
     <aside v-if="word" class="word-panel">
+      <!-- Header -->
       <div class="panel-header">
-        <button class="back-btn" @click="emit('close')">
-          <Icon icon="solar:arrow-left-linear" width="20" />
+        <button class="panel-close" @click="handleClose" aria-label="Close panel">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+          </svg>
         </button>
-        <div class="panel-header-actions">
-          <button class="sound-btn" @click="handleSpeak" title="Play pronunciation">
-            <Icon icon="solar:volume-loud-linear" width="20" />
+      </div>
+
+      <!-- Body -->
+      <div class="panel-body">
+        <!-- Word Header -->
+        <div class="word-header">
+          <div class="word-left">
+            <h2 class="word-title">{{ word.word }}</h2>
+            <button class="speak-btn" @click="handleSpeak" title="Play pronunciation">
+              <Icon icon="solar:volume-loud-linear" width="20" />
+            </button>
+          </div>
+          <button
+            class="favorite-btn"
+            :class="{ active: word.is_favorite }"
+            @click="handleToggleFavorite"
+            title="Toggle favorite"
+          >
+            <svg v-if="word.is_favorite" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+            <svg v-else width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+            </svg>
           </button>
-          <button class="heart-btn" @click="handleToggleFavorite" title="Add to favorites">
-            <Icon v-if="word?.is_favorite" icon="solar:heart-bold" width="20" />
-            <Icon v-else icon="solar:heart-linear" width="20" />
-          </button>
         </div>
-      </div>
 
-      <h2 class="panel-word">{{ word.word }}</h2>
-      <p class="panel-definition">{{ word.definition }}</p>
+        <!-- Definition -->
+        <p class="definition">{{ word.definition }}</p>
 
-      <!-- Synonyms Section (Desktop) -->
-      <div v-if="word.synonyms && word.synonyms.length" class="panel-section">
-        <h3 class="section-title">SYNONYMS</h3>
-        <div class="synonyms-list">
-          <span v-for="syn in word.synonyms" :key="syn" class="synonym-tag" @click="speak(syn)"
-            title="Click to hear">
-            {{ syn }}
-          </span>
-        </div>
-      </div>
+        <!-- Know It Toggle -->
+        <label class="know-it-toggle">
+          <input type="checkbox" @change="handleToggleKnown" />
+          <span class="toggle-label">Already know this word?</span>
+        </label>
 
-      <div class="panel-section">
-        <h3 class="section-title">EXAMPLES</h3>
-        <ul class="examples-list">
-          <li v-for="(ex, i) in word.examples" :key="i">{{ ex }}</li>
-        </ul>
-      </div>
-
-      <div class="badges-row">
-        <div class="badge">
-          <span class="badge-label">{{ word.level }}</span>
-          <span class="badge-sublabel">Level</span>
-        </div>
-        <div class="badge-divider">/</div>
-        <div class="badge">
-          <span class="badge-label">{{ word.context }}</span>
-          <span class="badge-sublabel">Context</span>
-        </div>
-      </div>
-
-      <div class="frequency-section">
-        <span class="frequency-label">FREQUENCY</span>
-        <div class="frequency-bar">
-          <div v-for="(seg, i) in frequencySegments" :key="i" class="frequency-segment"
-            :class="{ active: seg.active }" :style="{ background: seg.active ? seg.color : '#3d3a52' }">
-            <div v-if="seg.active && word.frequency === 'common' && i === 2" class="frequency-star">
-              <Icon icon="solar:star-bold" width="12" />
-            </div>
+        <!-- Synonyms Section -->
+        <div v-if="word.synonyms && word.synonyms.length" class="synonyms-section">
+          <h4 class="section-title">Synonyms</h4>
+          <div class="synonyms-list">
+            <span v-for="syn in word.synonyms" :key="syn" class="synonym-tag">
+              {{ syn }}
+            </span>
           </div>
         </div>
-        <div class="frequency-labels">
-          <span>RARE</span>
-          <span>UNCOMMON</span>
-          <span>COMMON</span>
+
+        <!-- Examples Section -->
+        <div v-if="word.examples && word.examples.length" class="examples-section">
+          <h4 class="section-title">Examples</h4>
+          <ul class="examples-list">
+            <li v-for="(example, idx) in word.examples" :key="idx">{{ example }}</li>
+          </ul>
+        </div>
+
+        <!-- Explanation Section -->
+        <div v-if="showExplanation" class="explanation-section">
+          <h4 class="section-title">AI Explanation</h4>
+          <div v-if="isExplaining" class="explanation-loading">
+            <div class="spinner-small"></div>
+            <p>Generating explanation...</p>
+          </div>
+          <div v-else-if="word?.explanation" class="explanation-content">
+            {{ word.explanation }}
+          </div>
+          <div v-else class="explanation-empty">
+            <p>No explanation available.</p>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="actions">
+          <button
+            class="action-btn explain"
+            @click="toggleExplanation"
+            :disabled="isExplaining"
+          >
+            <Icon
+              :icon="isExplaining ? 'solar:spinner-linear' : 'solar:lightbulb-linear'"
+              width="16"
+              :class="{ 'spinner-icon': isExplaining }"
+            />
+            <span>{{ isExplaining ? 'Explaining...' : 'Explain' }}</span>
+          </button>
+          <button
+            class="action-btn delete"
+            @click="handleDelete"
+            title="Delete word"
+          >
+            <Icon icon="solar:trash-bin-trash-outline" width="16" />
+            <span>Delete</span>
+          </button>
+        </div>
+
+        <!-- Metadata (Minimalista) -->
+        <div class="metadata-minimal">
+          <div class="meta-row">
+            <span class="meta-label">Level</span>
+            <span class="meta-value" :style="{ color: levelColor(word.level) }">{{ levelLabel(word.level) }}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">Category</span>
+            <span class="meta-value">{{ word.context || '—' }}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">Frequency</span>
+            <span class="meta-value" :style="{ color: frequencyColor(word.frequency) }">{{ frequencyLabel(word.frequency) }}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">Type</span>
+            <span class="meta-value">{{ word.type || '—' }}</span>
+          </div>
         </div>
       </div>
     </aside>
@@ -147,139 +274,197 @@ function handleSpeak() {
 </template>
 
 <style scoped>
-/* ─── Word Panel (Desktop) ─── */
+/* ════════════════════════════════════════
+   DETAIL PANEL — Sticky, scrolls solo si es más alto que viewport
+   ════════════════════════════════════════ */
+
 .word-panel {
   width: 380px;
   flex-shrink: 0;
   background: #36324a;
   border-left: 1px solid rgba(255, 255, 255, 0.06);
   padding: 24px;
-  overflow-y: auto;
-  z-index: 999;
+  border-radius: 16px 0 0 16px;
+
+  /* Fixed positioning para funcionar en ExamplesPage */
   position: fixed;
   right: 0;
   top: 0;
   bottom: 0;
-  height: 100vh;
+
+  /* Solo scrollea internamente si el contenido es más alto que la ventana */
+  max-height: 100vh;
+  overflow-y: auto;
+}
+
+.word-panel::-webkit-scrollbar {
+  width: 5px;
+}
+
+.word-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.word-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
 }
 
 .panel-header {
   display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.panel-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: #9c99ab;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.panel-close:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e0e8;
+}
+
+.word-header {
+  display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.panel-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.back-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  border: none;
-  background: transparent;
-  color: #9c99ab;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-}
-
-.back-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #e2e0e8;
-}
-
-.heart-btn,
-.sound-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  border: none;
-  background: transparent;
-  color: #9c99ab;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-}
-
-.heart-btn:hover,
-.sound-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #e2e0e8;
-}
-
-.heart-btn {
-  color: #f472b6;
-}
-
-.sound-btn {
-  color: #a78bfa;
-}
-
-.sound-btn:hover {
-  color: #c4b5fd;
-  background: rgba(167, 139, 250, 0.1);
-}
-
-.panel-word {
-  font-size: 32px;
-  font-weight: 600;
-  color: #9c99ab;
-  margin-bottom: 16px;
-  letter-spacing: -0.5px;
-}
-
-.panel-definition {
-  font-size: 15px;
-  line-height: 1.6;
-  color: #b8b5c8;
-  margin-bottom: 28px;
-}
-
-.panel-section {
-  margin-bottom: 24px;
-}
-
-.section-title {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-  color: #9c99ab;
   margin-bottom: 12px;
 }
 
-.examples-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+.word-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.examples-list li {
-  position: relative;
-  padding-left: 16px;
-  margin-bottom: 10px;
-  font-size: 14px;
-  line-height: 1.5;
-  color: #b8b5c8;
-}
-
-.examples-list li::before {
-  content: '•';
-  position: absolute;
-  left: 0;
-  color: #c4b5fd;
+.word-title {
+  font-size: 32px;
   font-weight: 700;
+  color: #e2e0e8;
+  margin: 0;
+  letter-spacing: -0.5px;
+}
+
+.speak-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(167, 139, 250, 0.1);
+  color: #a78bfa;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.speak-btn:hover {
+  background: rgba(167, 139, 250, 0.2);
+  color: #c4b5fd;
+}
+
+.favorite-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: #9c99ab;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.favorite-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.favorite-btn.active {
+  color: #f472b6;
+  background: rgba(244, 114, 182, 0.1);
+}
+
+.definition {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #b8b5c8;
+  margin-bottom: 20px;
+}
+
+/* Know It Toggle */
+.know-it-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 24px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+.know-it-toggle:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.know-it-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #4ade80;
+  flex-shrink: 0;
+}
+
+.know-it-toggle input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.toggle-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #b4b1c6;
+  transition: color 0.2s ease;
+}
+
+.know-it-toggle input[type="checkbox"]:checked ~ .toggle-label {
+  color: #4ade80;
+  font-weight: 600;
 }
 
 /* ─── Synonyms ─── */
+.synonyms-section {
+  margin-bottom: 28px;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #9c99ab;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 12px 0;
+}
+
 .synonyms-list {
   display: flex;
   flex-wrap: wrap;
@@ -287,105 +472,179 @@ function handleSpeak() {
 }
 
 .synonym-tag {
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: rgba(124, 58, 237, 0.12);
-  color: #a78bfa;
+  padding: 7px 14px;
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  border-radius: 20px;
   font-size: 13px;
-  font-weight: 600;
-  border: 1px solid rgba(124, 58, 237, 0.2);
-  cursor: pointer;
+  color: #c4b5fd;
+  font-weight: 500;
   transition: all 0.2s ease;
-  user-select: none;
+  cursor: default;
+  display: inline-block;
 }
 
 .synonym-tag:hover {
-  background: rgba(124, 58, 237, 0.2);
-  border-color: rgba(124, 58, 237, 0.35);
-  color: #c4b5fd;
+  background: rgba(139, 92, 246, 0.18);
+  border-color: rgba(139, 92, 246, 0.3);
+  transform: translateY(-1px);
 }
 
-/* ─── Badges ─── */
-.badges-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 20px;
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: 14px;
-  margin-bottom: 24px;
+/* Metadata Minimalista */
+.metadata-minimal {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.badge {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.badge-label {
-  font-size: 15px;
-  font-weight: 600;
-  color: #e2e0e8;
-}
-
-.badge-sublabel {
-  font-size: 12px;
-  color: #9c99ab;
-}
-
-.badge-divider {
-  font-size: 18px;
-  color: #9c99ab;
-  font-weight: 300;
-}
-
-/* ─── Frequency Bar ─── */
-.frequency-section {
-  margin-top: 8px;
-}
-
-.frequency-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-  color: #9c99ab;
-  margin-bottom: 10px;
-  display: block;
-}
-
-.frequency-bar {
-  display: flex;
-  gap: 4px;
-  height: 28px;
-  margin-bottom: 8px;
-}
-
-.frequency-segment {
-  flex: 1;
-  border-radius: 6px;
-  position: relative;
-  transition: all 0.3s ease;
-}
-
-.frequency-segment.active {
-  box-shadow: 0 0 12px rgba(167, 139, 250, 0.3);
-}
-
-.frequency-star {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.frequency-labels {
+.meta-row {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  align-items: center;
+  padding: 10px 0;
+  font-size: 13px;
+}
+
+.meta-label {
   font-weight: 600;
-  letter-spacing: 1px;
   color: #9c99ab;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+.meta-value {
+  font-weight: 600;
+  color: #e2e0e8;
+  font-size: 13px;
+}
+
+.examples-section {
+  margin-bottom: 28px;
+}
+
+.examples-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.examples-list li {
+  font-size: 14px;
+  color: #b8b5c8;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 10px;
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 30px;
+}
+
+.action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.action-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-btn.explain {
+  background: rgba(167, 139, 250, 0.1);
+  color: #a78bfa;
+}
+
+.action-btn.explain:hover:not(:disabled) {
+  background: rgba(167, 139, 250, 0.2);
+}
+
+.action-btn.delete {
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+}
+
+.action-btn.delete:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.spinner-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Explanation ─── */
+.explanation-section {
+  margin-bottom: 28px;
+}
+
+.explanation-content {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #b8b5c8;
+  padding: 16px 14px;
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 10px;
+}
+
+.explanation-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  min-height: 100px;
+}
+
+.spinner-small {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(167, 139, 250, 0.2);
+  border-top-color: #a78bfa;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+.explanation-loading p {
+  color: #9c99ab;
+  font-size: 14px;
+  margin: 0;
+}
+
+.explanation-empty {
+  padding: 20px;
+  text-align: center;
+  color: #9c99ab;
+  font-size: 14px;
+}
+
+.explanation-empty p {
+  margin: 0;
 }
 
 /* ─── Transitions ─── */
@@ -398,11 +657,5 @@ function handleSpeak() {
 .slide-panel-leave-to {
   transform: translateX(20px);
   opacity: 0;
-}
-
-@media (max-width: 768px) {
-  .word-panel {
-    display: none;
-  }
 }
 </style>
