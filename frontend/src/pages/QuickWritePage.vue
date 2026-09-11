@@ -961,7 +961,7 @@ const revealWord = (word: string, e: Event) => {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -973,10 +973,28 @@ const revealWord = (word: string, e: Event) => {
 .modal-card {
   background: #36324a;
   border-radius: 16px;
-  padding: 28px;
   max-width: 500px;
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.08);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0;
+}
+
+.modal-card::-webkit-scrollbar {
+  width: 5px;
+}
+
+.modal-card::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modal-card::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
 }
 
 .modal-header {
@@ -984,6 +1002,14 @@ const revealWord = (word: string, e: Event) => {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 16px;
+  padding: 28px 28px 16px 28px;
+  background: #36324a;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex-shrink: 0;
+  /* margin: -28px -28px 16px -28px; */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .modal-emoji {
@@ -1007,6 +1033,8 @@ const revealWord = (word: string, e: Event) => {
   font-weight: 600;
   color: #e2e0e8;
   margin: 0 0 16px 0;
+  padding: 0 28px;
+  margin-top: 20px;
 }
 
 .modal-words {
@@ -1014,6 +1042,7 @@ const revealWord = (word: string, e: Event) => {
   gap: 6px;
   margin-bottom: 16px;
   flex-wrap: wrap;
+  padding: 0 28px;
 }
 
 .word-badge-wrapper {
@@ -1068,6 +1097,7 @@ const revealWord = (word: string, e: Event) => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  padding: 0 28px 28px 28px;
 }
 
 .modal-input {
@@ -1127,7 +1157,7 @@ const revealWord = (word: string, e: Event) => {
   border: 1px solid rgba(34, 197, 94, 0.2);
   border-radius: 8px;
   padding: 16px;
-  margin-bottom: 16px;
+  margin: 0 28px 16px 28px;
 }
 
 .corrections-header {
@@ -1512,6 +1542,14 @@ const revealWord = (word: string, e: Event) => {
   .reveal-btn-modal {
     width: auto;
     height: auto;
+  }
+
+  .write-section {
+    padding: 0;
+  }
+
+  .corrections-section {
+    margin: 0;
   }
 }
 </style>
