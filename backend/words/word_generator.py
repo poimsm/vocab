@@ -115,11 +115,15 @@ def create_single_task(
                     db.flush()
                     sequence_counter += 1
 
+                    text_form = approximate_text_form(example_text, main_word)
+                    if not text_form:
+                        text_form = main_word
+
                     # Crear la relación con la palabra
                     example_word = ExampleWord(
                         example_id=example.id,
                         word_id=word.id,
-                        text_form=main_word,
+                        text_form=text_form,
                     )
                     db.add(example_word)
 
