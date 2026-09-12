@@ -16,3 +16,6 @@ lemminflect
 nltk
 langdetect=1.0.9
 language_tool_python=3.4.0
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-asyncio==0.21.1

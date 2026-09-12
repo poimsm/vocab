@@ -34,6 +34,232 @@ router = APIRouter()
 
 # ==================== Acciones Auxiliares ====================
 
+def _is_queue_item_with_learned_word(
+    db: Session,
+    queue_item: ContentQueue,
+    current_user: User,
+) -> bool:
+    """
+    Chequea si un ContentQueue item tiene una palabra target que es LEARNED.
+    Retorna True si el item debe ser descartado (palabra LEARNED).
+    """
+    example = db.exec(
+        select(Example).where(Example.id == queue_item.content_id)
+    ).first()
+
+    if not example:
+        return True  # Si no existe el ejemplo, descartar
+
+    example_repo = ExampleRepository(db)
+    text_segments = example_repo.segment_example_text(example)
+
+    if text_segments:
+        first_target = None
+        for seg in text_segments:
+            if seg.get('target_word'):
+                first_target = seg['target_word']['id']
+                break
+
+        if first_target:
+            from models import Word, WordStatistics, LearningState
+            word_stats = db.exec(
+                select(WordStatistics).join(Word).where(
+                    WordStatistics.word_id == first_target,
+                    WordStatistics.type == ContentType.EXAMPLE,
+                    Word.user_id == current_user.id
+                )
+            ).first()
+
+            if word_stats and word_stats.learning_state == LearningState.LEARNED:
+                return True
+
+    return False
+
+
+def _validate_buffer_and_get_valid_ids(
+    db: Session,
+    buffer_queue_item_ids: List[int],
+    current_user: User,
+) -> List[int]:
+    """
+    Valida items en el buffer, removiendo aquellos con palabras LEARNED y duplicados.
+
+    Retorna: valid_ids que pasaron validación (sin duplicados).
+    """
+    valid_ids = []
+    seen_ids = set()
+
+    for queue_id in buffer_queue_item_ids:
+        # Evitar duplicados
+        if queue_id in seen_ids:
+            logger.debug(f"[_validate_buffer_and_get_valid_ids] Item {queue_id} is duplicate, skipping")
+            continue
+
+        queue_item = db.exec(
+            select(ContentQueue).where(
+                ContentQueue.id == queue_id,
+                ContentQueue.user_id == current_user.id
+            )
+        ).first()
+
+        if not queue_item:
+            logger.debug(f"[_validate_buffer_and_get_valid_ids] Item {queue_id} not found")
+            continue
+
+        if _is_queue_item_with_learned_word(db, queue_item, current_user):
+            logger.debug(f"[_validate_buffer_and_get_valid_ids] Item {queue_id} has LEARNED word, removing")
+            continue
+
+        valid_ids.append(queue_id)
+        seen_ids.add(queue_id)
+
+    return valid_ids
+
+
+def _adjust_position_after_removals(
+    buffer_queue_item_ids: List[int],
+    valid_ids: List[int],
+    buffer_position: int,
+) -> int:
+    """
+    Calcula la nueva posición después de remover items del buffer.
+
+    Args:
+        buffer_queue_item_ids: IDs originales del buffer
+        valid_ids: IDs que permanecen después de validación
+        buffer_position: Posición original
+
+    Retorna: Nueva posición ajustada
+    """
+    removed_before_position = 0
+    for i, queue_id in enumerate(buffer_queue_item_ids):
+        if i < buffer_position and queue_id not in valid_ids:
+            removed_before_position += 1
+
+    new_position = max(0, buffer_position - removed_before_position)
+
+    if valid_ids:
+        new_position = min(new_position, len(valid_ids) - 1)
+    else:
+        new_position = 0
+
+    return new_position
+
+
+def _refill_buffer_to_limit(
+    db: Session,
+    buffer_ids: List[int],
+    limit: int,
+    current_user: User,
+) -> List[int]:
+    """
+    Refill buffer hasta alcanzar limit, validando nuevos items para remover LEARNED y evitando duplicados.
+
+    Retorna lista de IDs del buffer rellenado (sin duplicados).
+    """
+    if len(buffer_ids) >= limit:
+        return buffer_ids
+
+    logger.debug(f"[_refill_buffer_to_limit] Buffer has {len(buffer_ids)}, need to fill to {limit}")
+
+    queue_mgr = ContentQueueManager(db)
+    final_ids = list(buffer_ids)
+    buffer_ids_set = set(buffer_ids)  # Para búsquedas rápidas de duplicados
+
+    while len(final_ids) < limit:
+        amount_needed = limit - len(final_ids)
+        additional_items = queue_mgr.next_many(
+            user_id=current_user.id,
+            content_type=ContentType.EXAMPLE,
+            amount=amount_needed,
+        )
+
+        if not additional_items:
+            logger.info(f"[_refill_buffer_to_limit] ContentQueue empty")
+            break
+
+        # Validar nuevos items: filtrar LEARNED y duplicados
+        items_added = 0
+        for item in additional_items:
+            # Evitar duplicados: no agregar si ya está en el buffer
+            if item.id in buffer_ids_set:
+                logger.debug(f"[_refill_buffer_to_limit] Item {item.id} already in buffer, skipping")
+                continue
+
+            # Filtrar items con palabras LEARNED
+            if not _is_queue_item_with_learned_word(db, item, current_user):
+                final_ids.append(item.id)
+                buffer_ids_set.add(item.id)
+                items_added += 1
+
+        logger.debug(f"[_refill_buffer_to_limit] Added {items_added} valid items, buffer now has {len(final_ids)}")
+
+        if items_added == 0:
+            logger.info(f"[_refill_buffer_to_limit] All remaining items have LEARNED words or are duplicates")
+            break
+
+    return final_ids
+
+
+def _build_examples_response(
+    db: Session,
+    buffer_queue_item_ids: List[int],
+) -> list:
+    """
+    Convierte un buffer de queue items a respuesta de ejemplos segmentados.
+
+    Retorna lista de ejemplos con text_segments, extracted_words, etc.
+    """
+    if not buffer_queue_item_ids:
+        return []
+
+    # Obtener ContentQueue items
+    queue_items = db.exec(
+        select(ContentQueue).where(ContentQueue.id.in_(buffer_queue_item_ids))
+    ).all()
+
+    queue_item_map = {item.id: item for item in queue_items}
+
+    # Obtener ejemplos
+    example_ids = [queue_item_map[qid].content_id for qid in buffer_queue_item_ids if qid in queue_item_map]
+    examples = db.exec(
+        select(Example).where(Example.id.in_(example_ids))
+    ).all()
+
+    example_repo = ExampleRepository(db)
+    examples_response = []
+    common_words = _load_common_words()
+
+    # Mantener orden del buffer
+    for queue_id in buffer_queue_item_ids:
+        if queue_id not in queue_item_map:
+            continue
+
+        queue_item = queue_item_map[queue_id]
+        ex = next((e for e in examples if e.id == queue_item.content_id), None)
+
+        if not ex:
+            continue
+
+        text_segments = example_repo.segment_example_text(ex)
+        target_word_ids = {seg['target_word']['id'] for seg in text_segments if seg.get('target_word')}
+        target_word_strings = {seg['target_word']['main'].lower() for seg in text_segments if seg.get('target_word')}
+
+        extracted_words = _extract_words_from_example(text_segments, target_word_ids, common_words)
+        extracted_words = [w for w in extracted_words if w not in target_word_strings]
+
+        examples_response.append({
+            "queue_item_id": queue_id,
+            "example_id": ex.id,
+            "text": text_segments,
+            "extracted_words": extracted_words,
+            "is_favorite": ex.is_favorite,
+            "is_marked": ex.is_marked,
+        })
+
+    return examples_response
+
+
 def _validate_and_refill_buffer(
     db: Session,
     current_user: User,
@@ -44,9 +270,9 @@ def _validate_and_refill_buffer(
     """
     Valida el buffer actual y lo refill si es necesario.
 
-    1. Chequea si items en buffer están CONSUMED o si sus palabras son LEARNED
-    2. Remueve items inválidos y ajusta position
-    3. Agrega nuevos items del ContentQueue hasta alcanzar limit
+    1. Valida items - remueve aquellos con palabras LEARNED
+    2. Ajusta position
+    3. Refill hasta alcanzar limit
 
     Retorna: (nuevo_buffer_ids, nuevo_position)
     """
@@ -55,122 +281,27 @@ def _validate_and_refill_buffer(
         f"position={buffer_position}, limit={limit}"
     )
 
-    valid_ids = []
+    # Paso 1: Validar buffer
+    valid_ids = _validate_buffer_and_get_valid_ids(db, buffer_queue_item_ids, current_user)
 
-    # Validar cada ID en el buffer
-    for queue_id in buffer_queue_item_ids:
-        queue_item = db.exec(
-            select(ContentQueue).where(
-                ContentQueue.id == queue_id,
-                ContentQueue.user_id == current_user.id
-            )
-        ).first()
-
-        # Si item no existe, saltarlo
-        if not queue_item:
-            logger.debug(f"[_validate_and_refill_buffer] Item {queue_id} does not exist, removing")
-            continue
-
-        # Items CONSUMED son válidos - los mantenemos en el buffer
-        # Solo removemos si la palabra asociada fue marcada como LEARNED
-
-        # Chequear si la palabra asociada es LEARNED
-        from models import Word, WordStatistics, LearningState
-        example = db.exec(
-            select(Example).where(Example.id == queue_item.content_id)
-        ).first()
-
-        if example:
-            # Obtener palabra asociada (primera palabra target del ejemplo)
-            from examples.example_repository import ExampleRepository
-            example_repo = ExampleRepository(db)
-            text_segments = example_repo.segment_example_text(example)
-
-            if text_segments:
-                first_target = None
-                for seg in text_segments:
-                    if seg.get('target_word'):
-                        first_target = seg['target_word']['id']
-                        break
-
-                if first_target:
-                    # Join WordStatistics con Word para acceder a user_id
-                    # Filtrar por type=EXAMPLE porque cada palabra puede tener múltiples records (EXAMPLE y BEST_OPTIONS)
-                    word_stats = db.exec(
-                        select(WordStatistics).join(Word).where(
-                            WordStatistics.word_id == first_target,
-                            WordStatistics.type == ContentType.EXAMPLE,
-                            Word.user_id == current_user.id
-                        )
-                    ).first()
-
-                    # Si la palabra es LEARNED, remover del buffer
-                    if word_stats and word_stats.learning_state == LearningState.LEARNED:
-                        logger.debug(f"[_validate_and_refill_buffer] Item {queue_id} word is LEARNED, removing")
-                        continue
-
-        valid_ids.append(queue_id)
-
-    # Calcular nueva posición
-    # Contar cuántos items fueron removidos ANTES de la posición actual
-    removed_before_position = 0
-    for i, queue_id in enumerate(buffer_queue_item_ids):
-        if i < buffer_position and queue_id not in valid_ids:
-            removed_before_position += 1
-
-    new_position = max(0, buffer_position - removed_before_position)
-
-    # Si la nueva posición está fuera de rango, ajustar al último item
-    if valid_ids:
-        new_position = min(new_position, len(valid_ids) - 1)
-    else:
-        new_position = 0
+    # Paso 2: Ajustar posición
+    new_position = _adjust_position_after_removals(buffer_queue_item_ids, valid_ids, buffer_position)
 
     logger.debug(
-        f"[_validate_and_refill_buffer] After validation: valid_ids={valid_ids}, "
-        f"removed_before_position={removed_before_position}, new_position={new_position}"
+        f"[_validate_and_refill_buffer] After validation: valid_ids={valid_ids}, new_position={new_position}"
     )
 
-    # Refill si es necesario para alcanzar limit, o si estamos al final del buffer y tenemos exactamente limit items
+    # Paso 3: Decidir si refill
     at_end_of_buffer = buffer_position >= len(valid_ids) - 1
     should_refill = len(valid_ids) < limit or (at_end_of_buffer and len(valid_ids) == limit)
 
     if should_refill:
-        queue_mgr = ContentQueueManager(db)
-
-        # Si estamos al final del buffer, traer un lote completamente nuevo (no mezclar con viejo)
         if at_end_of_buffer and len(valid_ids) == limit:
-            logger.debug(f"[_validate_and_refill_buffer] At end of buffer, fetching new batch instead of old items")
-            valid_ids = []  # Descartar buffer viejo
-            amount_needed = limit
-            new_position = 0  # Reset posición al inicio del nuevo lote
-        else:
-            logger.debug(f"[_validate_and_refill_buffer] Need to refill: have {len(valid_ids)}, need {limit}")
-            amount_needed = limit - len(valid_ids)
+            logger.debug(f"[_validate_and_refill_buffer] At end of buffer, fetching new batch")
+            valid_ids = []
+            new_position = 0
 
-        logger.debug(f"[_validate_and_refill_buffer] Requesting {amount_needed} additional items from ContentQueue")
-
-        additional_items = queue_mgr.next_many(
-            user_id=current_user.id,
-            content_type=ContentType.EXAMPLE,
-            amount=amount_needed,
-        )
-
-        additional_ids = [item.id for item in additional_items]
-        logger.debug(f"[_validate_and_refill_buffer] ContentQueue returned {len(additional_ids)} items")
-
-        if len(additional_ids) < amount_needed:
-            logger.warning(
-                f"[_validate_and_refill_buffer] ContentQueue insufficient: requested {amount_needed}, got {len(additional_ids)}. "
-                f"This suggests content needs to be generated."
-            )
-
-        valid_ids.extend(additional_ids)
-
-        logger.debug(
-            f"[_validate_and_refill_buffer] Refilled with {len(additional_ids)} new items. "
-            f"Final buffer: {len(valid_ids)} items"
-        )
+        valid_ids = _refill_buffer_to_limit(db, valid_ids, limit, current_user)
 
     return valid_ids, new_position
 
@@ -267,8 +398,8 @@ def _action_sync_buffer(
 
     Pasos:
     1. Remover todos los items con palabras LEARNED
-    2. Colapsar el buffer (remover huecos)
-    3. Llenar con nuevos items desde la posición actual hasta completar limit
+    2. Calcular nueva posición
+    3. Llenar con nuevos items desde ContentQueue hasta completar limit
 
     Retorna (nuevo_buffer_ids, nueva_position, status).
     """
@@ -277,96 +408,22 @@ def _action_sync_buffer(
         f"position={buffer_position}"
     )
 
-    # PASO 1: Remover todos los items con palabras LEARNED
-    valid_ids = []
-    from models import Word, WordStatistics, LearningState
-
-    for queue_id in buffer_queue_item_ids:
-        queue_item = db.exec(
-            select(ContentQueue).where(
-                ContentQueue.id == queue_id,
-                ContentQueue.user_id == current_user.id
-            )
-        ).first()
-
-        if not queue_item:
-            logger.debug(f"[_action_sync_buffer] Item {queue_id} does not exist, removing")
-            continue
-
-        example = db.exec(
-            select(Example).where(Example.id == queue_item.content_id)
-        ).first()
-
-        if not example:
-            logger.debug(f"[_action_sync_buffer] Example {queue_item.content_id} not found, removing item {queue_id}")
-            continue
-
-        # Chequear si la palabra asociada es LEARNED
-        example_repo = ExampleRepository(db)
-        text_segments = example_repo.segment_example_text(example)
-
-        if text_segments:
-            first_target = None
-            for seg in text_segments:
-                if seg.get('target_word'):
-                    first_target = seg['target_word']['id']
-                    break
-
-            if first_target:
-                word_stats = db.exec(
-                    select(WordStatistics).join(Word).where(
-                        WordStatistics.word_id == first_target,
-                        WordStatistics.type == ContentType.EXAMPLE,
-                        Word.user_id == current_user.id
-                    )
-                ).first()
-
-                if word_stats and word_stats.learning_state == LearningState.LEARNED:
-                    logger.debug(f"[_action_sync_buffer] Item {queue_id} has LEARNED word, removing")
-                    continue
-
-        valid_ids.append(queue_id)
-
-    # PASO 2: Colapsar el buffer (ya colapsado por el loop anterior)
+    # Validar y remover items LEARNED
+    valid_ids = _validate_buffer_and_get_valid_ids(db, buffer_queue_item_ids, current_user)
     logger.debug(f"[_action_sync_buffer] After removal: {len(valid_ids)} items remain")
 
-    # PASO 3: Calcular nueva posición después de remociones
-    removed_before_position = 0
-    for i, queue_id in enumerate(buffer_queue_item_ids):
-        if i < buffer_position and queue_id not in valid_ids:
-            removed_before_position += 1
-
-    new_position = max(0, buffer_position - removed_before_position)
-    if valid_ids:
-        new_position = min(new_position, len(valid_ids) - 1)
-    else:
-        new_position = 0
-
+    # Calcular nueva posición
+    new_position = _adjust_position_after_removals(buffer_queue_item_ids, valid_ids, buffer_position)
     logger.debug(f"[_action_sync_buffer] Position adjusted: {buffer_position} → {new_position}")
 
-    # PASO 4: Llenar el buffer si tiene menos de limit items
-    if len(valid_ids) < limit:
-        logger.info(f"[_action_sync_buffer] Buffer has {len(valid_ids)} items, need to fill to {limit}")
-
-        queue_mgr = ContentQueueManager(db)
-        amount_needed = limit - len(valid_ids)
-
-        additional_items = queue_mgr.next_many(
-            user_id=current_user.id,
-            content_type=ContentType.EXAMPLE,
-            amount=amount_needed,
-        )
-
-        additional_ids = [item.id for item in additional_items]
-        logger.debug(f"[_action_sync_buffer] Got {len(additional_ids)} additional items from queue")
-
-        valid_ids.extend(additional_ids)
+    # Refill buffer
+    valid_ids = _refill_buffer_to_limit(db, valid_ids, limit, current_user)
 
     logger.info(
         f"[_action_sync_buffer] Buffer finalized: {len(valid_ids)} items, position={new_position}"
     )
 
-    # Actualizar sesión con buffer finalizado
+    # Actualizar sesión
     session_repo = UserExampleSessionRepository(db)
     session_repo.update_session(current_user.id, valid_ids, new_position)
 
@@ -386,12 +443,11 @@ def _action_resume(
 
     Lógica:
     1. Si buffer está vacío, restaurar desde sesión guardada
-    2. Remover items con palabras LEARNED del buffer actual
-    3. Ajustar posición por items removidos
-    4. Si todos los items fueron visitados → descartar buffer y cargar nuevo
-    5. Si buffer < limit → refill desde ContentQueue
-    6. Si ContentQueue no tiene items → triggear generación o devolver no_words
-    7. Obtener ejemplos del buffer final
+    2. Remover items con palabras LEARNED
+    3. Ajustar posición
+    4. Si todos fueron visitados → descartar buffer y cargar nuevo
+    5. Si no → refill si < limit
+    6. Obtener ejemplos del buffer final
 
     Retorna (ejemplos_segmentados, status, buffer_ids, position).
     Status: "ok", "generating", o "no_words"
@@ -424,107 +480,25 @@ def _action_resume(
             return [], "ok", [], 0
 
     visited_ids = session_repo.get_visited_queue_item_ids(current_user.id)
-
-    # Chequear si todos los items del buffer fueron visitados
     all_visited = all(item_id in visited_ids for item_id in buffer_queue_item_ids)
 
-    # PASO 2: Remover items con palabras LEARNED del buffer actual
-    valid_ids = []
-    from models import Word, WordStatistics, LearningState
-
-    for queue_id in buffer_queue_item_ids:
-        queue_item = db.exec(
-            select(ContentQueue).where(
-                ContentQueue.id == queue_id,
-                ContentQueue.user_id == current_user.id
-            )
-        ).first()
-
-        if not queue_item:
-            logger.debug(f"[_action_resume] Item {queue_id} does not exist, removing")
-            continue
-
-        example = db.exec(
-            select(Example).where(Example.id == queue_item.content_id)
-        ).first()
-
-        if not example:
-            logger.debug(f"[_action_resume] Example {queue_item.content_id} not found, removing item {queue_id}")
-            continue
-
-        # Chequear si la palabra asociada es LEARNED
-        example_repo = ExampleRepository(db)
-        text_segments = example_repo.segment_example_text(example)
-
-        is_learned = False
-        if text_segments:
-            first_target = None
-            for seg in text_segments:
-                if seg.get('target_word'):
-                    first_target = seg['target_word']['id']
-                    break
-
-            logger.debug(f"[_action_resume] Queue item {queue_id}: first_target={first_target}")
-
-            if first_target:
-                word_stats = db.exec(
-                    select(WordStatistics).join(Word).where(
-                        WordStatistics.word_id == first_target,
-                        WordStatistics.type == ContentType.EXAMPLE,
-                        Word.user_id == current_user.id
-                    )
-                ).first()
-
-                if word_stats:
-                    logger.debug(
-                        f"[_action_resume] Queue item {queue_id}: word_id={first_target}, "
-                        f"learning_state={word_stats.learning_state}"
-                    )
-                    if word_stats.learning_state == LearningState.LEARNED:
-                        logger.debug(f"[_action_resume] Item {queue_id} has LEARNED word, removing")
-                        is_learned = True
-                else:
-                    logger.debug(f"[_action_resume] Queue item {queue_id}: word_stats not found for word_id={first_target}")
-
-        if not is_learned:
-            valid_ids.append(queue_id)
-
-    logger.debug(f"[_action_resume] After removal of LEARNED items: {len(valid_ids)} items remain")
-
-    # Detectar si se removieron items LEARNED
+    # PASO 2 y 3: Validar buffer y ajustar posición
+    valid_ids = _validate_buffer_and_get_valid_ids(db, buffer_queue_item_ids, current_user)
     learned_items_removed = len(buffer_queue_item_ids) - len(valid_ids)
-    logger.debug(f"[_action_resume] Removed {learned_items_removed} LEARNED items from buffer")
+    new_position = _adjust_position_after_removals(buffer_queue_item_ids, valid_ids, buffer_position)
 
-    # PASO 3: Calcular nueva posición después de remociones
-    removed_before_position = 0
-    for i, queue_id in enumerate(buffer_queue_item_ids):
-        if i < buffer_position and queue_id not in valid_ids:
-            removed_before_position += 1
-
-    new_position = max(0, buffer_position - removed_before_position)
-    if valid_ids:
-        new_position = min(new_position, len(valid_ids) - 1)
-    else:
-        new_position = 0
-
-    logger.debug(f"[_action_resume] Position adjusted: {buffer_position} → {new_position}")
+    logger.debug(f"[_action_resume] Removed {learned_items_removed} LEARNED items, position: {buffer_position} → {new_position}")
 
     final_buffer_ids = valid_ids
     final_position = new_position
     status = "ok"
 
     # PASO 4: Decidir si descartar buffer o refill
-    # Si todos fueron visitados Y NO se removió ningún item LEARNED → descarta y carga nuevo
-    # Si hay items NO visitados O se removió items LEARNED → refill si < limit
     should_load_new_batch = all_visited and learned_items_removed == 0
 
     if should_load_new_batch and buffer_queue_item_ids:
-        logger.info(
-            f"[_action_resume] All buffer items visited and no LEARNED items removed, "
-            f"loading completely new batch"
-        )
+        logger.info(f"[_action_resume] All visited and no LEARNED items removed, loading new batch")
 
-        # Vaciar buffer completamente y llenar con nuevos items
         queue_mgr = ContentQueueManager(db)
         new_items = queue_mgr.next_many(
             user_id=current_user.id,
@@ -536,96 +510,26 @@ def _action_resume(
             final_buffer_ids = [item.id for item in new_items]
             final_position = 0
 
-            # Marcar el primer item como visitado
             if final_buffer_ids:
                 session_repo.mark_queue_item_as_visited(current_user.id, final_buffer_ids[0])
 
             session_repo.update_session(current_user.id, final_buffer_ids, final_position)
             logger.info(f"[_action_resume] Loaded new batch with {len(final_buffer_ids)} items")
         else:
-            # No hay items en ContentQueue, triggear generación
-            logger.info(f"[_action_resume] ContentQueue empty, no items available for new batch")
             final_buffer_ids = []
             final_position = 0
 
     else:
-        # PASO 5: Refill buffer con items que quedaron después de remover LEARNED
+        # PASO 5: Refill buffer
         logger.info(
             f"[_action_resume] Buffer has unvisited items or LEARNED items were removed. "
             f"Current buffer: {len(final_buffer_ids)} items, limit: {limit}"
         )
 
-        if len(final_buffer_ids) < limit:
-            logger.info(f"[_action_resume] Buffer has {len(final_buffer_ids)} items, refilling to {limit}")
-
-            queue_mgr = ContentQueueManager(db)
-
-            # Keep fetching items until we reach limit or run out
-            while len(final_buffer_ids) < limit:
-                amount_needed = limit - len(final_buffer_ids)
-
-                additional_items = queue_mgr.next_many(
-                    user_id=current_user.id,
-                    content_type=ContentType.EXAMPLE,
-                    amount=amount_needed,
-                )
-
-                if not additional_items:
-                    logger.info(f"[_action_resume] ContentQueue empty, no more items available")
-                    break
-
-                # VALIDAR items nuevos para remover aquellos con palabras LEARNED
-                items_added = 0
-                for item in additional_items:
-                    queue_item = item  # item is ContentQueue
-                    example = db.exec(
-                        select(Example).where(Example.id == queue_item.content_id)
-                    ).first()
-
-                    if not example:
-                        logger.debug(f"[_action_resume] Example {queue_item.content_id} not found, skipping")
-                        continue
-
-                    # Chequear si la palabra asociada es LEARNED
-                    example_repo = ExampleRepository(db)
-                    text_segments = example_repo.segment_example_text(example)
-
-                    is_learned = False
-                    if text_segments:
-                        first_target = None
-                        for seg in text_segments:
-                            if seg.get('target_word'):
-                                first_target = seg['target_word']['id']
-                                break
-
-                        if first_target:
-                            word_stats = db.exec(
-                                select(WordStatistics).join(Word).where(
-                                    WordStatistics.word_id == first_target,
-                                    WordStatistics.type == ContentType.EXAMPLE,
-                                    Word.user_id == current_user.id
-                                )
-                            ).first()
-
-                            if word_stats and word_stats.learning_state == LearningState.LEARNED:
-                                logger.debug(f"[_action_resume] New item {queue_item.id} has LEARNED word, skipping")
-                                is_learned = True
-
-                    # Solo agregar si no es LEARNED
-                    if not is_learned:
-                        final_buffer_ids.append(queue_item.id)
-                        items_added += 1
-
-                logger.debug(f"[_action_resume] Added {items_added} items, buffer now has {len(final_buffer_ids)}")
-
-                # Si no se agregó ningún item, salir del loop
-                if items_added == 0:
-                    logger.info(f"[_action_resume] All remaining items have LEARNED words")
-                    break
-
+        final_buffer_ids = _refill_buffer_to_limit(db, final_buffer_ids, limit, current_user)
         session_repo.update_session(current_user.id, final_buffer_ids, final_position)
 
-    # PASO 6: Si buffer quedó vacío, triggear generación o devolver no_words
+    # PASO 6: Si buffer vacío, triggear generación o retornar no_words
     if not final_buffer_ids:
         logger.warning(f"[_action_resume] Buffer is empty, checking for available words")
 
@@ -637,6 +541,7 @@ def _action_resume(
         word_repo = WordRepository(db)
         best_option_repo = BestOptionRepository(db)
         example_repo = ExampleRepository(db)
+        queue_mgr = ContentQueueManager(db)
 
         content_planner = ContentPlanner(
             session=db,
@@ -647,62 +552,19 @@ def _action_resume(
             best_option_repository=best_option_repo,
         )
 
-        # Chequear si hay palabras NO LEARNED
         has_words = content_planner.has_non_learned_words(current_user.id, ContentType.EXAMPLE)
 
         if not has_words:
             logger.warning(f"[_action_resume] User has NO non-LEARNED words")
             return [], "no_words", [], 0
 
-        # Trigger generation
-        logger.info(f"[_action_resume] User HAS non-learned words, triggering generation")
+        logger.info(f"[_action_resume] Triggering generation")
         content_planner.ensure_ready(current_user.id, ContentType.EXAMPLE)
 
         return [], "generating", [], 0
 
-    # PASO 7: Obtener ejemplos del buffer final
-    queue_items = db.exec(
-        select(ContentQueue).where(ContentQueue.id.in_(final_buffer_ids))
-    ).all()
-
-    queue_item_map = {item.id: item for item in queue_items}
-    example_ids = [queue_item_map[qid].content_id for qid in final_buffer_ids if qid in queue_item_map]
-    examples = db.exec(
-        select(Example).where(Example.id.in_(example_ids))
-    ).all()
-
-    logger.debug(f"[_action_resume] Retrieved {len(examples)} example records")
-
-    example_repo = ExampleRepository(db)
-    examples_response = []
-    common_words = _load_common_words()
-
-    # Mantener orden del buffer
-    for queue_id in final_buffer_ids:
-        if queue_id not in queue_item_map:
-            continue
-
-        queue_item = queue_item_map[queue_id]
-        ex = next((e for e in examples if e.id == queue_item.content_id), None)
-
-        if not ex:
-            continue
-
-        text_segments = example_repo.segment_example_text(ex)
-        target_word_ids = {seg['target_word']['id'] for seg in text_segments if seg.get('target_word')}
-        target_word_strings = {seg['target_word']['main'].lower() for seg in text_segments if seg.get('target_word')}
-
-        extracted_words = _extract_words_from_example(text_segments, target_word_ids, common_words)
-        extracted_words = [w for w in extracted_words if w not in target_word_strings]
-
-        examples_response.append({
-            "queue_item_id": queue_id,
-            "example_id": ex.id,
-            "text": text_segments,
-            "extracted_words": extracted_words,
-            "is_favorite": ex.is_favorite,
-            "is_marked": ex.is_marked,
-        })
+    # PASO 7: Construir respuesta de ejemplos
+    examples_response = _build_examples_response(db, final_buffer_ids)
 
     logger.info(f"[_action_resume] Resuming with {len(examples_response)} examples, status={status}")
     return examples_response, status, final_buffer_ids, final_position
@@ -719,32 +581,27 @@ def _action_next(
     Acción: Vacía el buffer completamente y carga nuevos items.
 
     Pasos:
-    1. Descarta el buffer actual completamente
-    2. Limpia los items visitados en la sesión
+    1. Descarta el buffer actual
+    2. Limpia los items visitados
     3. Carga nuevos items desde ContentQueue hasta limit
-    4. Establece posición en 0
+    4. Retorna ejemplos con posición=0
 
     Retorna (ejemplos_segmentados, status, nuevo_buffer_ids, nuevo_position).
     Status puede ser: "ok", "generating", "no_words"
     """
     logger.info(
-        f"[_action_next] User {current_user.id}: Fetching fresh batch - discard old buffer, load new items"
+        f"[_action_next] User {current_user.id}: Fetching fresh batch"
     )
 
     session_repo = UserExampleSessionRepository(db)
-
-    # Paso 1 y 2: Descartar buffer actual y limpiar visitados
-    new_buffer_ids = []
-    new_position = 0
-
-    # Limpiar visited items en la sesión
-    session_repo.reset_session(current_user.id)
-    logger.info(f"[_action_next] Session reset: buffer cleared and visited items cleared")
-
-    # Paso 3: Cargar nuevos items desde ContentQueue
-    logger.info(f"[_action_next] Loading {limit} new items from ContentQueue")
-
     queue_mgr = ContentQueueManager(db)
+
+    # Paso 1 y 2: Descartar buffer y limpiar visitados
+    session_repo.reset_session(current_user.id)
+    logger.info(f"[_action_next] Session reset")
+
+    # Paso 3: Cargar nuevos items
+    logger.info(f"[_action_next] Loading {limit} new items from ContentQueue")
     new_items = queue_mgr.next_many(
         user_id=current_user.id,
         content_type=ContentType.EXAMPLE,
@@ -754,20 +611,16 @@ def _action_next(
     new_buffer_ids = [item.id for item in new_items]
     logger.info(f"[_action_next] Loaded {len(new_buffer_ids)} items from ContentQueue")
 
-    # Marcar el primer item como visitado
+    # Marcar primer item como visitado y actualizar sesión
     if new_buffer_ids:
         session_repo.mark_queue_item_as_visited(current_user.id, new_buffer_ids[0])
-        logger.debug(f"[_action_next] Marked first item {new_buffer_ids[0]} as visited")
+        session_repo.update_session(current_user.id, new_buffer_ids, 0)
+        logger.info(f"[_action_next] Session updated with {len(new_buffer_ids)} items, position=0")
 
-        # Actualizar sesión con el nuevo buffer
-        session_repo.update_session(current_user.id, new_buffer_ids, new_position)
-        logger.info(f"[_action_next] Session updated with new buffer: {len(new_buffer_ids)} items, position=0")
-
-    # Si no hay items, triggear generación o devolver no_words
+    # Si no hay items, triggear generación
     if not new_buffer_ids:
-        logger.warning(f"[_action_next] ContentQueue empty for user {current_user.id}")
+        logger.warning(f"[_action_next] ContentQueue empty")
 
-        # Inicializar componentes para planificación
         from learning_path.content_planner import ContentPlanner
         from learning_path.priority_engine import PriorityEngine
         from words.word_repository import WordRepository
@@ -786,68 +639,20 @@ def _action_next(
             best_option_repository=best_option_repo,
         )
 
-        # Chequear si hay palabras NO LEARNED
-        logger.info(f"[_action_next] Checking for non-learned words for user {current_user.id}")
         has_words = content_planner.has_non_learned_words(current_user.id, ContentType.EXAMPLE)
 
         if not has_words:
-            logger.warning(f"[_action_next] User {current_user.id} has NO non-LEARNED words - returning no_words")
+            logger.warning(f"[_action_next] User has NO non-LEARNED words")
             return [], "no_words", [], 0
 
-        # Trigger generation
-        logger.warning(f"[_action_next] User {current_user.id} HAS non-learned words - triggering generation")
+        logger.warning(f"[_action_next] Triggering generation")
         content_planner.ensure_ready(current_user.id, ContentType.EXAMPLE)
-        logger.debug(f"[_action_next] Content generation triggered")
 
         return [], "generating", [], 0
 
-    # Obtener ContentQueue items del nuevo buffer
-    queue_items = db.exec(
-        select(ContentQueue).where(ContentQueue.id.in_(new_buffer_ids))
-    ).all()
-
-    queue_item_map = {item.id: item for item in queue_items}
-
-    # Segmentar ejemplos manteniendo orden del buffer
-    example_ids = [queue_item_map[qid].content_id for qid in new_buffer_ids if qid in queue_item_map]
-    examples = db.exec(
-        select(Example).where(Example.id.in_(example_ids))
-    ).all()
-
-    logger.debug(f"[_action_next] Retrieved {len(examples)} example records from buffer")
-
-    example_repo = ExampleRepository(db)
-    examples_response = []
-    common_words = _load_common_words()
-
-    # Mantener orden del buffer
-    for queue_id in new_buffer_ids:
-        if queue_id not in queue_item_map:
-            continue
-
-        queue_item = queue_item_map[queue_id]
-        ex = next((e for e in examples if e.id == queue_item.content_id), None)
-
-        if not ex:
-            continue
-
-        text_segments = example_repo.segment_example_text(ex)
-        target_word_ids = {seg['target_word']['id'] for seg in text_segments if seg.get('target_word')}
-        target_word_strings = {seg['target_word']['main'].lower() for seg in text_segments if seg.get('target_word')}
-
-        extracted_words = _extract_words_from_example(text_segments, target_word_ids, common_words)
-        extracted_words = [w for w in extracted_words if w not in target_word_strings]
-
-        examples_response.append({
-            "queue_item_id": queue_id,
-            "example_id": ex.id,
-            "text": text_segments,
-            "extracted_words": extracted_words,
-            "is_favorite": ex.is_favorite,
-            "is_marked": ex.is_marked,
-        })
-
-    return examples_response, "ok", new_buffer_ids, new_position
+    # Construir respuesta
+    examples_response = _build_examples_response(db, new_buffer_ids)
+    return examples_response, "ok", new_buffer_ids, 0
 
 
 # ==================== Funciones Auxiliares ====================
