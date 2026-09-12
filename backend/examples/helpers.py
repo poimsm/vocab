@@ -151,12 +151,12 @@ def _levenshtein_ratio(s1: str, s2: str) -> float:
 def _get_bonus_for_suffix(word: str) -> float:
     """
     Retorna un bonus de similitud si la palabra termina en sufijos comunes.
-    Esto ayuda a detectar variaciones como: jump -> jumping, jump -> jumped, quiet -> quietly
+    Esto ayuda a detectar variaciones como: jump -> jumping, jump -> jumped, quiet -> quietly, cat -> cats
 
-    Retorna: 0.15 para ly/ing/ed, 0.0 de otro modo
+    Retorna: 0.15 para ly/ing/ed/s, 0.0 de otro modo
     """
     word_lower = word.lower()
-    if word_lower.endswith(('ly', 'ing', 'ed')):
+    if word_lower.endswith(('ly', 'ing', 'ed', 's')):
         return 0.15
     return 0.0
 
@@ -263,13 +263,26 @@ def approximate_text_form(example_text: str, suggested_text_form: str) -> str:
         best_match_word = None
         best_score = 0.0
 
+        # Obtener el lema de la palabra sugerida para comparación adicional
+        suggested_lemma = _get_lemma(suggested_lower)
+
         for text_word in words_in_text:
-            # Calcular similitud de Levenshtein
+            # Calcular similitud de Levenshtein entre la palabra sugerida y la palabra del texto
             similarity = _levenshtein_ratio(suggested_lower, text_word)
 
-            # Agregar bonus por sufijo común (ly, ing, ed)
+            # Calcular también similitud entre lemas si el lema es diferente
+            lemma_similarity = 0.0
+            if suggested_lemma != suggested_lower:
+                text_lemma = _get_lemma(text_word)
+                if text_lemma != text_word:
+                    lemma_similarity = _levenshtein_ratio(suggested_lemma, text_lemma)
+
+            # Usar el mejor de los dos scores de similitud
+            best_similarity = max(similarity, lemma_similarity)
+
+            # Agregar bonus por sufijo común (ly, ing, ed, s)
             bonus = _get_bonus_for_suffix(text_word)
-            score = similarity + bonus
+            score = best_similarity + bonus
 
             if score > best_score:
                 best_score = score
