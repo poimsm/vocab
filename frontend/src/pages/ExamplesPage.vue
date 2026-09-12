@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import api from '@/utils/api'
+import { wordApi } from '@/services/wordApi'
 import { useExamplesStore } from '@/stores/examples'
 import LoadingCard from '@/components/LoadingCard.vue'
 import FavoritesView from '@/components/FavoritesView.vue'
@@ -299,10 +300,10 @@ function closeMobileDetail() {
 async function handleToggleKnown() {
   if (!selectedWord.value) return
 
-  console.log('[handleToggleKnown] Marking word as learned:', selectedWord.value.id)
+  console.log('[handleToggleKnown] Toggling learned status for word:', selectedWord.value.id)
 
   try {
-    await api.patch(`/words/words/${selectedWord.value.id}/learned`)
+    await wordApi.toggleLearned(selectedWord.value.id, true)
     console.log('[handleToggleKnown] Word marked as learned, syncing buffer and fetching examples...')
     closeMobileDetail()
     // Sync buffer (remove learned words) and fetch examples in one atomic call
