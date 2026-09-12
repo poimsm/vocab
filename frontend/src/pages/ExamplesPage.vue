@@ -53,16 +53,22 @@ const SPEECH_RATES = [0.9, 0.7]
 const currentSpeechRateIndex = ref(0)
 let pollAbortController: AbortController | null = null
 let pollActive = ref(false)  // Track if polling should continue
+let consecutiveGeneratingCount = ref(0)  // Track consecutive "generating" responses
+const MAX_CONSECUTIVE_GENERATING = 6  // Stop polling after 6 consecutive generating responses
 
 // ─── Polling ───
 function startPolling() {
-  // Guard: Don't start if already polling
-  if (pollActive.value && pollAbortController) {
-    console.log('[startPolling] Already polling, ignoring duplicate start')
-    return
+  console.log('[startPolling] Starting poll loop, current state - pollActive:', pollActive.value, 'hasController:', !!pollAbortController)
+
+  // Clean up any previous polling state
+  if (pollAbortController) {
+    console.log('[startPolling] Cleaning up previous AbortController')
+    pollAbortController.abort()
   }
 
-  console.log('[startPolling] Starting poll loop')
+  // Reset consecutive generating counter
+  consecutiveGeneratingCount.value = 0
+
   pollActive.value = true
   pollAbortController = new AbortController()
 
@@ -101,13 +107,28 @@ function startPolling() {
         console.log('[poll] Response status:', response.data.status)
 
         if (response.data.status === 'generating') {
-          console.log('[poll] Still generating, scheduling next poll')
+          consecutiveGeneratingCount.value++
+          console.log(`[poll] Still generating (${consecutiveGeneratingCount.value}/${MAX_CONSECUTIVE_GENERATING}), scheduling next poll`)
+
+          // Safety check: stop polling after too many consecutive "generating" responses
+          if (consecutiveGeneratingCount.value >= MAX_CONSECUTIVE_GENERATING) {
+            console.error(`[poll] Reached maximum consecutive generating responses (${MAX_CONSECUTIVE_GENERATING}), stopping polling`)
+            examplesStore.setIsPolling(false)
+            examplesStore.setGenerating(false)
+            examplesStore.setError('Content generation timeout - please try again')
+            pollActive.value = false
+            return
+          }
+
           // Only schedule next poll if still active
           if (pollActive.value) {
             poll()
           }
           return
         }
+
+        // Reset counter when we get a non-generating response
+        consecutiveGeneratingCount.value = 0
 
         if (response.data.status === 'no_words') {
           console.log('[poll] No words available')
@@ -204,6 +225,9 @@ function stopPolling() {
     pollTimer.value = null
   }
 
+  // Reset consecutive generating counter
+  consecutiveGeneratingCount.value = 0
+
   examplesStore.setIsPolling(false)
   console.log('[stopPolling] Poll loop stopped')
 }
@@ -221,7 +245,12 @@ async function fetchExamples() {
     await examplesStore.fetchExamples(BATCH_SIZE)
 
     console.log('[fetchExamples] Store returned. isPolling:', examplesStore.isPolling)
-    // Note: Polling is started from onMounted or refreshExample, not from here
+
+    // Start polling if content is generating
+    if (examplesStore.isPolling || examplesStore.generating) {
+      console.log('[fetchExamples] Content generating, starting polling')
+      startPolling()
+    }
   } catch (e: any) {
     console.error('[fetchExamples] Error:', e)
     examplesStore.setGenerating(false)
@@ -308,6 +337,12 @@ async function handleToggleKnown() {
     closeMobileDetail()
     // Sync buffer (remove learned words) and fetch examples in one atomic call
     await examplesStore.syncAndFetchNext(BATCH_SIZE)
+
+    // Start polling if content is generating
+    if (examplesStore.isPolling || examplesStore.generating) {
+      console.log('[handleToggleKnown] Content generating, starting polling')
+      startPolling()
+    }
   } catch (e: any) {
     console.error('[handleToggleKnown] Error:', e)
     alert('Failed to mark word as learned')
@@ -352,9 +387,13 @@ async function refreshExample() {
   // At end of buffer, use navigateExample with isLastItem=true (includes next)
   console.log('[refreshExample] At end of buffer, navigating with sync+resolve+next')
   await examplesStore.navigateExample(currentEx.queue_item_id, true, BATCH_SIZE)
-  if (examplesStore.isPolling) {
+
+  // Always start polling if content is generating
+  if (examplesStore.isPolling || examplesStore.generating) {
+    console.log('[refreshExample] Content generating/polling, starting poll loop')
     startPolling()
   }
+
   selectedWord.value = null
   isMobileDetailOpen.value = false
   currentSpeechRateIndex.value = 0
