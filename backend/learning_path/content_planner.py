@@ -15,6 +15,9 @@ from models import (
 )
 from learning_path.priority_engine import PriorityEngine
 from learning_path.content_queue import ContentQueue  # Clase de negocio
+from learning_path.path_health_monitor import PathHealthMonitor
+from learning_path.path_repair_service import PathRepairService
+from learning_path.path_health_integration import PathHealthIntegration
 
 
 class ContentPlanner:
@@ -69,17 +72,26 @@ class ContentPlanner:
 
         Flujo:
 
-            1. Asegurar LearningPath suficiente.
-            2. Buscar contenido ya generado.
-            3. Encolarlo.
-            4. Actualizar cursor basándose en contenido encolado.
-            5. Limpiar items inservibles (fallback para inconsistencias).
-            6. Medir cuánto contenido falta.
-            7. Si falta, solicitar generación background.
+            1. Auto-reparar anomalías detectadas en el path.
+            2. Asegurar LearningPath suficiente.
+            3. Buscar contenido ya generado.
+            4. Encolarlo.
+            5. Actualizar cursor basándose en contenido encolado.
+            6. Limpiar items inservibles (fallback para inconsistencias).
+            7. Medir cuánto contenido falta.
+            8. Si falta, solicitar generación background.
 
         Esto permite que el usuario reciba contenido inmediatamente
         siempre que exista suficiente contenido preparado.
         """
+
+        # Auto-repair: Detectar y reparar anomalías en el path
+        had_anomalies = not PathHealthIntegration.check_and_repair(self.session, user_id, content_type)
+        if had_anomalies:
+            logger.info(
+                f"[ContentPlanner] Path had anomalies but were repaired. "
+                f"Continuing with normal flow for user {user_id} ({content_type})"
+            )
 
         self.ensure_path(
             user_id=user_id,
@@ -456,10 +468,20 @@ class ContentPlanner:
             f"available_words={available_word_count}, saturation={saturation_data['saturation_level']:.2f}"
         )
 
+        # LÍMITE DURO PRIMERO: si path está lleno, SIEMPRE bloquear nuevas palabras
+        # Bug fix: Esto previene la explosión del path (problema: path crecía a 338 items)
+        # Se debe verificar ANTES de cualquier lógica de active_words
+        if current_path_size >= max_path_size:
+            logger.info(
+                f"[ContentPlanner] Path FULL for user {user_id} ({content_type}): "
+                f"{current_path_size}/{max_path_size} - blocking new words (HARD LIMIT)"
+            )
+            return 0
+
         # OBJETIVO: mantener ~15-20 palabras ACTIVAS en aprendizaje
         # Algoritmo: "refill when depleting"
         # Si active_words <= 10 → agregar palabras nuevas AGRESIVAMENTE
-        # (incluso si path_size > 20, porque hay muchas palabras LEARNED que no se usan)
+        # (incluso si path_size < 20, porque hay muchas palabras LEARNED que no se usan)
         if active_words <= 10:
             logger.info(
                 f"[ContentPlanner] Low active words ({active_words} <= 10) - FILLING path "
@@ -471,14 +493,6 @@ class ContentPlanner:
                 return 8
             else:
                 return 10
-
-        # LÍMITE DURO: si path está lleno Y hay suficientes palabras activas, no agregar más
-        if current_path_size >= max_path_size:
-            logger.info(
-                f"[ContentPlanner] Path FULL for user {user_id} ({content_type}): "
-                f"{current_path_size}/{max_path_size} and active_words={active_words} - blocking new words"
-            )
-            return 0
 
         # Si 10 < active_words < 15 → agregar moderadamente
         if active_words < 15:
@@ -510,11 +524,14 @@ class ContentPlanner:
         from models import Word
 
         # Get all non-learned statistics for this user and content type
+        # FILTER: Only active words (is_active=True)
+        # Bug fix: Inactive words should never be counted as available
         stats = self.session.exec(
             select(WordStatistics)
             .join(Word, WordStatistics.word_id == Word.id)
             .where(
                 Word.user_id == user_id,
+                Word.is_active == True,
                 WordStatistics.type == content_type,
                 WordStatistics.learning_state != LearningState.LEARNED
             )
@@ -630,6 +647,11 @@ class ContentPlanner:
         ).first() or 0
 
         for word in words:
+            # FILTER: Skip inactive words
+            # Bug fix: Inactive words should never be scored for path inclusion
+            if not word.is_active:
+                continue
+
             statistics = self.get_statistics(
                 word_id=word.id,
                 content_type=content_type,
@@ -1446,6 +1468,15 @@ class ContentPlanner:
         words_needing_generation = []
 
         for word in generation_words:
+            # DEFENSIVE FILTER: Never generate for LEARNED words
+            # Bug fix: Ensure LEARNED words are ALWAYS excluded
+            word_stats = self.get_statistics(word.id, ContentType.EXAMPLE)
+            if word_stats.learning_state == LearningState.LEARNED:
+                logger.debug(
+                    f"[ContentPlanner] Word {word.id} ({word.main}) is LEARNED - skipping generation (DEFENSIVE FILTER)"
+                )
+                continue
+
             available_count = example_repo.count_available_examples_for_word(word.id)
             if available_count < 3:
                 words_needing_generation.append(word)
@@ -1472,31 +1503,17 @@ class ContentPlanner:
         else:
             simple_ratio = 0.4
 
-        simple_amount = max(1, int(amount * simple_ratio))
-        mixed_amount = amount - simple_amount
-
         # Solicitar generación simple solo para palabras que lo necesitan
-        if simple_amount > 0:
+        if len(words_needing_generation) > 0:
             word_ids = [w.id for w in words_needing_generation]
             logger.info(
-                f"[ContentPlanner] Requesting generation for {len(word_ids)} words (simple_amount={simple_amount})"
+                f"[ContentPlanner] Requesting generation for {len(word_ids)} words (amount={amount})"
             )
             ExampleGenerator.generate_simple(
                 user_id=user_id,
                 word_ids=word_ids,
-                amount=simple_amount,
+                amount=amount,
             )
-
-        # TODO: Mixed examples generation temporarily disabled - focusing on simple examples only
-        # if mixed_amount > 0:
-        #     mixed_words = self.get_mixed_candidate_words(user_id=user_id)
-        #     if mixed_words:
-        #         word_ids = [w.id for w in mixed_words]
-        #         ExampleGenerator.generate_mixed(
-        #             user_id=user_id,
-        #             word_ids=word_ids,
-        #             amount=mixed_amount,
-        #         )
 
     def get_generation_words(
         self,
@@ -1504,11 +1521,11 @@ class ContentPlanner:
         content_type: ContentType,
     ) -> List[Word]:
         """
-        Obtiene palabras únicamente desde la ventana
-        actual del LearningPath.
+        Obtiene palabras para generación:
+        - Primero, palabras del segmento actual del path
+        - Si no hay suficientes, agrega palabras NO LEARNED que no están en path
 
-        Esto mantiene la generación alineada con el
-        momento actual del aprendizaje.
+        Esto garantiza que palabras NEW/LEARNING siempre tengan oportunidad de generar.
         """
         from models import LearningPath, LearningPathCursor, Word
 
@@ -1524,7 +1541,7 @@ class ContentPlanner:
 
         current_segment = cursor.current_segment
 
-        # Obtener palabras del segmento actual
+        # Paso 1: Obtener palabras del segmento actual
         path_items = self.session.exec(
             select(LearningPath).where(
                 LearningPath.user_id == user_id,
@@ -1533,111 +1550,47 @@ class ContentPlanner:
             )
         ).all()
 
-        word_ids = [item.word_id for item in path_items]
+        path_word_ids = [item.word_id for item in path_items]
+        words_from_path = []
 
-        if not word_ids:
-            return []
-
-        words = self.session.exec(
-            select(Word).where(Word.id.in_(word_ids))
-        ).all()
-
-        return words
-
-    def get_mixed_candidate_words(
-        self,
-        user_id: int,
-    ) -> List[Word]:
-        """
-        Obtiene palabras de la ventana actual del Path.
-
-        La ventana contiene deliberadamente:
-
-            pasado reciente
-            +
-            presente
-            +
-            futuro cercano
-
-        De esta manera los mixed examples pueden combinar
-        palabras que el usuario acaba de ver con palabras
-        que está a punto de encontrar.
-        """
-        from models import LearningPath, LearningPathCursor, Word
-
-        cursor = self.session.exec(
-            select(LearningPathCursor).where(
-                LearningPathCursor.user_id == user_id,
-                LearningPathCursor.type == ContentType.EXAMPLE,
-            )
-        ).first()
-
-        if not cursor:
-            return []
-
-        current_segment = cursor.current_segment
-
-        # Ventana: segmento anterior, actual, y próximo
-        segments = [
-            current_segment - 1,
-            current_segment,
-            current_segment + 1,
-        ]
-
-        path_items = self.session.exec(
-            select(LearningPath).where(
-                LearningPath.user_id == user_id,
-                LearningPath.type == ContentType.EXAMPLE,
-                LearningPath.segment.in_(segments),
-            )
-        ).all()
-
-        word_ids = list(set([item.word_id for item in path_items]))
-
-        if not word_ids:
-            return []
-
-        words = self.session.exec(
-            select(Word).where(Word.id.in_(word_ids))
-        ).all()
-
-        return words
-
-    def register_generated_mixed_examples(
-        self,
-        user_id: int,
-        examples: List,
-    ) -> None:
-        """
-        Procesa mixed examples generados por AI.
-
-        Para cada example:
-
-            1. Se guarda el Example.
-            2. Se guardan sus ExampleWord.
-            3. Se identifica qué palabras fueron utilizadas realmente.
-            4. Se agrega el contenido a ContentQueue.
-
-        No modifica el LearningPath existente.
-
-        Esto es importante porque el Path debe mantenerse estable.
-        """
-
-        for example in examples:
-
-            # El repository debería encargarse de persistir
-            # el Example y sus ExampleWord.
-            saved_example = (
-                self.example_repository.save(
-                    example
+        if path_word_ids:
+            # IMPORTANTE: Filtrar solo NO LEARNED palabras del path
+            # Bug fix: Palabras LEARNED en el path NO deben ser generadas
+            # Bug fix: Palabras INACTIVAS tampoco deben ser generadas
+            words_from_path = self.session.exec(
+                select(Word)
+                .join(WordStatistics, Word.id == WordStatistics.word_id)
+                .where(
+                    Word.id.in_(path_word_ids),
+                    Word.is_active == True,
+                    WordStatistics.type == content_type,
+                    WordStatistics.learning_state != LearningState.LEARNED,
                 )
-            )
+            ).all()
 
-            self.content_queue.enqueue(
-                user_id=user_id,
-                content_type=ContentType.EXAMPLE,
-                content_id=saved_example.id,
-            )
+        # Paso 2: Si hay pocas palabras en path, agregar NO LEARNED words que faltan
+        # Esto garantiza que palabras NEW/LEARNING siempre se generen
+        # Bug fix: Solo considerar palabras ACTIVAS
+        if len(words_from_path) < 5:  # Threshold bajo para asegurar diversidad
+            non_learned_word_ids = self.session.exec(
+                select(WordStatistics.word_id)
+                .join(Word, WordStatistics.word_id == Word.id)
+                .where(
+                    Word.user_id == user_id,
+                    Word.is_active == True,
+                    WordStatistics.type == content_type,
+                    WordStatistics.learning_state != LearningState.LEARNED,
+                    Word.id.notin_(path_word_ids) if path_word_ids else True,
+                )
+            ).all()
+
+            if non_learned_word_ids:
+                additional_words = self.session.exec(
+                    select(Word).where(Word.id.in_(non_learned_word_ids))
+                ).all()
+                words_from_path.extend(additional_words)
+
+        return words_from_path
 
     def update_cursor_by_enqueued_content(
         self,

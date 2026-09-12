@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import joinedload
-from sqlalchemy import nulls_last
+from sqlalchemy import nulls_last, distinct, case, and_
 from sqlmodel import Session, func, or_, select
 from logging_client import logger
 from models import ContentQueue, ContentQueueStatus
@@ -63,15 +63,46 @@ class ExampleRepository:
         - Contiene la palabra (a través de ExampleWord)
         - Es de tipo EXPLORE
         - No ha sido encolado aún (enqueued=False)
+        - No contiene SOLO palabras en estado LEARNED
+
+        UNA SOLA QUERY: GROUP BY para contar palabras LEARNED vs total en cada ejemplo.
         """
-        count = self.session.exec(
-            select(func.count(Example.id))
+        from models import WordStatistics, LearningState
+
+        # Subquery: para cada ejemplo, contar palabras LEARNED y total
+        example_stats = (
+            select(
+                Example.id,
+                func.count(distinct(ExampleWord.word_id)).label("total_words"),
+                func.count(
+                    case(
+                        (WordStatistics.learning_state == LearningState.LEARNED, 1),
+                        else_=None
+                    )
+                ).label("learned_words")
+            )
             .join(ExampleWord, Example.id == ExampleWord.example_id)
+            .outerjoin(
+                WordStatistics,
+                and_(
+                    WordStatistics.word_id == ExampleWord.word_id,
+                    WordStatistics.type == ContentType.EXAMPLE
+                )
+            )
             .where(
                 ExampleWord.word_id == word_id,
                 Example.type == ExampleType.EXPLORE,
                 Example.enqueued == False
             )
+            .group_by(Example.id)
+            .subquery()
+        )
+
+        # Contar ejemplos donde learned_words < total_words
+        count = self.session.exec(
+            select(func.count())
+            .select_from(example_stats)
+            .where(example_stats.c.learned_words < example_stats.c.total_words)
         ).first() or 0
 
         return count
@@ -88,53 +119,57 @@ class ExampleRepository:
         - No contiene SOLO palabras en estado LEARNED
 
         Retorna el example con la secuencia más baja (el más antiguo).
+
+        UNA SOLA QUERY: GROUP BY para filtrar ejemplos válidos de una vez.
         """
         from logging_client import logger
+        from models import WordStatistics, LearningState
 
-        # Obtener ejemplos candidatos ordenados (excluyendo los ya consumidos)
-        candidate_ids = self.session.exec(
-            select(Example.id)
+        # Subquery: para cada ejemplo, contar palabras LEARNED y total
+        example_stats = (
+            select(
+                Example.id,
+                Example.sequence,
+                func.count(distinct(ExampleWord.word_id)).label("total_words"),
+                func.count(
+                    case(
+                        (WordStatistics.learning_state == LearningState.LEARNED, 1),
+                        else_=None
+                    )
+                ).label("learned_words")
+            )
             .join(ExampleWord, Example.id == ExampleWord.example_id)
+            .outerjoin(
+                WordStatistics,
+                and_(
+                    WordStatistics.word_id == ExampleWord.word_id,
+                    WordStatistics.type == ContentType.EXAMPLE
+                )
+            )
             .where(
                 ExampleWord.word_id == word_id,
                 Example.type == ExampleType.EXPLORE,
                 Example.enqueued == False,
                 Example.is_consumed == False
             )
-            .order_by(Example.sequence.asc())
-        ).all()
+            .group_by(Example.id, Example.sequence)
+            .subquery()
+        )
 
-        # Filtrar: excluir ejemplos donde TODAS las palabras son LEARNED
-        logger.debug(f"[ExampleRepository] Checking {len(candidate_ids)} candidate examples for word {word_id}")
+        # Obtener el primer ejemplo válido (donde learned_words < total_words)
+        result = self.session.exec(
+            select(example_stats.c.id)
+            .where(example_stats.c.learned_words < example_stats.c.total_words)
+            .order_by(example_stats.c.sequence.asc())
+            .limit(1)
+        ).first()
 
-        for example_id in candidate_ids:
-            example_word_ids = self.get_word_ids(example_id)
-            learned_count = 0
+        if result:
+            logger.debug(
+                f"[ExampleRepository] Found available EXPLORE example {result} for word {word_id}"
+            )
+            return result
 
-            for wid in example_word_ids:
-                stats = self.session.exec(
-                    select(WordStatistics)
-                    .where(
-                        WordStatistics.word_id == wid,
-                        WordStatistics.type == ContentType.EXAMPLE
-                    )
-                ).first()
-                if stats and stats.learning_state == LearningState.LEARNED:
-                    learned_count += 1
-
-            # Si NO todas las palabras son LEARNED, este ejemplo es válido
-            if learned_count < len(example_word_ids):
-                logger.debug(
-                    f"[ExampleRepository] Found available EXPLORE example {example_id} for word {word_id} "
-                    f"({learned_count}/{len(example_word_ids)} words are LEARNED)"
-                )
-                return example_id
-            else:
-                logger.debug(
-                    f"[ExampleRepository] Skipping example {example_id}: all {len(example_word_ids)} words are LEARNED"
-                )
-
-        # No se encontró ningún ejemplo válido
         logger.debug(
             f"[ExampleRepository] No valid EXPLORE examples found for word {word_id} "
             f"(all candidates have only LEARNED words)"

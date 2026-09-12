@@ -626,14 +626,14 @@ class TestBufferManagementScenarios:
                 assert mock_mgr.next_many.call_count == 2
 
     @pytest.mark.xfail(reason="TODO: Filter duplicates when all items from ContentQueue are checked")
-    def test_buffer_with_mixed_learned_and_valid_items(self, db_session: Session, current_user: User,
-                                                        test_content_queue):
+    def test_buffer_with_learned_and_valid_items(self, db_session: Session, current_user: User,
+                                                  test_content_queue):
         """Buffer should filter LEARNED items but keep valid ones during refill.
 
         XFAIL: Current implementation doesn't filter:
         1. LEARNED items (correctly filtered)
         2. Duplicate items already in buffer
-        This test documents expected behavior for mixed scenarios.
+        This test documents expected behavior for these scenarios.
         """
         buffer_ids = [test_content_queue[0].id]
         limit = 4

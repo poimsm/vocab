@@ -322,3 +322,74 @@ class UserExampleSession(SQLModel, table=True):
     # Metadata
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class PathAnomalyType(str, enum.Enum):
+    """Tipos de anomalías detectadas en el learning path."""
+    OVERSIZED_PATH = "oversized_path"  # Path > 20 items
+    INACTIVE_WORDS_IN_PATH = "inactive_words_in_path"  # Palabras inactivas en path
+    LEARNED_WORDS_IN_PATH = "learned_words_in_path"  # Palabras LEARNED en path
+    INFINITE_GENERATION_LOOP = "infinite_generation_loop"  # Generando sin progreso
+    EMPTY_QUEUE_WITH_NEW_WORDS = "empty_queue_with_new_words"  # Queue vacía pero hay palabras NEW
+    CURSOR_MISALIGNMENT = "cursor_misalignment"  # Cursor fuera de rango
+    CORRUPTED_STATISTICS = "corrupted_statistics"  # Estadísticas inconsistentes
+
+
+class LearningPathAnomaly(SQLModel, table=True):
+    """
+    Registra anomalías detectadas en el learning path.
+    Permite auditar y diagnosticar problemas automáticamente.
+    """
+    __tablename__: str = "learning_path_anomalies"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True, nullable=False)
+    type: ContentType = Field(index=True)
+    anomaly_type: PathAnomalyType = Field(index=True)
+
+    # Descripción detallada
+    description: str = Field(nullable=False)
+
+    # Datos de diagnóstico (JSON)
+    details: str = Field(default="{}")  # JSON con datos específicos del problema
+
+    # Auto-reparación
+    auto_repair_attempted: bool = Field(default=False, index=True)
+    auto_repair_successful: bool = Field(default=False, index=True)
+    repair_description: Optional[str] = Field(default=None)
+
+    # Seguimiento
+    is_resolved: bool = Field(default=False, index=True)
+    resolved_at: Optional[datetime] = Field(default=None)
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class PathRepairLog(SQLModel, table=True):
+    """
+    Registra todas las reparaciones ejecutadas en el learning path.
+    Útil para auditoría y entender el historial de problemas.
+    """
+    __tablename__: str = "path_repair_logs"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True, nullable=False)
+    type: ContentType = Field(index=True)
+
+    # Qué se reparó
+    repair_type: str = Field(max_length=100, nullable=False)  # "delete_oversized_path", "remove_inactive_words", etc
+
+    # Antes y después
+    before_state: str = Field(nullable=False)  # JSON con estado anterior
+    after_state: str = Field(nullable=False)  # JSON con estado posterior
+
+    # Resultados
+    items_affected: int = Field(default=0)
+    success: bool = Field(default=True, index=True)
+    error_message: Optional[str] = Field(default=None)
+
+    # Trigger
+    triggered_by: str = Field(max_length=100, default="auto_repair")  # "auto_repair", "manual", "api_call"
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
