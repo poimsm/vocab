@@ -132,7 +132,7 @@ async function handleRegister() {
     }
 
     if (password.value !== confirmPassword.value) {
-        errorMessage.value = 'Passwords don\'t match — give it another shot.'
+        errorMessage.value = 'Passwords don\'t match. Try again.'
         isLoading.value = false
         return
     }

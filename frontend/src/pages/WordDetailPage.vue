@@ -15,6 +15,7 @@ const isSavingFavorite = ref(false)
 const isSavingLearned = ref(false)
 const showExplanation = ref(false)
 const isExplaining = ref(false)
+let loadingTimeout: ReturnType<typeof setTimeout> | null = null
 
 const getAIExplanation = async () => {
   if (!word.value) return
@@ -41,22 +42,30 @@ const toggleExplanation = () => {
 const wordId = computed(() => parseInt(route.params.id as string))
 
 const loadWord = async () => {
-  try {
-    console.log('[WordDetailPage.loadWord] Loading word id:', wordId.value)
-    isLoading.value = true
-    error.value = null
-    word.value = await wordApi.getWordDetail(wordId.value)
-    console.log('[WordDetailPage.loadWord] Loaded:', word.value?.main, 'is_learned:', word.value?.is_learned)
-  } catch (err: any) {
-    error.value = err.message || 'Failed to load word'
-    console.error('[WordDetailPage.loadWord] Error:', err)
-  } finally {
-    isLoading.value = false
+  // Clear any pending load requests
+  if (loadingTimeout) {
+    clearTimeout(loadingTimeout)
   }
+
+  // Debounce the load - only load if no new request comes in within 50ms
+  loadingTimeout = setTimeout(async () => {
+    try {
+      console.log('[WordDetailPage.loadWord] Loading word id:', wordId.value)
+      isLoading.value = true
+      error.value = null
+      word.value = await wordApi.getWordDetail(wordId.value)
+      console.log('[WordDetailPage.loadWord] Loaded:', word.value?.main, 'is_learned:', word.value?.is_learned)
+    } catch (err: any) {
+      error.value = err.message || 'Failed to load word'
+      console.error('[WordDetailPage.loadWord] Error:', err)
+    } finally {
+      isLoading.value = false
+    }
+  }, 50)
 }
 
 const toggleFavorite = async () => {
-  if (!word.value) return
+  if (!word.value || isSavingFavorite.value) return
   isSavingFavorite.value = true
   try {
     const result = await wordApi.toggleFavorite(wordId.value)
@@ -70,7 +79,7 @@ const toggleFavorite = async () => {
 }
 
 const markAsLearned = async () => {
-  if (!word.value) return
+  if (!word.value || isSavingLearned.value) return
   console.log('[WordDetailPage.markAsLearned] Marking word as learned:', word.value.main, 'id:', word.value.id, 'current is_learned:', word.value.is_learned)
 
   isSavingLearned.value = true

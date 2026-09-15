@@ -516,6 +516,19 @@ def explain_word_endpoint(
         raise HTTPException(status_code=404, detail="Palabra no encontrada")
 
     try:
+        logger.info(f"[explain_word_endpoint] Word {word_id} current explanation: '{word.explanation}' (type: {type(word.explanation).__name__}, is_null: {word.explanation is None})")
+
+        # If explanation already exists and is NOT null, return it without calling AI
+        if word.explanation is not None:
+            logger.info(f"[explain_word_endpoint] Word {word_id} already has explanation (not null), RETURNING EXISTING without calling AI")
+            return {
+                "status": "ok",
+                "word_id": word_id,
+                "explanation": word.explanation
+            }
+
+        logger.info(f"[explain_word_endpoint] Word {word_id} has null explanation, calling AI to generate new one")
+
         # Generar explicación usando AI
         explanation_json = ai.explain_vocabulary(word.main)
 

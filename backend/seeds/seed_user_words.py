@@ -18,8 +18,9 @@
         "She loves reading classic zombie horror books.",
         "The actor turned into a creepy zombie.",
         "They locked the doors to stop the zombie.",
-        "The groaning zombie scared the entire group.",
-    ]
+        "The groaning zombie scared the entire group."
+    ],
+    "explanation": "pending..."
   },
   {
     "main": "tiger",
@@ -40,8 +41,9 @@
         "Conservationists work to save the wild tiger.",
         "The tiger moved silently across the river.",
         "That sleepy tiger rests under the tree.",
-        "Feed the hungry tiger some fresh meat.",
-    ]
+        "Feed the hungry tiger some fresh meat."
+    ],
+    "explanation": "pending..."
   },
   {
     "main": "wander",
@@ -62,8 +64,9 @@
         "Children love to wander in big parks.",
         "Never wander away from your group here.",
         "The cows wander across the open field.",
-        "I often wander through local book shops.",
-    ]
+        "I often wander through local book shops."
+    ],
+    "explanation": "pending..."
   },
   {
     "main": "stumble",
@@ -84,8 +87,9 @@
         "I might stumble upon a good book.",
         "Watch out or you will stumble now.",
         "The sleepy kid started to stumble forward.",
-        "Do not let small obstacles make you stumble.",
-    ]
+        "Do not let small obstacles make you stumble."
+    ],
+    "exaplanation": "Stumble means to trip or lose your balance while walking or running. It can also mean to make a mistake or have trouble with your words when speaking. You might stumble over your feet while walking up stairs or stumble during a presentation when you forget what to say."
   },
   {
     "main": "carve out",
@@ -106,8 +110,9 @@
         "You must carve out an hour daily.",
         "She managed to carve out her spot.",
         "Artists carve out shapes from solid stone.",
-        "We need to carve out more space.",
-    ]
+        "We need to carve out more space."
+    ],
+    "explanation": "pending..."
   },
   {
     "main": "spring out",
@@ -128,8 +133,9 @@
         "New ideas spring out during our meetings.",
         "Toys spring out of the surprise box.",
         "He saw a frog spring out quickly.",
-        "We watched the dog spring out outside.",
-    ]
+        "We watched the dog spring out outside."
+    ],
+    "explanation": "pending..."
   },
   {
     "main": "loom",
@@ -150,8 +156,9 @@
         "High cliffs loom above the stormy ocean.",
         "New dangers loom near the dark forest.",
         "Tough choices loom before the young team.",
-        "Strange shapes loom inside the quiet room.",
-    ]
+        "Strange shapes loom inside the quiet room."
+    ],
+    "explanation": "pending..."
   },  
   {
     "main": "ominous",
@@ -172,8 +179,9 @@
         "That silence in the house was ominous.",
         "An ominous warning came from the chief.",
         "The ruined castle had an ominous vibe.",
-        "Heavy rain brought an ominous dark storm.",
-    ]
+        "Heavy rain brought an ominous dark storm."
+    ],
+    "explanation": "pending..."
   },
   {
     "main": "peril",
@@ -194,8 +202,9 @@
         "The lost Hiker was in deep peril.",
         "Ignoring the rules leads to real peril.",
         "High winds create peril for small boats.",
-        "They walked into peril without knowing it.",
-    ]
+        "They walked into peril without knowing it."
+    ],
+    "explanation": "Eerie describes a feeling that is strange, unsettling, or spooky. You might use it when talking about a dark forest, a quiet old house, or unusual noises at night. It often gives you a sense of something mysterious or even scary that makes you feel uneasy."
   },
   {
     "main": "eerie",
@@ -216,8 +225,9 @@
         "An eerie silence filled the entire cave.",
         "The foggy forest looked eerie at night.",
         "He gave an eerie smile to everyone.",
-        "Green glowing eyes look very eerie here.",
-    ]
+        "Green glowing eyes look very eerie here."
+    ],
+    "explanation": "Eerie describes a feeling that is strange, unsettling, or spooky. You might use it when talking about a dark forest, a quiet old house, or unusual noises at night. It often gives you a sense of something mysterious or even scary that makes you feel uneasy."
   },
   {
     "main": "ghost",
@@ -238,8 +248,9 @@
         "A small ghost appeared in the mirror.",
         "He was as quiet as a ghost.",
         "That camera caught a mysterious ghost image.",
-        "The old legend features a crying ghost.",
-    ]
+        "The old legend features a crying ghost."
+    ],
+    "explanation": "A ghost is often thought of as the spirit of someone who has died. People talk about ghosts in scary stories, movies, or during Halloween. Sometimes, people say they 'saw a ghost' when they feel a presence or see something strange that they can't explain."
   },
   {
     "main": "ambush",
@@ -260,8 +271,9 @@
         "Shadows hid the squad for an ambush.",
         "A surprise ambush caught them off guard.",
         "Wolves set an ambush near the river.",
-        "Never march blindly into a fatal ambush.",
-    ]
+        "Never march blindly into a fatal ambush."
+    ],
+    "explanation": "Ambush means to surprise someone suddenly, especially when they are not expecting it. It’s often used in situations like a sneak attack in a game or in stories about hunting. For example, friends might plan an ambush for a surprise party to catch someone off guard."
   },
   {
     "main": "relentless",
@@ -282,7 +294,8 @@
         "Their relentless effort finally brought great success.",
         "A relentless wind blew all night long.",
         "The detective maintained a relentless search here.",
-        "She showed relentless courage during hard times.",
-    ]
+        "She showed relentless courage during hard times."
+    ],
+    "explanation": "Relentless describes something that is continuous and does not stop or give up easily. You might use it to talk about a person's strong determination, like a student who studies hard every day or a problem that keeps happening. It can feel intense and unyielding."
   }
 ]
