@@ -36,6 +36,16 @@ def generate_quick_write_exercises_task(user_id: int, word_ids: List[int], amoun
     try:
         # Crear nueva sesión para la tarea
         with Session(engine) as db:
+            # ✅ Validar cuota de quick_writes
+            from config import QuotaValidator
+            try:
+                QuotaValidator.validate_max_quick_writes_per_user(db, user_id)
+            except Exception as quota_error:
+                logger.warning(
+                    f"[QuickWriteGenerator] Quota exceeded for user {user_id}: {quota_error}"
+                )
+                return {"status": "error", "message": "Quota exceeded", "created": 0}
+
             # Cargar palabras por sus IDs
             words = db.exec(
                 select(Word).where(Word.id.in_(word_ids), Word.user_id == user_id)

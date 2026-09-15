@@ -90,6 +90,10 @@ def create_collocation(
     current_user: User = Depends(get_current_user)
 ):
     """Crea una nueva colocación."""
+    # ✅ Validar cuota de collocations
+    from config import QuotaValidator
+    QuotaValidator.validate_max_collocations_per_user(db, current_user.id)
+
     repository = CollocationRepository(db)
     collocation = repository.create(
         user_id=current_user.id,
@@ -148,6 +152,10 @@ def create_collocations_batch(
     current_user: User = Depends(get_current_user)
 ):
     """Crea múltiples collocations de una vez."""
+    # ✅ Validar cuota de collocations
+    from config import QuotaValidator
+    QuotaValidator.validate_max_collocations_per_user(db, current_user.id)
+
     repository = CollocationRepository(db)
     collocations = repository.create_many(current_user.id, phrases)
 
@@ -216,6 +224,10 @@ def generate_initial_collocations(
     current_user: User = Depends(get_current_user)
 ):
     """Genera collocations iniciales si el usuario no tiene ninguna."""
+    # ✅ Validar cuota de collocations
+    from config import QuotaValidator
+    QuotaValidator.validate_max_collocations_per_user(db, current_user.id)
+
     repository = CollocationRepository(db)
     existing = repository.get_user_collocations(current_user.id)
 
@@ -240,6 +252,10 @@ def generate_initial_collocations(
 
     collocations = repository.create_many(current_user.id, initial_phrases)
     logger.info(f"Generated {len(collocations)} initial collocations for user {current_user.id}")
+
+    # ✅ Contar colocaciones creadas
+    if collocations:
+        UserProfileManager.increment_collocations(db, current_user.id, amount=len(collocations))
 
     items = []
     for c in collocations:
@@ -276,6 +292,10 @@ def generate_collocations(
       - Si tiene collocations disponibles (is_in_use=False), devuelve una y la marca como is_in_use=True
       - Si no, genera nuevas usando IA, devuelve una y la marca como is_in_use=True
     """
+    # ✅ Validar cuota de collocations
+    from config import QuotaValidator
+    QuotaValidator.validate_max_collocations_per_user(db, current_user.id)
+
     collocation_repo = CollocationRepository(db)
 
     # Obtener palabras vistas (excluyendo NEW)
@@ -324,6 +344,7 @@ def generate_collocations(
     words_to_generate = []
     word_to_generate_map = {}  # Mapeo para asociar palabras con sus índices
     word_objects_map = {}  # Mapeo word_id -> Word object para acceder a word.main
+    new_collocations_created = 0  # Contador de collocations nuevas
 
     for idx, word in enumerate(selected_words):
         # Buscar collocation disponible
@@ -387,6 +408,7 @@ def generate_collocations(
                 collocation_repo.mark_as_in_use(new_collocation.id)
                 idx = word_to_generate_map[word_id]
                 result_collocations.append((idx, new_collocation))
+                new_collocations_created += 1
                 logger.info(f"Created and marked collocation {new_collocation.id} for word {word_id} with text_form='{calculated_text_form}'")
         else:
             logger.warning(f"AI failed to generate pairs")
@@ -396,6 +418,11 @@ def generate_collocations(
     final_collocations = [c for _, c in result_collocations]
 
     logger.info(f"Returning {len(final_collocations)} collocations for user {current_user.id}")
+
+    # ✅ Contar solo las collocations CREADAS (no las reutilizadas)
+    if new_collocations_created > 0:
+        UserProfileManager.increment_collocations(db, current_user.id, amount=new_collocations_created)
+        logger.debug(f"[CollocationGenerator] Counted {new_collocations_created} new collocations for user {current_user.id}")
 
     items = []
     for c in final_collocations:

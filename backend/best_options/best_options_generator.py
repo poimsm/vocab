@@ -55,6 +55,16 @@ def generate_best_options_task(user_id: int, word_ids: List[int]) -> None:
     try:
         # Crear nueva sesión para la tarea
         with Session(engine) as db:
+            # ✅ Validar cuota de best_options
+            from config import QuotaValidator
+            try:
+                QuotaValidator.validate_max_best_options_per_user(db, user_id)
+            except Exception as quota_error:
+                logger.warning(
+                    f"[BestOptionsGenerator] Quota exceeded for user {user_id}: {quota_error}"
+                )
+                return
+
             # Cargar palabras por sus IDs
             words = db.exec(
                 select(Word).where(Word.id.in_(word_ids), Word.user_id == user_id)

@@ -44,6 +44,16 @@ def generate_simple_examples_task(
     try:
         # Crear nueva sesión para la tarea
         with Session(engine) as db:
+            # ✅ Validar cuota de ejemplos
+            from config import QuotaValidator
+            try:
+                QuotaValidator.validate_max_examples_per_user(db, user_id)
+            except Exception as quota_error:
+                logger.warning(
+                    f"[ExampleGenerator] Quota exceeded for user {user_id}: {quota_error}"
+                )
+                return
+
             # Cargar palabras por sus IDs
             words = db.exec(
                 select(Word).where(Word.id.in_(word_ids), Word.user_id == user_id)
@@ -184,6 +194,14 @@ def generate_simple_examples_task(
             logger.info(
                 f"[ExampleGenerator] Successfully created {successfully_created} examples for user {user_id}"
             )
+
+            # ✅ Contar ejemplos creados
+            if successfully_created > 0:
+                from config import UserProfileManager
+                UserProfileManager.increment_examples(db, user_id, amount=successfully_created)
+                logger.debug(
+                    f"[ExampleGenerator] Counted {successfully_created} examples for user {user_id}"
+                )
 
     except Exception as e:
         logger.error(
