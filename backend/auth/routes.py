@@ -9,6 +9,7 @@ from logging_client import logger
 from decorators import log_endpoint
 from pathlib import Path
 from examples.helpers import approximate_text_form
+from config import QuotaValidator
 
 router = APIRouter()
 
@@ -91,6 +92,10 @@ def assign_default_words(user_id: int, db: Session):
 @log_endpoint
 def register(user_data: UserRegister, db: Session = Depends(get_db)):
     logger.info(f"User registration attempt: {user_data.email}")
+
+    # Validar que no se haya alcanzado el máximo de usuarios
+    QuotaValidator.validate_max_users(db)
+
     # Verificar si ya existe el correo
     existing_user = db.exec(select(User).where(User.email == user_data.email)).first()
     if existing_user:

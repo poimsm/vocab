@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import time
 from sqlalchemy.exc import IntegrityError
 from examples.helpers import approximate_text_form
+from config import UserProfileManager
 
 
 @celery_app.task(name="tasks.words.create_single")
@@ -142,6 +143,15 @@ def create_single_task(
                 db.add(stats)
 
             db.commit()
+
+            # ✅ Contar palabra creada en perfil de usuario
+            UserProfileManager.increment_words(db, user_id)
+
+            # ✅ Contar ejemplos creados
+            if enriched.get("examples"):
+                examples_count = len(enriched["examples"])
+                UserProfileManager.increment_examples(db, user_id, amount=examples_count)
+                logger.debug(f"[WordGenerator] Counted {examples_count} examples for user {user_id}")
 
             # Trigger de generación de best options en background
             from best_options.best_options_generator import BestOptionGenerator
@@ -370,6 +380,14 @@ def create_bulk_task(
                                 db.add(stats)
 
                             db.commit()
+
+                            # ✅ Contar palabra creada
+                            UserProfileManager.increment_words(db, user_id)
+
+                            # ✅ Contar ejemplos creados
+                            if enriched.get("examples"):
+                                examples_count = len(enriched["examples"])
+                                UserProfileManager.increment_examples(db, user_id, amount=examples_count)
 
                         except IntegrityError as e:
                             # Word already exists, skip it and continue

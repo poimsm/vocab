@@ -5,6 +5,7 @@ from logging_client import logger
 from celery_app import celery_app
 import ai
 from best_options.best_options_repository import BestOptionRepository
+from config import UserProfileManager
 
 
 def _shuffle_options_with_correct_index(options: list, correct_option_idx: int) -> tuple:
@@ -144,6 +145,15 @@ def generate_best_options_task(user_id: int, word_ids: List[int]) -> None:
                     sequence_counter += 1
 
             db.commit()
+
+            # ✅ Contar best_options creados
+            best_options_created = sequence_counter - max_sequence - 1
+            if best_options_created > 0:
+                UserProfileManager.increment_best_options(db, user_id, amount=best_options_created)
+                logger.debug(
+                    f"[BestOptionsGenerator] Counted {best_options_created} best options for user {user_id}"
+                )
+
             logger.info(
                 f"[BestOptionsGenerator] Successfully created best options for user {user_id}"
             )

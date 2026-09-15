@@ -2,7 +2,7 @@ import enum
 from typing import Optional, List
 from datetime import datetime, timezone
 from sqlmodel import Field, SQLModel, Relationship
-from sqlalchemy import JSON, Integer
+from sqlalchemy import JSON, Integer, UniqueConstraint
 from sqlalchemy.orm import foreign
 from enum import Enum
 
@@ -17,6 +17,29 @@ class User(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     words: List["Word"] = Relationship(back_populates="user")
+
+
+class UserProfile(SQLModel, table=True):
+    """
+    Perfil de usuario con contabilidad de recursos.
+    Mantiene contadores actualizados de words, examples, best_options, etc.
+    Esto evita hacer COUNT(*) constantemente y permite comparaciones rápidas con límites.
+    """
+    __tablename__: str = "user_profiles"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", nullable=False, index=True, unique=True)
+
+    # Contadores de recursos
+    total_words: int = Field(default=0)
+    total_examples: int = Field(default=0)
+    total_best_options: int = Field(default=0)
+    total_collocations: int = Field(default=0)
+    total_quick_writes: int = Field(default=0)
+
+    # Metadata
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class WordLevel:
@@ -106,7 +129,7 @@ class Word(SQLModel, table=True):
     level: int = Field(default=WordLevel.INTERMEDIATE)
     context: Optional[str] = Field(default=None, max_length=50)
     source_text: Optional[str] = Field(max_length=100, default=None)
-    normalized: Optional[str] = Field(default=None, max_length=100, unique=True, index=True)
+    normalized: Optional[str] = Field(default=None, max_length=100, index=True)
     is_favorite: bool = Field(default=False)
     favorited_at: Optional[datetime] = Field(default=None, index=True)
     is_active: bool = Field(default=True)
@@ -135,7 +158,7 @@ class Example(SQLModel, table=True):
     text: str = Field(nullable=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     favorited_at: Optional[datetime] = Field(default=None, index=True)
-    normalized: Optional[str] = Field(default=None, max_length=255, unique=True, index=True)
+    normalized: Optional[str] = Field(default=None, max_length=255, index=True)
     times_seen: int = Field(default=0)
     sequence: int = Field(default=0, index=True)
     enqueued: bool = Field(default=False, index=True)
@@ -155,7 +178,7 @@ class BestOption(SQLModel, table=True):
     options: str = Field(nullable=False)  # guardar options separadas por ";"
     correct_option: int = Field(default=0)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    normalized: Optional[str] = Field(default=None, max_length=255, unique=True, index=True)
+    normalized: Optional[str] = Field(default=None, max_length=255, index=True)
     is_active: bool = Field(default=True)
     sequence: int = Field(default=0, index=True)
     enqueued: bool = Field(default=False, index=True)
@@ -262,6 +285,29 @@ class GlobalConfiguration(SQLModel, table=True):
     key: str = Field(unique=True, index=True, nullable=False, max_length=100)
     value: str = Field(nullable=False)
     description: Optional[str] = Field(default=None, max_length=500)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class UserConfiguration(SQLModel, table=True):
+    """
+    Configuración específica por usuario.
+    Permite establecer límites diferentes para cada usuario.
+    Si no tiene valor específico, usa el de GlobalConfiguration como fallback.
+    """
+    __tablename__: str = "user_configurations"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", nullable=False, index=True, unique=True)
+
+    # Límites específicos del usuario (None = usar global)
+    max_words: Optional[int] = Field(default=None, nullable=True)
+    max_examples: Optional[int] = Field(default=None, nullable=True)
+    max_best_options: Optional[int] = Field(default=None, nullable=True)
+    max_collocations: Optional[int] = Field(default=None, nullable=True)
+    max_quick_writes: Optional[int] = Field(default=None, nullable=True)
+
+    # Metadata
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

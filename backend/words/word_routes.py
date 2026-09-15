@@ -15,6 +15,7 @@ from words.word_schemas import WordListItem, WordDetail, CreateWordRequest, Crea
 from decorators import log_endpoint
 from words.word_repository import WordRepository
 from words.word_generator import WordGenerator
+from config import QuotaValidator, UserProfileManager
 import ai
 import os
 
@@ -223,6 +224,9 @@ def create_single_word(
     logger.info(f"[create_single_word] User {current_user.id}: Processing word creation")
     logger.debug(f"[create_single_word] Text: {request_data.text}")
 
+    # Validar que el usuario no haya excedido su límite de palabras
+    QuotaValidator.validate_max_words_per_user(db, current_user.id)
+
     text = request_data.text.strip()
 
     if not text:
@@ -336,6 +340,9 @@ def create_words_bulk(
     from words.word_generator import WordGenerator
 
     logger.info(f"[create_words_bulk] User {current_user.id}: Creating {len(texts)} words")
+
+    # Validar que el usuario no haya excedido su límite de palabras
+    QuotaValidator.validate_max_words_per_user(db, current_user.id)
 
     if not texts:
         logger.warning(f"[create_words_bulk] No texts provided")

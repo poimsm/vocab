@@ -21,6 +21,7 @@ from collocation.collocation_schemas import (
 from collocation.collocation_repository import CollocationRepository
 from words.word_repository import WordRepository
 from examples.helpers import approximate_text_form
+from config import UserProfileManager
 
 
 router = APIRouter()
@@ -95,6 +96,10 @@ def create_collocation(
         phrase=request.phrase,
         word_id=request.word_id
     )
+
+    # ✅ Contar colocación creada
+    UserProfileManager.increment_collocations(db, current_user.id)
+
     logger.info(f"Created collocation {collocation.id} for user {current_user.id}")
     segments = repository.get_text_segments(collocation)
     return CollocationItem(
@@ -145,6 +150,11 @@ def create_collocations_batch(
     """Crea múltiples collocations de una vez."""
     repository = CollocationRepository(db)
     collocations = repository.create_many(current_user.id, phrases)
+
+    # ✅ Contar colocaciones creadas
+    if collocations:
+        UserProfileManager.increment_collocations(db, current_user.id, amount=len(collocations))
+
     logger.info(f"Created {len(collocations)} collocations for user {current_user.id}")
     items = []
     for c in collocations:

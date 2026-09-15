@@ -5,6 +5,7 @@ from celery_app import celery_app
 import ai
 from models import Word
 from quick_write.quick_write_repository import QuickWriteRepository
+from config import UserProfileManager
 
 
 @celery_app.task(name="tasks.quick_write.generate")
@@ -94,6 +95,11 @@ def generate_quick_write_exercises_task(user_id: int, word_ids: List[int], amoun
                 except Exception as e:
                     logger.error(f"[QuickWriteGenerator] Error saving exercise: {e}", exc_info=True)
                     continue
+
+            # ✅ Contar quick writes creados
+            if created_count > 0:
+                UserProfileManager.increment_quick_writes(db, user_id, amount=created_count)
+                logger.debug(f"[QuickWriteGenerator] Counted {created_count} quick writes for user {user_id}")
 
             logger.info(f"[QuickWriteGenerator] Successfully created {created_count} quick write exercises for user {user_id}")
             return {
