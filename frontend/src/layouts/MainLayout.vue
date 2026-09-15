@@ -190,7 +190,7 @@ const modules = [
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   background: #2d2a3e;
 
-  display: flex;
+  /* display: flex; */
   flex-direction: column;
   gap: 4px;
 
