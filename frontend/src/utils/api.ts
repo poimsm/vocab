@@ -29,10 +29,13 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      const authStore = useAuthStore()
-      authStore.logout()
-      // Opcional: Redirigir a la vista de login
-      window.location.href = '/login'
+      // Only logout if we're not on the login page
+      const currentPath = window.location.pathname
+      if (!currentPath.includes('/login')) {
+        const authStore = useAuthStore()
+        authStore.logout()
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(error)
   }

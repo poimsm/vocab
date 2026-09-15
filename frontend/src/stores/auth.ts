@@ -25,7 +25,7 @@ export const useAuthStore = defineStore('auth', () => {
       token.value = accessToken
 
       // 3. Leemos la propiedad directamente del objeto (ya no se usa .get())
-      const email = credentials.email 
+      const email = credentials.email
       userEmail.value = email
 
       localStorage.setItem('token', accessToken)
@@ -34,6 +34,19 @@ export const useAuthStore = defineStore('auth', () => {
       return true
     } catch (error) {
       console.error('Error en el login:', error)
+      throw error
+    }
+  }
+
+  async function register(credentials: LoginCredentials) {
+    try {
+      await api.post('/auth/register', {
+        email: credentials.email,
+        password: credentials.password
+      })
+      return true
+    } catch (error) {
+      console.error('Error en el registro:', error)
       throw error
     }
   }
@@ -50,6 +63,7 @@ export const useAuthStore = defineStore('auth', () => {
     userEmail,
     isAuthenticated,
     login,
+    register,
     logout
   }
 })

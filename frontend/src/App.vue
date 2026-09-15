@@ -22,6 +22,7 @@ const nav = useNavigationStore()
 @media (max-width: 768px) {
   .placeholder {
     font-size: 21px;
+    background-color: blue;
   }
 }
 </style>
