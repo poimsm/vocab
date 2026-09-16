@@ -7,6 +7,16 @@ import { useActivityTracking } from '@/composables/useActivityTracking'
 
 const { trackButtonClick } = useActivityTracking()
 
+// ─── Throttle helper for infinite scroll ───
+let scrollTimeout: ReturnType<typeof setTimeout> | null = null
+function throttledScroll() {
+  if (scrollTimeout) return
+  scrollTimeout = setTimeout(() => {
+    scrollTimeout = null
+    onWindowScroll()
+  }, 300) // 300ms throttle prevents infinite scroll loop
+}
+
 // ─── Types ───
 type WordLevel = 'Beginner' | 'Intermediate' | 'Advanced'
 type WordFrequency = 'rare' | 'uncommon' | 'common'
@@ -541,11 +551,11 @@ watch([filterMode, learningStateFilter, searchQuery], () => {
 
 onMounted(() => {
   fetchWords()
-  window.addEventListener('scroll', onWindowScroll)
+  window.addEventListener('scroll', throttledScroll)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('scroll', onWindowScroll)
+  window.removeEventListener('scroll', throttledScroll)
 })
 </script>
 
