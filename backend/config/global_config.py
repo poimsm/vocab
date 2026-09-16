@@ -16,7 +16,7 @@ class GlobalConfigManager:
 
     # Default configurations
     DEFAULT_CONFIGS = {
-        "MAX_USERS": "1000",
+        "MAX_USERS": "100",
         "MAX_WORDS_PER_USER": "500",
         "MAX_EXAMPLES_PER_USER": "5000",
         "MAX_BEST_OPTIONS_PER_USER": "1000",
