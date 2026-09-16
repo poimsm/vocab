@@ -497,24 +497,46 @@ function closeRelearnDialog() {
 }
 
 async function simulateRelearn() {
-  trackButtonClick('simulate_relearn', { count: relearnCount.value })
+  trackButtonClick('relearn_start', { count: relearnCount.value })
   isRelearnProcessing.value = true
   relearnProgress.value = 0
   relearnSuccess.value = false
 
-  // Simulate progress animation
-  const interval = setInterval(() => {
-    relearnProgress.value += Math.random() * 35
-    if (relearnProgress.value >= 100) {
-      relearnProgress.value = 100
-      clearInterval(interval)
+  try {
+    // Simulate progress animation while fetching
+    const interval = setInterval(() => {
+      relearnProgress.value += Math.random() * 20
+      if (relearnProgress.value > 70) {
+        relearnProgress.value = 70
+      }
+    }, 200)
 
+    // Call the relearn endpoint
+    const response = await api.post('/words/relearn', { count: relearnCount.value })
+
+    clearInterval(interval)
+    relearnProgress.value = 100
+
+    if (response.data.status === 'ok') {
       setTimeout(() => {
         isRelearnProcessing.value = false
         relearnSuccess.value = true
+        trackButtonClick('relearn_success', { count: relearnCount.value })
+        // Refresh words list to show updated learning states
+        fetchWords(true)
       }, 300)
+    } else {
+      clearInterval(interval)
+      isRelearnProcessing.value = false
+      error.value = response.data.message || 'Error relearning words'
+      trackButtonClick('relearn_error', { message: error.value })
     }
-  }, 200)
+  } catch (err: any) {
+    isRelearnProcessing.value = false
+    error.value = err.response?.data?.message || 'Error relearning words'
+    trackButtonClick('relearn_error', { message: error.value })
+    console.error('Error relearning words:', err)
+  }
 }
 
 

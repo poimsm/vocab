@@ -580,6 +580,104 @@ def toggle_learned_status(
     }
 
 
+@router.post("/relearn", response_model=dict)
+@log_endpoint
+def relearn_words(
+    request_data: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Selecciona palabras LEARNED aleatorias y las marca como no aprendidas para práctica adicional.
+
+    Body esperado:
+    {
+        "count": 5  // Cantidad de palabras a resetear (1-50)
+    }
+
+    Respuesta:
+    {
+        "status": "ok",
+        "message": "N palabras seleccionadas para reaprender",
+        "reset_words": [
+            {
+                "id": 1,
+                "main": "palabra1",
+                "meaning": "significado1",
+                ...
+            },
+            ...
+        ]
+    }
+    """
+    logger.info(f"[relearn_words] User {current_user.id}: Starting relearn process")
+
+    count = request_data.get("count", 5)
+
+    # Validar que el count esté en rango válido
+    if not isinstance(count, int) or count < 1 or count > 50:
+        logger.warning(f"[relearn_words] Invalid count: {count}")
+        return {
+            "status": "error",
+            "message": "El count debe ser un número entre 1 y 50"
+        }
+
+    # Log de actividad
+    UserActivityService.log_feature_interaction(
+        db=db,
+        user_id=current_user.id,
+        feature_name="relearn",
+        interaction_type="relearn_started",
+        details={"count": count}
+    )
+
+    word_repo = WordRepository(db)
+
+    # Obtener y resetear palabras LEARNED aleatorias
+    reset_word_ids = word_repo.reset_random_learned_words(current_user.id, count)
+
+    if not reset_word_ids:
+        logger.warning(f"[relearn_words] No learned words found for user {current_user.id}")
+        return {
+            "status": "error",
+            "message": "No hay palabras aprendidas para reaprender",
+            "reset_words": []
+        }
+
+    # Obtener detalles de las palabras reseteadas
+    reset_words = [
+        {
+            "id": word_repo.get(db, word_id).id,
+            "main": TextFormatter.capitalize(word_repo.get(db, word_id).main),
+            "meaning": TextFormatter.capitalize(word_repo.get(db, word_id).meaning),
+            "synonyms": TextFormatter.capitalize(word_repo.get(db, word_id).synonyms),
+            "type": word_repo.get(db, word_id).type,
+            "frequency": word_repo.get(db, word_id).frequency,
+            "level": WordLevel.to_str(word_repo.get(db, word_id).level),
+            "context": TextFormatter.capitalize(word_repo.get(db, word_id).context),
+            "is_favorite": word_repo.get(db, word_id).is_favorite,
+        }
+        for word_id in reset_word_ids
+    ]
+
+    logger.info(f"[relearn_words] User {current_user.id}: {len(reset_word_ids)} words reset for relearning")
+
+    # Log de actividad
+    UserActivityService.log_feature_interaction(
+        db=db,
+        user_id=current_user.id,
+        feature_name="relearn",
+        interaction_type="relearn_completed",
+        details={"count": len(reset_word_ids)}
+    )
+
+    return {
+        "status": "ok",
+        "message": f"{len(reset_word_ids)} palabras seleccionadas para reaprender",
+        "reset_words": reset_words
+    }
+
+
 @router.post("/words/{word_id}/explain")
 @log_endpoint
 def explain_word_endpoint(

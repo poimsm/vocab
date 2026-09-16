@@ -349,6 +349,43 @@ class WordRepository:
         self.session.commit()
         return True
 
+    def reset_random_learned_words(self, user_id: int, count: int) -> List[int]:
+        """
+        Obtiene palabras LEARNED aleatorias y las marca como no aprendidas.
+
+        Args:
+            user_id: ID del usuario
+            count: Cantidad de palabras a resetear
+
+        Returns:
+            Lista de IDs de palabras que fueron reseteadas
+        """
+        # Obtener todas las palabras LEARNED del usuario
+        learned_word_ids = self.session.exec(
+            select(Word.id)
+            .join(WordStatistics)
+            .where(
+                Word.user_id == user_id,
+                Word.is_active == True,
+                WordStatistics.type == ContentType.EXAMPLE,
+                WordStatistics.learning_state == LearningState.LEARNED
+            )
+            .distinct()
+        ).all()
+
+        if not learned_word_ids:
+            return []
+
+        # Si hay menos palabras que el conteo solicitado, usar todas
+        actual_count = min(len(learned_word_ids), count)
+        selected_word_ids = random.sample(learned_word_ids, actual_count)
+
+        # Desmarcar cada palabra seleccionada
+        for word_id in selected_word_ids:
+            self.mark_as_not_learned(word_id)
+
+        return selected_word_ids
+
     def get_total_favorites(self, user_id: int) -> int:
         """Obtiene el total de palabras favoritas del usuario"""
         return self.session.exec(
