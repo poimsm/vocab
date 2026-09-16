@@ -350,6 +350,10 @@ class ExampleRepository:
         """
         Alterna el estado de favorito de un ejemplo.
 
+        Cuando se marca como favorito:
+        - Actualiza favorited_at con la fecha actual (aparecerá primero en el listado)
+        - Resetea is_marked a False (favorite siempre se inicia sin marcar)
+
         Retorna el nuevo estado de is_favorite.
         """
         example = self.session.get(Example, example_id)
@@ -362,6 +366,9 @@ class ExampleRepository:
         # Registrar cuándo se marcó como favorito
         if example.is_favorite:
             example.favorited_at = datetime.now(timezone.utc)
+            # Resetear marcado cuando se agrega a favoritos
+            example.is_marked = False
+            logger.debug(f"[ExampleRepository] Example {example_id} added to favorites, is_marked reset to False")
         else:
             example.favorited_at = None
 

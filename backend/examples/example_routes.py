@@ -932,14 +932,26 @@ def toggle_example_favorite(
     """
     Alterna el estado de favorito de un ejemplo.
 
-    Retorna el nuevo estado de is_favorite.
+    Cuando se marca como favorito:
+    - Se resetea is_marked a False
+    - Se actualiza favorited_at (aparecerá primero en listado)
+
+    Retorna: is_favorite, is_marked, unmarked_favorites_count
     """
     logger.info(f"[toggle_example_favorite] User {current_user.id}: Toggling favorite for example {example_id}")
 
     example_repo = ExampleRepository(db)
     is_favorite = example_repo.toggle_favorite(example_id)
 
-    logger.debug(f"[toggle_example_favorite] Example {example_id} is_favorite: {is_favorite}")
+    # Obtener el ejemplo actualizado para devolver el estado is_marked
+    example = db.exec(
+        select(Example).where(Example.id == example_id)
+    ).first()
+
+    if not example:
+        raise HTTPException(status_code=404, detail="Example not found")
+
+    logger.debug(f"[toggle_example_favorite] Example {example_id} is_favorite: {is_favorite}, is_marked: {example.is_marked}")
 
     # Log de actividad
     UserActivityService.log_button_click(
@@ -948,7 +960,8 @@ def toggle_example_favorite(
         button_name="toggle_example_favorite",
         details={
             "example_id": example_id,
-            "is_favorite": is_favorite
+            "is_favorite": is_favorite,
+            "is_marked": example.is_marked
         }
     )
 
@@ -958,6 +971,7 @@ def toggle_example_favorite(
     return {
         "example_id": example_id,
         "is_favorite": is_favorite,
+        "is_marked": example.is_marked,
         "unmarked_favorites_count": unmarked_count
     }
 

@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import api from '@/utils/api'
+import { useExamplesStore } from '@/stores/examples'
 
 interface TextSegment {
   text: string
@@ -27,6 +28,21 @@ interface Emits {
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
+const examplesStore = useExamplesStore()
+
+// Watch for changes in favorites from other sources (e.g., ExamplesPage)
+watch(
+  () => examplesStore.favoritesNeedRefresh,
+  (needsRefresh) => {
+    if (needsRefresh && props.modelValue) {
+      console.log('[FavoritesView] Detected favorites change, refreshing list')
+      favoritesPage.value = 1
+      favoriteExamples.value = []
+      fetchFavorites()
+      examplesStore.clearFavoritesRefreshFlag()
+    }
+  }
+)
 
 // State
 const favoriteExamples = ref<FavoriteExample[]>([])
@@ -168,6 +184,19 @@ async function toggleMarkedExample(exampleId: number) {
       if (example) {
         example.is_marked = response.data.is_marked
       }
+
+      // Update the unmarked favorites count in the store if provided
+      if (response.data.unmarked_favorites_count !== undefined) {
+        examplesStore.setUnmarkedFavoritesCount(response.data.unmarked_favorites_count)
+      }
+
+      // Refresh favorites list after marking/unmarking to reorder correctly
+      // This ensures newly unmarked items move to the top
+      setTimeout(() => {
+        favoritesPage.value = 1
+        favoriteExamples.value = []
+        fetchFavorites()
+      }, 200)
     }
   } catch (e: any) {
     alert('Failed to toggle marked status: ' + (e.response?.data?.message || e.message))
@@ -220,20 +249,19 @@ watch(
   () => props.modelValue,
   (newValue) => {
     if (newValue) {
-      if (favoriteExamples.value.length > 0) {
-        resetScrollTracking()
-      } else {
-        favoritesPage.value = 1
-        lastSortBy.value = 'not_marked_first'
-        showDone.value = false
-        showRandom.value = false
-        isInitialLoad.value = true
-        resetScrollTracking()
-        fetchFavorites()
-        setTimeout(() => {
-          isInitialLoad.value = false
-        }, 50)
-      }
+      // Always refresh when opening to ensure list is up-to-date
+      favoritesPage.value = 1
+      favoriteExamples.value = []
+      lastSortBy.value = 'not_marked_first'
+      showDone.value = false
+      showRandom.value = false
+      isInitialLoad.value = true
+      resetScrollTracking()
+      fetchFavorites()
+      examplesStore.clearFavoritesRefreshFlag()
+      setTimeout(() => {
+        isInitialLoad.value = false
+      }, 50)
     }
   }
 )

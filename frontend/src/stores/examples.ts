@@ -48,6 +48,9 @@ interface ExamplesState {
 
   // Favorites counter
   unmarkedFavoritesCount: number
+
+  // Flag to notify when favorites list should be refreshed
+  favoritesNeedRefresh: boolean
 }
 
 export const useExamplesStore = defineStore('examples', () => {
@@ -63,6 +66,7 @@ export const useExamplesStore = defineStore('examples', () => {
     noWords: false,
     isPolling: false,
     unmarkedFavoritesCount: 0,
+    favoritesNeedRefresh: false,
   })
 
   // ─── Getters ───
@@ -169,6 +173,16 @@ export const useExamplesStore = defineStore('examples', () => {
     console.log('[setUnmarkedFavoritesCount] Updated to:', count)
   }
 
+  function markFavoritesNeedRefresh() {
+    state.value.favoritesNeedRefresh = true
+    console.log('[markFavoritesNeedRefresh] Favorites list marked for refresh')
+  }
+
+  function clearFavoritesRefreshFlag() {
+    state.value.favoritesNeedRefresh = false
+    console.log('[clearFavoritesRefreshFlag] Refresh flag cleared')
+  }
+
   function setGenerating(value: boolean) {
     state.value.generating = value
   }
@@ -206,6 +220,7 @@ export const useExamplesStore = defineStore('examples', () => {
       noWords: false,
       isPolling: false,
       unmarkedFavoritesCount: 0,
+      favoritesNeedRefresh: false,
     }
   }
 
@@ -518,6 +533,7 @@ export const useExamplesStore = defineStore('examples', () => {
     noWords: computed(() => state.value.noWords),
     isPolling: computed(() => state.value.isPolling),
     unmarkedFavoritesCount: computed(() => state.value.unmarkedFavoritesCount),
+    favoritesNeedRefresh: computed(() => state.value.favoritesNeedRefresh),
 
     // Getters
     currentExample,
@@ -540,6 +556,8 @@ export const useExamplesStore = defineStore('examples', () => {
     setNoWords,
     setIsPolling,
     setUnmarkedFavoritesCount,
+    markFavoritesNeedRefresh,
+    clearFavoritesRefreshFlag,
     clearState,
     isQueueItemResolved,
     markQueueItemAsResolved,

@@ -300,6 +300,14 @@ async function toggleExampleFav() {
       if (response.data.unmarked_favorites_count !== undefined) {
         examplesStore.setUnmarkedFavoritesCount(response.data.unmarked_favorites_count)
       }
+
+      // If newly marked as favorite, reset is_marked in current example
+      if (response.data.is_favorite && ex) {
+        ex.is_marked = false
+      }
+
+      // Notify FavoritesView that it needs to refresh
+      examplesStore.markFavoritesNeedRefresh()
     }
   } catch (e) {
     alert('Failed to toggle favorite')
