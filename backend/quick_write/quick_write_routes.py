@@ -17,6 +17,7 @@ from quick_write.quick_write_repository import QuickWriteRepository
 from quick_write.grammar_engine import GrammarEngine
 from words.word_repository import WordRepository
 from models import ContentType
+from activity.user_activity_service import UserActivityService
 import ai
 
 
@@ -36,6 +37,19 @@ def get_quick_writes(
 ):
     """Obtiene todos los ejercicios del usuario con paginación y filtro opcional"""
     logger.info(f"[get_quick_writes] User {current_user.id}: Fetching exercises (page={page}, limit={limit}, sort={sort}, status={status})")
+
+    # Log de actividad
+    UserActivityService.log_page_view(
+        db=db,
+        user_id=current_user.id,
+        page_name="quick_write_list",
+        details={
+            "page": page,
+            "limit": limit,
+            "sort": sort,
+            "status": status
+        }
+    )
 
     repo = QuickWriteRepository(db)
     data = repo.get_with_pagination(current_user.id, page, limit, sort, status)
@@ -58,6 +72,15 @@ def get_quick_write(
 ):
     """Obtiene un ejercicio específico"""
     logger.debug(f"[get_quick_write] User {current_user.id}: Fetching exercise {note_id}")
+
+    # Log de actividad
+    UserActivityService.log_endpoint_visit(
+        db=db,
+        user_id=current_user.id,
+        endpoint=f"/quick-write/{note_id}",
+        method="GET",
+        details={"note_id": note_id}
+    )
 
     repo = QuickWriteRepository(db)
     note = repo.get(note_id, current_user.id)
@@ -83,6 +106,18 @@ def generate_quick_write_exercises(
     target_user_id = user_id if user_id is not None else current_user.id
 
     logger.info(f"[generate_quick_write_exercises] User {target_user_id}: Requesting generation")
+
+    # Log de actividad
+    UserActivityService.log_feature_interaction(
+        db=db,
+        user_id=current_user.id,
+        feature_name="quick_write_generation",
+        interaction_type="generate",
+        details={
+            "target_user_id": target_user_id,
+            "word_ids_count": len(word_ids) if word_ids else 0
+        }
+    )
 
     # Si no se proporcionan word_ids, obtenerlas por prioridad de aprendizaje
     if not word_ids:
@@ -129,6 +164,16 @@ def update_quick_write(
 ):
     """Actualiza un ejercicio con validación de idioma y revisión de gramática"""
     logger.info(f"[update_quick_write] User {current_user.id}: Updating exercise {note_id}")
+
+    # Log de actividad
+    UserActivityService.log_button_click(
+        db=db,
+        user_id=current_user.id,
+        button_name="update_quick_write",
+        details={
+            "note_id": note_id
+        }
+    )
 
     repo = QuickWriteRepository(db)
     update_data = {}
@@ -216,6 +261,18 @@ def toggle_favorite_quick_write(
         raise HTTPException(status_code=404, detail="Exercise not found")
 
     logger.debug(f"[toggle_favorite_quick_write] Exercise {note_id} favorite toggled to {note.is_favorite}")
+
+    # Log de actividad
+    UserActivityService.log_button_click(
+        db=db,
+        user_id=current_user.id,
+        button_name="toggle_favorite_quick_write",
+        details={
+            "note_id": note_id,
+            "is_favorite": note.is_favorite
+        }
+    )
+
     return {
         "id": note.id,
         "is_favorite": note.is_favorite
@@ -240,6 +297,14 @@ def delete_quick_write(
         raise HTTPException(status_code=404, detail="Exercise not found")
 
     logger.debug(f"[delete_quick_write] Exercise {note_id} deleted")
+
+    # Log de actividad
+    UserActivityService.log_button_click(
+        db=db,
+        user_id=current_user.id,
+        button_name="delete_quick_write",
+        details={"note_id": note_id}
+    )
     return None
 
 
@@ -251,6 +316,14 @@ def check_grammar(
 ):
     """Revisa la gramática y detecta idioma del texto"""
     logger.info(f"[check_grammar] User {current_user.id}: Checking grammar")
+
+    # Log de actividad
+    UserActivityService.log_button_click(
+        db=Session(bind=db.bind),
+        user_id=current_user.id,
+        button_name="check_grammar",
+        details={"text_length": len(text) if text else 0}
+    )
 
     if not text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")

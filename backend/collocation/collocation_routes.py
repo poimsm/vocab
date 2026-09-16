@@ -22,6 +22,7 @@ from collocation.collocation_repository import CollocationRepository
 from words.word_repository import WordRepository
 from examples.helpers import approximate_text_form
 from config import UserProfileManager
+from activity.user_activity_service import UserActivityService
 
 
 router = APIRouter()
@@ -45,6 +46,18 @@ def get_collocations(
 
     Returns unmarked collocations first, then marked ones.
     """
+    # Log de actividad
+    UserActivityService.log_page_view(
+        db=db,
+        user_id=current_user.id,
+        page_name="collocations_list",
+        details={
+            "status": status,
+            "page": page,
+            "limit": limit
+        }
+    )
+
     repository = CollocationRepository(db)
 
     # Obtener total de collocations
@@ -94,6 +107,18 @@ def create_collocation(
     from config import QuotaValidator
     QuotaValidator.validate_max_collocations_per_user(db, current_user.id)
 
+    # Log de actividad
+    UserActivityService.log_feature_interaction(
+        db=db,
+        user_id=current_user.id,
+        feature_name="collocation_creation",
+        interaction_type="create",
+        details={
+            "phrase": request.phrase,
+            "word_id": request.word_id
+        }
+    )
+
     repository = CollocationRepository(db)
     collocation = repository.create(
         user_id=current_user.id,
@@ -124,6 +149,17 @@ def toggle_collocation_status(
     current_user: User = Depends(get_current_user)
 ):
     """Actualiza el estado de marcado de una colocación."""
+    # Log de actividad
+    UserActivityService.log_button_click(
+        db=db,
+        user_id=current_user.id,
+        button_name="toggle_collocation_marked",
+        details={
+            "collocation_id": collocation_id,
+            "is_marked": request.is_marked
+        }
+    )
+
     repository = CollocationRepository(db)
     collocation = repository.toggle_marked(collocation_id, current_user.id, request.is_marked)
 
@@ -155,6 +191,15 @@ def create_collocations_batch(
     # ✅ Validar cuota de collocations
     from config import QuotaValidator
     QuotaValidator.validate_max_collocations_per_user(db, current_user.id)
+
+    # Log de actividad
+    UserActivityService.log_feature_interaction(
+        db=db,
+        user_id=current_user.id,
+        feature_name="collocation_creation",
+        interaction_type="batch",
+        details={"count": len(phrases)}
+    )
 
     repository = CollocationRepository(db)
     collocations = repository.create_many(current_user.id, phrases)
@@ -191,6 +236,14 @@ def delete_collocation(
     current_user: User = Depends(get_current_user)
 ):
     """Elimina una colocación."""
+    # Log de actividad
+    UserActivityService.log_button_click(
+        db=db,
+        user_id=current_user.id,
+        button_name="delete_collocation",
+        details={"collocation_id": collocation_id}
+    )
+
     repository = CollocationRepository(db)
     success = repository.delete(collocation_id, current_user.id)
 
@@ -211,6 +264,14 @@ def delete_all_collocations(
     current_user: User = Depends(get_current_user)
 ):
     """Elimina todas las collocations del usuario."""
+    # Log de actividad
+    UserActivityService.log_button_click(
+        db=db,
+        user_id=current_user.id,
+        button_name="delete_all_collocations",
+        details={}
+    )
+
     repository = CollocationRepository(db)
     count = repository.delete_all(current_user.id)
     logger.info(f"Deleted {count} collocations for user {current_user.id}")
@@ -227,6 +288,15 @@ def generate_initial_collocations(
     # ✅ Validar cuota de collocations
     from config import QuotaValidator
     QuotaValidator.validate_max_collocations_per_user(db, current_user.id)
+
+    # Log de actividad
+    UserActivityService.log_feature_interaction(
+        db=db,
+        user_id=current_user.id,
+        feature_name="collocation_generation",
+        interaction_type="generate_initial",
+        details={}
+    )
 
     repository = CollocationRepository(db)
     existing = repository.get_user_collocations(current_user.id)
@@ -295,6 +365,15 @@ def generate_collocations(
     # ✅ Validar cuota de collocations
     from config import QuotaValidator
     QuotaValidator.validate_max_collocations_per_user(db, current_user.id)
+
+    # Log de actividad
+    UserActivityService.log_feature_interaction(
+        db=db,
+        user_id=current_user.id,
+        feature_name="collocation_generation",
+        interaction_type="generate",
+        details={}
+    )
 
     collocation_repo = CollocationRepository(db)
 

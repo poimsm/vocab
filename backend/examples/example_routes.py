@@ -18,6 +18,7 @@ from learning_path.learning_tracker import LearningTracker
 from examples.example_repository import ExampleRepository
 from examples.user_example_session_repository import UserExampleSessionRepository
 from best_options.best_options_repository import BestOptionRepository
+from activity.user_activity_service import UserActivityService
 
 
 class ExploreRequest(BaseModel):
@@ -817,6 +818,19 @@ def explore_examples(
         f"buffer_ids={request.buffer_queue_item_ids}, buffer_pos={request.buffer_position}"
     )
 
+    # Log de actividad
+    UserActivityService.log_feature_interaction(
+        db=db,
+        user_id=current_user.id,
+        feature_name="examples_explore",
+        interaction_type="_".join(request.actions),
+        details={
+            "actions": request.actions,
+            "limit": request.limit,
+            "buffer_size": len(request.buffer_queue_item_ids)
+        }
+    )
+
     examples = []
     status = "ok"
     buffer_ids = request.buffer_queue_item_ids
@@ -927,6 +941,17 @@ def toggle_example_favorite(
 
     logger.debug(f"[toggle_example_favorite] Example {example_id} is_favorite: {is_favorite}")
 
+    # Log de actividad
+    UserActivityService.log_button_click(
+        db=db,
+        user_id=current_user.id,
+        button_name="toggle_example_favorite",
+        details={
+            "example_id": example_id,
+            "is_favorite": is_favorite
+        }
+    )
+
     return {
         "example_id": example_id,
         "is_favorite": is_favorite
@@ -951,6 +976,17 @@ def toggle_example_marked(
     is_marked = example_repo.toggle_marked(example_id)
 
     logger.debug(f"[toggle_example_marked] Example {example_id} is_marked: {is_marked}")
+
+    # Log de actividad
+    UserActivityService.log_button_click(
+        db=db,
+        user_id=current_user.id,
+        button_name="toggle_example_marked",
+        details={
+            "example_id": example_id,
+            "is_marked": is_marked
+        }
+    )
 
     return {
         "example_id": example_id,
@@ -989,6 +1025,18 @@ def get_favorite_examples(
     - status: "ok"
     """
     logger.info(f"[get_favorite_examples] User {current_user.id}: Fetching favorite examples (page={page}, limit={limit}, is_marked={is_marked}, sort_by={sort_by})")
+
+    # Log de actividad
+    UserActivityService.log_page_view(
+        db=db,
+        user_id=current_user.id,
+        page_name="examples_favorites",
+        details={
+            "page": page,
+            "limit": limit,
+            "sort_by": sort_by
+        }
+    )
 
     example_repo = ExampleRepository(db)
     paginated_data = example_repo.get_examples(page=page, limit=limit, is_marked=is_marked, sort_by=sort_by)

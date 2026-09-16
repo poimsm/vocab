@@ -2,6 +2,9 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { quickWriteApi, type QuickWriteExercise } from '@/services/quickWriteApi'
+import { useActivityTracking } from '@/composables/useActivityTracking'
+
+const { trackButtonClick } = useActivityTracking()
 
 interface LocalResponse {
   id: number
@@ -138,6 +141,7 @@ const handleWindowScroll = () => {
 }
 
 const toggleFilter = () => {
+  trackButtonClick('toggle_quickwrite_filter', { show_only_completed: !showOnlyCompleted.value })
   showOnlyCompleted.value = !showOnlyCompleted.value
   currentPage.value = 1
   prompts.value = []
@@ -148,6 +152,7 @@ const toggleFilter = () => {
 }
 
 const generateMoreExercises = async () => {
+  trackButtonClick('generate_quickwrite_exercises')
   isGenerating.value = true
   generateError.value = null
 
@@ -193,6 +198,7 @@ const hasUsedWord = (text: string, promptId: number): boolean => {
 }
 
 const openPrompt = (promptId: number) => {
+  trackButtonClick('open_quickwrite_exercise', { exercise_id: promptId })
   const existing = responses.value.get(promptId)
   if (existing) {
     currentInput.value = existing.original_content
@@ -215,6 +221,8 @@ const closeModal = () => {
 
 const saveResponse = async () => {
   if (!selectedPromptId.value) return
+
+  trackButtonClick('submit_quickwrite_response', { exercise_id: selectedPromptId.value })
 
   showError.value = false
   saveError.value = ''

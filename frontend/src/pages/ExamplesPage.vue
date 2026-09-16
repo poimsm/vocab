@@ -5,6 +5,7 @@ import { Icon } from '@iconify/vue'
 import api from '@/utils/api'
 import { wordApi } from '@/services/wordApi'
 import { useExamplesStore } from '@/stores/examples'
+import { useActivityTracking } from '@/composables/useActivityTracking'
 import LoadingCard from '@/components/LoadingCard.vue'
 import FavoritesView from '@/components/FavoritesView.vue'
 import WordDetailPanel from '@/components/WordDetailPanel.vue'
@@ -13,6 +14,7 @@ import ExtractedWordsModal from '@/components/ExtractedWordsModal.vue'
 
 const router = useRouter()
 const examplesStore = useExamplesStore()
+const { trackButtonClick } = useActivityTracking()
 
 interface TargetWord {
   id: number
@@ -199,6 +201,7 @@ function speakWord() {
 }
 
 function speakExample() {
+  trackButtonClick('speak_example')
   const ex = examplesStore.currentExample
   if (ex) {
     const fullText = ex.text.map(segment => segment.text).join('')
@@ -283,6 +286,7 @@ async function fetchWordDetail(wordId: number) {
 }
 
 async function toggleExampleFav() {
+  trackButtonClick('toggle_example_favorite')
   const ex = examplesStore.currentExample
   if (!ex) return
 
@@ -299,6 +303,7 @@ async function toggleExampleFav() {
 
 // ─── Methods ───
 function handleWordClick(word: TargetWord) {
+  trackButtonClick('click_word_in_example', { word_id: word.id, word: word.main })
   console.log('[handleWordClick] Clicked word:', word.main, 'id:', word.id, 'isMobile:', window.innerWidth <= 768)
   if (window.innerWidth <= 768) {
     router.push(`/words/${word.id}`)
@@ -329,6 +334,7 @@ function closeMobileDetail() {
 async function handleToggleKnown() {
   if (!selectedWord.value) return
 
+  trackButtonClick('mark_word_as_learned', { word_id: selectedWord.value.id })
   console.log('[handleToggleKnown] Toggling learned status for word:', selectedWord.value.id)
 
   try {
@@ -352,6 +358,7 @@ async function handleToggleKnown() {
 async function handleToggleFavorite() {
   if (!selectedWord.value) return
 
+  trackButtonClick('toggle_word_favorite', { word_id: selectedWord.value.id })
   console.log('[handleToggleFavorite] Toggling favorite for word:', selectedWord.value.word)
 
   try {
@@ -400,6 +407,7 @@ async function refreshExample() {
 }
 
 async function prevExample() {
+  trackButtonClick('previous_example')
   console.log('[prevExample] Attempting previous, canGoPrev:', examplesStore.canGoPrev, 'index:', examplesStore.currentIndex)
   if (examplesStore.canGoPrev) {
     examplesStore.prevExample()
@@ -414,6 +422,7 @@ async function prevExample() {
 }
 
 async function nextExample() {
+  trackButtonClick('next_example')
   console.log('[nextExample] Attempting next, canGoNext:', examplesStore.canGoNext, 'index:', examplesStore.currentIndex)
   if (examplesStore.canGoNext) {
     const currentEx = examplesStore.currentExample
@@ -441,6 +450,7 @@ function showToast() {
 }
 
 function copyExample() {
+  trackButtonClick('copy_example')
   const ex = examplesStore.currentExample
   if (!ex) return
   const fullText = ex.text.map(segment => segment.text).join('')
@@ -459,6 +469,66 @@ function copyExample() {
       })
   } else {
     copyFallback(fullText)
+  }
+}
+
+// ─── Additional Click Handlers ───
+function openFavoritesModalHandler() {
+  trackButtonClick('open_favorites_modal')
+  openFavoritesModal()
+}
+
+function openExtractedWordsModalHandler() {
+  trackButtonClick('open_extracted_words_modal')
+  showExtractedWordsModal.value = true
+}
+
+function retryFetchExamples() {
+  trackButtonClick('retry_fetch_examples')
+  fetchExamples()
+}
+
+function refreshExampleHandler() {
+  trackButtonClick('refresh_example_or_next')
+  refreshExample()
+}
+
+function closeExtractedWordsModal() {
+  trackButtonClick('close_extracted_words_modal')
+  showExtractedWordsModal.value = false
+}
+
+function closeFavoritesModal() {
+  trackButtonClick('close_favorites_modal')
+  showFavoritesModal.value = false
+}
+
+function handleCloseWordDetail() {
+  trackButtonClick('close_word_detail_panel')
+  closeWordDetail()
+}
+
+function handleSpeakWord(word: string) {
+  trackButtonClick('speak_word_from_detail', { word })
+  speak(word)
+}
+
+function handleToggleFavoriteWord() {
+  trackButtonClick('toggle_word_favorite_from_detail')
+  handleToggleFavorite()
+}
+
+function handleToggleKnownWord() {
+  trackButtonClick('mark_word_known_from_detail')
+  handleToggleKnown()
+}
+
+function handleCloseMobileDetail(v: boolean) {
+  if (!v) {
+    trackButtonClick('close_mobile_word_detail')
+    closeMobileDetail()
+  } else {
+    isMobileDetailOpen.value = v
   }
 }
 
@@ -564,7 +634,7 @@ onUnmounted(() => {
   <!-- Favorites View -->
   <FavoritesView
     :modelValue="showFavoritesModal"
-    @update:modelValue="v => showFavoritesModal = v"
+    @update:modelValue="v => { if (!v) closeFavoritesModal(); else showFavoritesModal = v }"
     @word-click="handleFavoritesWordClick"
   />
 
@@ -576,29 +646,29 @@ onUnmounted(() => {
     <!-- No Words State -->
     <div v-else-if="examplesStore.noWords" class="empty-state">
       <p>No more words to review</p>
-      <button class="retry-btn" @click="fetchExamples">Try Again</button>
+      <button class="retry-btn" @click="retryFetchExamples">Try Again</button>
     </div>
 
     <!-- Error State -->
     <div v-else-if="examplesStore.error" class="error-state">
       <p>{{ examplesStore.error }}</p>
-      <button class="retry-btn" @click="fetchExamples">Retry</button>
+      <button class="retry-btn" @click="retryFetchExamples">Retry</button>
     </div>
 
     <!-- Empty State -->
     <div v-else-if="!examplesStore.currentExample" class="empty-state">
       <p>No examples available</p>
-      <button class="retry-btn" @click="fetchExamples">Generate</button>
+      <button class="retry-btn" @click="retryFetchExamples">Generate</button>
     </div>
 
     <!-- Center: Example Sentence -->
     <div v-else class="sentence-area" :class="{ 'panel-open': selectedWord && !isMobileDetailOpen }">
       <!-- Top Bar -->
       <div class="sentence-top-bar">
-        <button class="top-bar-btn favorites-btn" title="Favorite examples" style="border:0;" @click="openFavoritesModal">
+        <button class="top-bar-btn favorites-btn" title="Favorite examples" style="border:0;" @click="openFavoritesModalHandler">
           <Icon icon="ph:list-heart-thin" width="32" />
         </button>
-        <button class="top-bar-btn add-words-btn" title="Add words" style="border:0;" @click="showExtractedWordsModal = true">
+        <button class="top-bar-btn add-words-btn" title="Add words" style="border:0;" @click="openExtractedWordsModalHandler">
           <Icon icon="solar:add-linear" width="24" />
         </button>
       </div>
@@ -632,7 +702,7 @@ onUnmounted(() => {
         <button class="action-btn" @click="prevExample" :disabled="!examplesStore.canGoPrev" title="Previous">
           <Icon icon="solar:arrow-left-linear" width="22" />
         </button>
-        <button class="action-btn" @click="refreshExample" :disabled="examplesStore.generating" title="Next / New">
+        <button class="action-btn" @click="refreshExampleHandler" :disabled="examplesStore.generating" title="Next / New">
           <Icon v-if="examplesStore.generating" icon="solar:refresh-circle-linear" width="22" class="spinning" />
           <Icon v-else icon="solar:arrow-right-linear" width="22" />
         </button>
@@ -647,27 +717,27 @@ onUnmounted(() => {
   <ExtractedWordsModal
     :modelValue="showExtractedWordsModal"
     :words="examplesStore.currentExample?.extracted_words || []"
-    @update:modelValue="v => showExtractedWordsModal = v"
+    @update:modelValue="v => { if (!v) closeExtractedWordsModal(); else showExtractedWordsModal = v }"
   />
 
   <!-- Word Detail Panel (Desktop) -->
   <WordDetailPanel
     :word="selectedWord"
-    @close="closeWordDetail"
-    @speak="speakWord"
-    @toggle-favorite="handleToggleFavorite"
-    @toggle-known="handleToggleKnown"
+    @close="handleCloseWordDetail"
+    @speak="handleSpeakWord"
+    @toggle-favorite="handleToggleFavoriteWord"
+    @toggle-known="handleToggleKnownWord"
   />
 
   <!-- Mobile Word Detail -->
   <MobileWordDetail
     :modelValue="isMobileDetailOpen"
     :word="selectedWord"
-    @update:modelValue="v => { if (!v) closeMobileDetail() }"
-    @speak-word="speakWord"
+    @update:modelValue="handleCloseMobileDetail"
+    @speak-word="handleSpeakWord"
     @speak="speak"
-    @toggle-favorite="handleToggleFavorite"
-    @toggle-known="handleToggleKnown"
+    @toggle-favorite="handleToggleFavoriteWord"
+    @toggle-known="handleToggleKnownWord"
   />
 
   <!-- Copy Toast Notification -->

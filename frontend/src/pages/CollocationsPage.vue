@@ -3,6 +3,9 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { collocationApi } from '@/services/collocationApi'
+import { useActivityTracking } from '@/composables/useActivityTracking'
+
+const { trackButtonClick } = useActivityTracking()
 
 interface TextSegment {
   text: string
@@ -32,6 +35,7 @@ const totalPages = ref(1)
 const ITEMS_PER_PAGE = 15
 
 const toggleMarked = async (collocation: Collocation) => {
+  trackButtonClick('toggle_collocation_marked', { collocation_id: collocation.id })
   const newStatus = !collocation.is_marked
   isSavingStatus.value = collocation.id
 
@@ -53,11 +57,13 @@ const toggleMarked = async (collocation: Collocation) => {
 
 const handleWordClick = (wordId: number | null) => {
   if (wordId) {
+    trackButtonClick('click_word_in_collocation', { word_id: wordId })
     router.push(`/words/${wordId}`)
   }
 }
 
 const toggleFilter = () => {
+  trackButtonClick('toggle_collocation_filter', { show_only_marked: !showOnlyMarked.value })
   showOnlyMarked.value = !showOnlyMarked.value
   currentPage.value = 1
   collocations.value = []
@@ -65,6 +71,7 @@ const toggleFilter = () => {
 }
 
 const generateMoreCollocations = async () => {
+  trackButtonClick('generate_collocations')
   isGenerating.value = true
   generateError.value = null
 
@@ -85,6 +92,16 @@ const generateMoreCollocations = async () => {
   } finally {
     isGenerating.value = false
   }
+}
+
+const retryLoadCollocations = () => {
+  trackButtonClick('retry_load_collocations')
+  loadCollocations()
+}
+
+const closeGenerateError = () => {
+  trackButtonClick('close_generate_error_alert')
+  generateError.value = null
 }
 
 const loadCollocations = async () => {
@@ -163,7 +180,7 @@ onUnmounted(() => {
     <!-- Error State -->
     <div v-else-if="error" class="error-state">
       <p>{{ error }}</p>
-      <button @click="loadCollocations" class="retry-btn">Retry</button>
+      <button @click="retryLoadCollocations" class="retry-btn">Retry</button>
     </div>
 
     <!-- Empty State -->
@@ -195,7 +212,7 @@ onUnmounted(() => {
       <!-- Generate Error Alert -->
       <div v-if="generateError" class="generate-error-alert">
         <p>{{ generateError }}</p>
-        <button @click="generateError = null" class="close-alert">
+        <button @click="closeGenerateError" class="close-alert">
           <Icon icon="solar:close-linear" width="16" />
         </button>
       </div>

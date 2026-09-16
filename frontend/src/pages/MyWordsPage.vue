@@ -3,6 +3,9 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import api from '@/utils/api'
 import { wordApi } from '@/services/wordApi'
+import { useActivityTracking } from '@/composables/useActivityTracking'
+
+const { trackButtonClick } = useActivityTracking()
 
 // ─── Types ───
 type WordLevel = 'Beginner' | 'Intermediate' | 'Advanced'
@@ -102,6 +105,7 @@ const frequencyLabel = (freq: WordFrequency) => {
 
 // ─── Text-to-Speech ───
 function speak(text: string) {
+  trackButtonClick('speak_word', { word: text })
   if (!window.speechSynthesis) {
     console.warn('Speech synthesis not supported')
     return
@@ -387,10 +391,78 @@ async function getAIExplanation() {
 }
 
 function toggleExplanation() {
+  trackButtonClick('toggle_explanation', { word_id: selectedWord.value?.id })
   if (!showExplanation.value && !selectedWord.value?.explanation) {
     getAIExplanation()
   }
   showExplanation.value = !showExplanation.value
+}
+
+// ─── Filter & View Mode Handlers ───
+function setFilterModeAll() {
+  trackButtonClick('filter_mode_all')
+  filterMode.value = 'all'
+}
+
+function setFilterModeFavorites() {
+  trackButtonClick('filter_mode_favorites')
+  filterMode.value = 'favorites'
+  learningStateFilter.value = 'all'
+}
+
+function setLearningStateAll() {
+  trackButtonClick('learning_state_filter_all')
+  learningStateFilter.value = 'all'
+}
+
+function setLearningStateNew() {
+  trackButtonClick('learning_state_filter_new')
+  learningStateFilter.value = 'new'
+}
+
+function setLearningStateLearning() {
+  trackButtonClick('learning_state_filter_learning')
+  learningStateFilter.value = 'learning'
+}
+
+function setLearningStateMastered() {
+  trackButtonClick('learning_state_filter_mastered')
+  learningStateFilter.value = 'mastered'
+}
+
+function setViewModeList() {
+  trackButtonClick('view_mode_list')
+  viewMode.value = 'list'
+}
+
+function setViewModeGrid() {
+  trackButtonClick('view_mode_grid')
+  viewMode.value = 'grid'
+}
+
+function toggleSearchMobile() {
+  trackButtonClick('toggle_mobile_search')
+  showSearchMobile.value = !showSearchMobile.value
+}
+
+function clearSearch() {
+  trackButtonClick('clear_search')
+  searchQuery.value = ''
+  showSearchMobile.value = false
+}
+
+function toggleFilterMenu() {
+  trackButtonClick('toggle_filter_menu')
+  showFilterMenu.value = !showFilterMenu.value
+}
+
+function closeFilterMenu() {
+  showFilterMenu.value = false
+}
+
+function retryFetchWords() {
+  trackButtonClick('retry_fetch_words')
+  fetchWords(true)
 }
 
 // ─── Computed ───
@@ -398,6 +470,7 @@ function toggleExplanation() {
 
 // ─── Methods ───
 function toggleFavoritesFilter() {
+  trackButtonClick('toggle_favorites_filter', { current_mode: filterMode.value })
   if (filterMode.value === 'favorites') {
     filterMode.value = 'all'
   } else {
@@ -407,14 +480,17 @@ function toggleFavoritesFilter() {
 }
 
 function toggleFavorite(word: Word) {
+  trackButtonClick('toggle_favorite', { word_id: word.id, is_favorite: word.isFavorite })
   toggleFavoriteApi(word)
 }
 
 function deleteWord(id: number) {
+  trackButtonClick('delete_word', { word_id: id })
   deleteWordApi(id)
 }
 
 function openDetail(word: Word) {
+  trackButtonClick('open_word_detail', { word_id: word.id })
   fetchWordDetail(word.id)
   showExplanation.value = false
   if (window.innerWidth <= 768) {
@@ -429,6 +505,7 @@ function closeDetail() {
 }
 
 function openAdd() {
+  trackButtonClick('open_add_word_modal')
   newWordText.value = ''
   if (window.innerWidth <= 768) {
     showAddMobile.value = true
@@ -446,6 +523,7 @@ function closeAdd() {
 }
 
 function addWord() {
+  trackButtonClick('add_word')
   addWordApi()
 }
 
@@ -504,14 +582,14 @@ onUnmounted(() => {
         <button
           class="filter-tab"
           :class="{ active: filterMode === 'all' }"
-          @click="filterMode = 'all'"
+          @click="setFilterModeAll"
         >
           All
         </button>
         <button
           class="filter-tab"
           :class="{ active: filterMode === 'favorites' }"
-          @click="filterMode = 'favorites'; learningStateFilter = 'all'"
+          @click="setFilterModeFavorites"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
@@ -521,7 +599,7 @@ onUnmounted(() => {
         </button>
       </div>
       <!-- Mobile Search Button -->
-      <button class="mobile-search-btn" @click="showSearchMobile = !showSearchMobile">
+      <button class="mobile-search-btn" @click="toggleSearchMobile">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
         </svg>
@@ -537,7 +615,7 @@ onUnmounted(() => {
         <span v-if="totalFavorites > 0" class="mobile-fav-badge">{{ totalFavorites }}</span>
       </button>
       <!-- Mobile Filter Button -->
-      <button class="mobile-filter-btn" :class="{ active: learningStateFilter !== 'all' }" @click="showFilterMenu = !showFilterMenu">
+      <button class="mobile-filter-btn" :class="{ active: learningStateFilter !== 'all' }" @click="toggleFilterMenu">
         <Icon icon="solar:filter-outline" width="18" />
       </button>
     </div>
@@ -548,7 +626,7 @@ onUnmounted(() => {
         class="state-tab"
         :class="{ active: learningStateFilter === 'all' }"
         :disabled="filterMode === 'favorites'"
-        @click="learningStateFilter = 'all'"
+        @click="setLearningStateAll"
       >
         All
       </button>
@@ -556,7 +634,7 @@ onUnmounted(() => {
         class="state-tab"
         :class="{ active: learningStateFilter === 'new' }"
         :disabled="filterMode === 'favorites'"
-        @click="learningStateFilter = 'new'"
+        @click="setLearningStateNew"
       >
         New
       </button>
@@ -564,7 +642,7 @@ onUnmounted(() => {
         class="state-tab"
         :class="{ active: learningStateFilter === 'learning' }"
         :disabled="filterMode === 'favorites'"
-        @click="learningStateFilter = 'learning'"
+        @click="setLearningStateLearning"
       >
         In Progress
       </button>
@@ -572,7 +650,7 @@ onUnmounted(() => {
         class="state-tab"
         :class="{ active: learningStateFilter === 'mastered' }"
         :disabled="filterMode === 'favorites'"
-        @click="learningStateFilter = 'mastered'"
+        @click="setLearningStateMastered"
       >
         Mastered
       </button>
@@ -582,7 +660,7 @@ onUnmounted(() => {
         <button
           class="view-mode-btn"
           :class="{ active: viewMode === 'list' }"
-          @click="viewMode = 'list'"
+          @click="setViewModeList"
           title="List view"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -592,7 +670,7 @@ onUnmounted(() => {
         <button
           class="view-mode-btn"
           :class="{ active: viewMode === 'grid' }"
-          @click="viewMode = 'grid'"
+          @click="setViewModeGrid"
           title="Grid view"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -613,7 +691,7 @@ onUnmounted(() => {
           autofocus
           @keydown.escape="showSearchMobile = false"
         />
-        <button class="mobile-search-close" @click="searchQuery = ''; showSearchMobile = false">
+        <button class="mobile-search-close" @click="clearSearch">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
           </svg>
@@ -623,14 +701,14 @@ onUnmounted(() => {
 
     <!-- Mobile Filter Menu -->
     <transition name="fade">
-      <div v-if="showFilterMenu" class="mobile-filter-backdrop" @click="showFilterMenu = false"></div>
+      <div v-if="showFilterMenu" class="mobile-filter-backdrop" @click="closeFilterMenu"></div>
     </transition>
     <transition name="slide-down">
       <div v-if="showFilterMenu" class="mobile-filter-menu">
         <button
           class="filter-menu-item"
           :class="{ active: learningStateFilter === 'all' }"
-          @click="learningStateFilter = 'all'; showFilterMenu = false"
+          @click="setLearningStateAll(); closeFilterMenu()"
         >
           <span>All</span>
           <svg v-if="learningStateFilter === 'all'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -640,7 +718,7 @@ onUnmounted(() => {
         <button
           class="filter-menu-item"
           :class="{ active: learningStateFilter === 'new' }"
-          @click="learningStateFilter = 'new'; showFilterMenu = false"
+          @click="setLearningStateNew(); closeFilterMenu()"
         >
           <span>New</span>
           <svg v-if="learningStateFilter === 'new'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -650,7 +728,7 @@ onUnmounted(() => {
         <button
           class="filter-menu-item"
           :class="{ active: learningStateFilter === 'learning' }"
-          @click="learningStateFilter = 'learning'; showFilterMenu = false"
+          @click="setLearningStateLearning(); closeFilterMenu()"
         >
           <span>In Progress</span>
           <svg v-if="learningStateFilter === 'learning'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -660,7 +738,7 @@ onUnmounted(() => {
         <button
           class="filter-menu-item"
           :class="{ active: learningStateFilter === 'mastered' }"
-          @click="learningStateFilter = 'mastered'; showFilterMenu = false"
+          @click="setLearningStateMastered(); closeFilterMenu()"
         >
           <span>Mastered</span>
           <svg v-if="learningStateFilter === 'mastered'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -679,7 +757,7 @@ onUnmounted(() => {
     <!-- Error -->
     <div v-else-if="error" class="error-state">
       <p>{{ error }}</p>
-      <button @click="fetchWords(true)" class="retry-btn">Retry</button>
+      <button @click="retryFetchWords" class="retry-btn">Retry</button>
     </div>
 
     <!-- Desktop: Split View -->
@@ -760,7 +838,7 @@ onUnmounted(() => {
       <transition name="slide-panel">
         <aside v-if="selectedWord && !showMobileDetail" class="detail-panel" style="position:fixed;right:0">
           <div class="detail-header">
-            <button class="detail-close" @click="selectedWord = null">
+            <button class="detail-close" @click="trackButtonClick('close_word_detail_panel'); selectedWord = null">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
               </svg>
@@ -887,7 +965,7 @@ onUnmounted(() => {
     <transition name="slide-up">
       <div v-if="showMobileDetail && selectedWord" class="mobile-detail-overlay">
         <div class="mobile-detail-header">
-          <button class="mobile-back-btn" @click="closeDetail">
+          <button class="mobile-back-btn" @click="trackButtonClick('close_mobile_detail'); closeDetail()">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
             </svg>
@@ -1006,11 +1084,11 @@ onUnmounted(() => {
 
     <!-- Desktop: Add Word Modal -->
     <transition name="fade">
-      <div v-if="showAddDesktop" class="modal-overlay" @click.self="closeAdd">
+      <div v-if="showAddDesktop" class="modal-overlay" @click.self="trackButtonClick('close_add_modal_overlay'); closeAdd()">
         <div class="modal-card">
           <div class="modal-header">
             <h3 class="modal-title">Add New Word</h3>
-            <button class="modal-close" @click="closeAdd">
+            <button class="modal-close" @click="trackButtonClick('close_add_modal_button'); closeAdd()">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
               </svg>
@@ -1047,7 +1125,7 @@ onUnmounted(() => {
             </div>
           </div>
           <div class="modal-footer">
-            <button class="modal-btn secondary" @click="closeAdd">Cancel</button>
+            <button class="modal-btn secondary" @click="trackButtonClick('cancel_add_word'); closeAdd()">Cancel</button>
             <button class="modal-btn primary" @click="addWord" :disabled="!newWordText.trim() || adding">
               <span v-if="adding">Adding...</span>
               <span v-else>Add Word</span>
@@ -1060,7 +1138,7 @@ onUnmounted(() => {
     <!-- Mobile: Add Word Inline Panel -->
     <transition name="slide-up">
       <div v-if="showAddMobile" class="mobile-add-panel">
-        <div class="mobile-add-handle" @click="closeAdd">
+        <div class="mobile-add-handle" @click="trackButtonClick('close_mobile_add_panel_handle'); closeAdd()">
           <div class="handle-bar"></div>
         </div>
         <div class="mobile-add-content">
@@ -1090,7 +1168,7 @@ onUnmounted(() => {
             autofocus
           />
           <div class="mobile-add-actions">
-            <button class="mobile-add-btn secondary" @click="closeAdd">Cancel</button>
+            <button class="mobile-add-btn secondary" @click="trackButtonClick('cancel_mobile_add_word'); closeAdd()">Cancel</button>
             <button class="mobile-add-btn primary" @click="addWord" :disabled="!newWordText.trim() || adding">
               <span v-if="adding">Adding...</span>
               <span v-else>Add</span>
@@ -1102,7 +1180,7 @@ onUnmounted(() => {
 
     <!-- Mobile: Backdrop for add panel -->
     <transition name="fade">
-      <div v-if="showAddMobile" class="mobile-backdrop" @click="closeAdd"></div>
+      <div v-if="showAddMobile" class="mobile-backdrop" @click="trackButtonClick('close_mobile_add_backdrop'); closeAdd()"></div>
     </transition>
   </div>
 </template>

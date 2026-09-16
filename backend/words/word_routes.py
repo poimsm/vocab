@@ -16,6 +16,7 @@ from decorators import log_endpoint
 from words.word_repository import WordRepository
 from words.word_generator import WordGenerator
 from config import QuotaValidator, UserProfileManager
+from activity.user_activity_service import UserActivityService
 import ai
 import os
 
@@ -79,6 +80,21 @@ def get_words(
     is_favorite: True para traer solo favoritas, False para traer todas
     """
     logger.info(f"[get_words] User {current_user.id}: Fetching words (sort={sort}, page={page}, limit={limit}, learning_state={learning_state}, is_favorite={is_favorite}, search={search})")
+
+    # Log de actividad
+    UserActivityService.log_page_view(
+        db=db,
+        user_id=current_user.id,
+        page_name="words_list",
+        details={
+            "sort": sort,
+            "page": page,
+            "limit": limit,
+            "learning_state": learning_state,
+            "is_favorite": is_favorite,
+            "search": search
+        }
+    )
 
     word_repo = WordRepository(db)
     paginated_data = word_repo.get_words(
@@ -161,6 +177,15 @@ def get_word(
     """Obtiene detalles completos de una palabra"""
     logger.debug(f"[get_word] User {current_user.id}: Fetching word {word_id}")
 
+    # Log de actividad
+    UserActivityService.log_endpoint_visit(
+        db=db,
+        user_id=current_user.id,
+        endpoint=f"/words/{word_id}",
+        method="GET",
+        details={"word_id": word_id}
+    )
+
     word_repo = WordRepository(db)
     word = word_repo.get(db, word_id)
 
@@ -224,6 +249,15 @@ def create_single_word(
     logger.info(f"[create_single_word] User {current_user.id}: Processing word creation")
     logger.debug(f"[create_single_word] Text: {request_data.text}")
 
+    # Log de actividad
+    UserActivityService.log_feature_interaction(
+        db=db,
+        user_id=current_user.id,
+        feature_name="word_creation",
+        interaction_type="single_word_started",
+        details={"text_length": len(request_data.text)}
+    )
+
     # Validar que el usuario no haya excedido su límite de palabras
     QuotaValidator.validate_max_words_per_user(db, current_user.id)
 
@@ -272,6 +306,15 @@ def create_single_word(
         if existing_word:
             logger.info(f"[create_single_word] Word '{main_word}' already exists for user {current_user.id}")
 
+            # Log de actividad - palabra ya existe
+            UserActivityService.log_feature_interaction(
+                db=db,
+                user_id=current_user.id,
+                feature_name="word_creation",
+                interaction_type="single_word_existing",
+                details={"word_id": existing_word.id, "word": main_word}
+            )
+
             # Retornar detalles de la palabra existente
             explore_examples_count = word_repo.get_explore_examples_count(existing_word.id)
             initial_examples = word_repo.get_initial_examples(existing_word.id)
@@ -302,6 +345,15 @@ def create_single_word(
         task = WordGenerator.create_single(current_user.id, text)
 
         logger.info(f"[create_single_word] Task {task.id} queued for user {current_user.id}")
+
+        # Log de actividad - palabra nueva enqueued
+        UserActivityService.log_feature_interaction(
+            db=db,
+            user_id=current_user.id,
+            feature_name="word_creation",
+            interaction_type="single_word_queued",
+            details={"task_id": str(task.id), "word": main_word}
+        )
 
         return {
             "status": "queued",
@@ -443,8 +495,21 @@ def toggle_favorite(
         logger.warning(f"[toggle_favorite] Word {word_id} not found")
         raise HTTPException(status_code=404, detail="Palabra no encontrada")
 
+    was_favorite = word.is_favorite
     updated_word = word_repo.toggle_favorite(word_id)
     logger.debug(f"[toggle_favorite] Word {word_id} favorite toggled to {updated_word.is_favorite}")
+
+    # Log de actividad
+    UserActivityService.log_button_click(
+        db=db,
+        user_id=current_user.id,
+        button_name="toggle_favorite",
+        details={
+            "word_id": word_id,
+            "was_favorite": was_favorite,
+            "is_favorite": updated_word.is_favorite
+        }
+    )
 
     return {
         "id": updated_word.id,
@@ -471,13 +536,12 @@ def toggle_learned_status(
     logger.info(f"[toggle_learned_status] User {current_user.id}: Toggling learned status for word {word_id}")
 
     word_repo = WordRepository(db)
+    is_learned_target = request_data.get("is_learned", True)
     word = word_repo.get(db, word_id)
 
     if not word or word.user_id != current_user.id:
         logger.warning(f"[toggle_learned_status] Word {word_id} not found")
         raise HTTPException(status_code=404, detail="Palabra no encontrada")
-
-    is_learned_target = request_data.get("is_learned", True)
 
     if is_learned_target:
         # Marcar como aprendida
@@ -497,6 +561,17 @@ def toggle_learned_status(
     # Verificar el estado actualizado
     is_learned = word_repo.is_learned(word_id, ContentType.EXAMPLE)
 
+    # Log de actividad
+    UserActivityService.log_button_click(
+        db=db,
+        user_id=current_user.id,
+        button_name="toggle_learned_status",
+        details={
+            "word_id": word_id,
+            "is_learned": is_learned_target
+        }
+    )
+
     return {
         "status": "ok",
         "message": "Learned status updated",
@@ -514,6 +589,14 @@ def explain_word_endpoint(
 ):
     """Genera y almacena explicación de una palabra"""
     logger.info(f"[explain_word_endpoint] User {current_user.id}: Explaining word {word_id}")
+
+    # Log de actividad
+    UserActivityService.log_button_click(
+        db=db,
+        user_id=current_user.id,
+        button_name="explain_word",
+        details={"word_id": word_id}
+    )
 
     word_repo = WordRepository(db)
     word = word_repo.get(db, word_id)
@@ -573,6 +656,14 @@ def delete_word(
     """Elimina una palabra (soft delete)"""
     logger.info(f"[delete_word] User {current_user.id}: Deleting word {word_id}")
 
+    # Log de actividad
+    UserActivityService.log_button_click(
+        db=db,
+        user_id=current_user.id,
+        button_name="delete_word",
+        details={"word_id": word_id}
+    )
+
     word_repo = WordRepository(db)
     word = word_repo.get(db, word_id)
 
@@ -594,6 +685,15 @@ def export_words_csv(
 ):
     """Exporta las palabras del usuario como CSV"""
     logger.info(f"[export_words_csv] User {current_user.id}: Exporting words")
+
+    # Log de actividad
+    UserActivityService.log_feature_interaction(
+        db=db,
+        user_id=current_user.id,
+        feature_name="word_export",
+        interaction_type="export_csv",
+        details={}
+    )
 
     word_repo = WordRepository(db)
     paginated_data = word_repo.get_words(user_id=current_user.id, limit=10000)

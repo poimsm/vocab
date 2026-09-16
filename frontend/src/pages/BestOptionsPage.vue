@@ -3,7 +3,10 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import api from '@/utils/api'
+import { useActivityTracking } from '@/composables/useActivityTracking'
 import LoadingCard from '@/components/LoadingCard.vue'
+
+const { trackButtonClick } = useActivityTracking()
 
 // ─── Types ───
 interface WordExample {
@@ -167,6 +170,7 @@ function stopPolling() {
 
 // ─── TTS ───
 function speak(text: string) {
+  trackButtonClick('speak_best_option_text')
   if (!window.speechSynthesis) return
   window.speechSynthesis.cancel()
   const u = new SpeechSynthesisUtterance(text)
@@ -240,6 +244,7 @@ async function fetchItems() {
 
 // ─── Interaction ───
 function selectOption(index: number) {
+  trackButtonClick('select_best_option', { option_index: index })
   if (showResult.value) return
   selectedOption.value = index
   showResult.value = true
@@ -255,6 +260,7 @@ function optionClass(index: number): string {
 }
 
 async function next() {
+  trackButtonClick('next_best_option')
   const cur = currentItem.value
   if (!cur) return
 
@@ -272,6 +278,7 @@ async function next() {
 }
 
 function prev() {
+  trackButtonClick('prev_best_option')
   if (canGoPrev.value) {
     currentIndex.value--
     resetState()
@@ -285,7 +292,25 @@ function resetState() {
 }
 
 function toggleDetail() {
+  trackButtonClick('toggle_word_detail_best_options', { word: currentItem.value?.word.main })
   showWordDetail.value = !showWordDetail.value
+}
+
+// ─── Fetch & Retry Handlers ───
+function retryFetchItems() {
+  trackButtonClick('retry_fetch_best_options')
+  fetchItems()
+}
+
+function speakSynonym(word: string) {
+  trackButtonClick('speak_synonym', { synonym: word })
+  speak(word)
+}
+
+function speakMainWord() {
+  if (!currentItem.value) return
+  trackButtonClick('speak_main_word_best_options', { word: currentItem.value.word.main })
+  speak(currentItem.value.word.main)
 }
 
 onMounted(fetchItems)
@@ -300,19 +325,19 @@ onUnmounted(stopPolling)
     <!-- No Words State -->
     <div v-else-if="noWords" class="center-state">
       <p>No more words to review</p>
-      <button class="retry" @click="fetchItems">Try Again</button>
+      <button class="retry" @click="retryFetchItems">Try Again</button>
     </div>
 
     <!-- Error -->
     <div v-else-if="error" class="center-state">
       <p class="err">{{ error }}</p>
-      <button class="retry" @click="fetchItems">Retry</button>
+      <button class="retry" @click="retryFetchItems">Retry</button>
     </div>
 
     <!-- Empty -->
     <div v-else-if="!currentItem" class="center-state">
       <p>No questions</p>
-      <button class="retry" @click="fetchItems">Load</button>
+      <button class="retry" @click="retryFetchItems">Load</button>
     </div>
 
     <!-- Quiz -->
@@ -335,7 +360,7 @@ onUnmounted(stopPolling)
               v-for="s in currentItem.word.synonyms"
               :key="s"
               class="syn"
-              @click.stop="speak(s)"
+              @click.stop="speakSynonym(s)"
             >{{ s }}</span>
           </div>
           <div v-if="currentItem.word.examples.length" class="examples">

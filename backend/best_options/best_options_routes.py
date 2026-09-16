@@ -12,6 +12,7 @@ from decorators import log_endpoint
 from best_options.best_options_schemas import BestOptionResponse
 from best_options.best_options_repository import BestOptionRepository
 from examples.example_repository import ExampleRepository
+from activity.user_activity_service import UserActivityService
 
 
 class BestOptionExploreRequest(BaseModel):
@@ -200,6 +201,18 @@ def explore_best_options(
     logger.info(
         f"[explore_best_options] User {current_user.id}: actions={request.actions}, "
         f"resolve_id={request.resolve_queue_item_id}, limit={request.limit}"
+    )
+
+    # Log de actividad
+    UserActivityService.log_feature_interaction(
+        db=db,
+        user_id=current_user.id,
+        feature_name="best_options_explore",
+        interaction_type="_".join(request.actions),
+        details={
+            "actions": request.actions,
+            "limit": request.limit
+        }
     )
 
     items = []

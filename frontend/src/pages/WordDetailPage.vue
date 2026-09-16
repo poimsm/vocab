@@ -4,6 +4,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { wordApi, type WordDetail } from '@/services/wordApi'
 import { useExamplesStore } from '@/stores/examples'
+import { useActivityTracking } from '@/composables/useActivityTracking'
+
+const { trackButtonClick } = useActivityTracking()
 
 const route = useRoute()
 const router = useRouter()
@@ -33,6 +36,7 @@ const getAIExplanation = async () => {
 }
 
 const toggleExplanation = () => {
+  trackButtonClick('toggle_word_explanation', { word_id: word.value?.id })
   if (!showExplanation.value && !word.value?.explanation) {
     getAIExplanation()
   }
@@ -66,6 +70,7 @@ const loadWord = async () => {
 
 const toggleFavorite = async () => {
   if (!word.value || isSavingFavorite.value) return
+  trackButtonClick('toggle_word_favorite_detail', { word_id: wordId.value, is_favorite: word.value.is_favorite })
   isSavingFavorite.value = true
   try {
     const result = await wordApi.toggleFavorite(wordId.value)
@@ -80,6 +85,7 @@ const toggleFavorite = async () => {
 
 const markAsLearned = async () => {
   if (!word.value || isSavingLearned.value) return
+  trackButtonClick('mark_word_as_learned_detail', { word_id: wordId.value, word: word.value.main })
   console.log('[WordDetailPage.markAsLearned] Marking word as learned:', word.value.main, 'id:', word.value.id, 'current is_learned:', word.value.is_learned)
 
   isSavingLearned.value = true
@@ -106,6 +112,7 @@ const markAsLearned = async () => {
 
 const speak = () => {
   if (!word.value) return
+  trackButtonClick('speak_word_detail', { word: word.value.main })
   const utterance = new SpeechSynthesisUtterance(word.value.main)
   utterance.lang = 'en-US'
   window.speechSynthesis.speak(utterance)
