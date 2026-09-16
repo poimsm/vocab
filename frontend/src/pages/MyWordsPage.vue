@@ -496,6 +496,11 @@ function closeRelearnDialog() {
   relearnProgress.value = 0
 }
 
+function selectRelearnCount(count: number) {
+  relearnCount.value = count
+  trackButtonClick('relearn_count_selected', { count })
+}
+
 async function simulateRelearn() {
   trackButtonClick('relearn_start', { count: relearnCount.value })
   isRelearnProcessing.value = true
@@ -1318,7 +1323,7 @@ onUnmounted(() => {
                     :key="count"
                     class="count-btn"
                     :class="{ active: relearnCount === count }"
-                    @click="relearnCount = count"
+                    @click="selectRelearnCount(count)"
                   >
                     {{ count }}
                   </button>

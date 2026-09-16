@@ -617,6 +617,13 @@ def relearn_words(
     # Validar que el count esté en rango válido
     if not isinstance(count, int) or count < 1 or count > 50:
         logger.warning(f"[relearn_words] Invalid count: {count}")
+        UserActivityService.log_feature_interaction(
+            db=db,
+            user_id=current_user.id,
+            feature_name="relearn",
+            interaction_type="relearn_error_invalid_count",
+            details={"count": count}
+        )
         return {
             "status": "error",
             "message": "El count debe ser un número entre 1 y 50"
@@ -638,6 +645,13 @@ def relearn_words(
 
     if not reset_word_ids:
         logger.warning(f"[relearn_words] No learned words found for user {current_user.id}")
+        UserActivityService.log_feature_interaction(
+            db=db,
+            user_id=current_user.id,
+            feature_name="relearn",
+            interaction_type="relearn_error_no_learned_words",
+            details={"requested_count": count}
+        )
         return {
             "status": "error",
             "message": "No hay palabras aprendidas para reaprender",
