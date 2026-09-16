@@ -85,6 +85,10 @@ export const useExamplesStore = defineStore('examples', () => {
     return state.value.currentIndex >= state.value.examples.length - 1
   })
 
+  const favoriteCount = computed(() => {
+    return state.value.examples.filter(ex => ex.is_favorite).length
+  })
+
   // ─── Mutations ───
   function resetBuffer() {
     state.value.bufferIds = []
@@ -495,6 +499,7 @@ export const useExamplesStore = defineStore('examples', () => {
     canGoNext,
     canGoPrev,
     isAtEndOfBuffer,
+    favoriteCount,
 
     // Methods
     resetBuffer,

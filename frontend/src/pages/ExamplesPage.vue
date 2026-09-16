@@ -665,10 +665,12 @@ onUnmounted(() => {
     <div v-else class="sentence-area" :class="{ 'panel-open': selectedWord && !isMobileDetailOpen }">
       <!-- Top Bar -->
       <div class="sentence-top-bar">
-        <button class="top-bar-btn favorites-btn" title="Favorite examples" style="border:0;" @click="openFavoritesModalHandler">
-          <Icon icon="ph:list-heart-thin" width="32" />
+        <button class="top-bar-btn favorites-btn" title="View favorite examples" @click="openFavoritesModalHandler">
+          <Icon icon="mdi:heart-multiple" width="24" />
+          <span class="favorites-label">Favorites</span>
+          <span v-if="examplesStore.favoriteCount > 0" class="favorites-badge">{{ examplesStore.favoriteCount }}</span>
         </button>
-        <button class="top-bar-btn add-words-btn" title="Add words" style="border:0;" @click="openExtractedWordsModalHandler">
+        <button class="top-bar-btn add-words-btn" title="Add words" @click="openExtractedWordsModalHandler">
           <Icon icon="solar:add-linear" width="24" />
         </button>
       </div>
@@ -792,12 +794,42 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   transition: all 0.2s ease;
   padding: 10px;
 }
 
 .top-bar-btn:hover {
   color: #e2e0e8;
+}
+
+.favorites-btn {
+  gap: 8px;
+  padding: 10px;
+}
+
+.favorites-btn:hover {
+  color: #c4b5fd;
+}
+
+.favorites-label {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.favorites-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: rgba(168, 85, 247, 0.3);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #d8b4fe;
 }
 
 .sentence-wrapper {
@@ -1035,6 +1067,10 @@ onUnmounted(() => {
 
   .action-buttons {
     gap: 24px;
+  }
+
+  .favorites-label {
+    font-size: 16px;
   }
 }
 </style>

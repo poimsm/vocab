@@ -76,6 +76,13 @@ const addSuccess = ref<string | null>(null)
 const showExplanation = ref(false)
 const isExplaining = ref(false)
 
+// ─── Relearn State ───
+const showRelearnDialog = ref(false)
+const relearnCount = ref(5)
+const isRelearnProcessing = ref(false)
+const relearnProgress = ref(0)
+const relearnSuccess = ref(false)
+
 // ─── View Mode State ───
 const viewMode = ref<'list' | 'grid'>('list')
 
@@ -475,6 +482,42 @@ function retryFetchWords() {
   fetchWords(true)
 }
 
+function openRelearnDialog() {
+  trackButtonClick('open_relearn_dialog')
+  relearnCount.value = 5
+  relearnProgress.value = 0
+  relearnSuccess.value = false
+  showRelearnDialog.value = true
+}
+
+function closeRelearnDialog() {
+  showRelearnDialog.value = false
+  relearnSuccess.value = false
+  relearnProgress.value = 0
+}
+
+async function simulateRelearn() {
+  trackButtonClick('simulate_relearn', { count: relearnCount.value })
+  isRelearnProcessing.value = true
+  relearnProgress.value = 0
+  relearnSuccess.value = false
+
+  // Simulate progress animation
+  const interval = setInterval(() => {
+    relearnProgress.value += Math.random() * 35
+    if (relearnProgress.value >= 100) {
+      relearnProgress.value = 100
+      clearInterval(interval)
+
+      setTimeout(() => {
+        isRelearnProcessing.value = false
+        relearnSuccess.value = true
+      }, 300)
+    }
+  }, 200)
+}
+
+
 // ─── Computed ───
 // (totalFavorites removed - now using totalFavorites from API)
 
@@ -567,12 +610,20 @@ onUnmounted(() => {
         <h1 class="words-title">My Words</h1>
         <p class="words-subtitle">{{ totalWords }} words saved</p>
       </div>
-      <button class="add-btn" @click="openAdd" :disabled="loading">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
-        </svg>
-        <span>Add Word</span>
-      </button>
+      <div class="header-actions">
+        <button class="relearn-btn" @click="openRelearnDialog" :disabled="loading" title="Randomly relearn some words">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-4.95M20.49 15a9 9 0 01-14.85 4.95"/>
+          </svg>
+          <span>Relearn</span>
+        </button>
+        <button class="add-btn" @click="openAdd" :disabled="loading">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+          </svg>
+          <span>Add Word</span>
+        </button>
+      </div>
     </header>
 
     <!-- Search & Filter Toolbar -->
@@ -1192,6 +1243,77 @@ onUnmounted(() => {
     <transition name="fade">
       <div v-if="showAddMobile" class="mobile-backdrop" @click="trackButtonClick('close_mobile_add_backdrop'); closeAdd()"></div>
     </transition>
+
+    <!-- Relearn Dialog -->
+    <transition name="fade">
+      <div v-if="showRelearnDialog" class="modal-overlay" @click.self="closeRelearnDialog">
+        <div class="modal-card relearn-modal">
+          <div class="modal-header">
+            <h3 class="modal-title">Relearn Words</h3>
+            <button class="modal-close" @click="closeRelearnDialog" :disabled="isRelearnProcessing">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <!-- Success State -->
+            <div v-if="relearnSuccess" class="relearn-success-state">
+              <div class="success-icon-container">
+                <svg class="success-icon" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+              <h4 class="success-title">Relearning Started!</h4>
+              <p class="success-message">
+                {{ relearnCount }} words are back in your LEARNING list to help reinforce your memory.
+              </p>
+              <button class="modal-btn primary" @click="closeRelearnDialog">Done</button>
+            </div>
+
+            <!-- Input State -->
+            <div v-else>
+              <p class="modal-hint">
+                Select the number of learned words you want to review again.
+              </p>
+
+              <!-- Processing State -->
+              <div v-if="isRelearnProcessing" class="processing-state">
+                <div class="progress-container">
+                  <div class="progress-bar">
+                    <div class="progress-fill" :style="{ width: relearnProgress + '%' }"></div>
+                  </div>
+                  <p class="progress-text">Processing... {{ Math.floor(relearnProgress) }}%</p>
+                </div>
+              </div>
+
+              <!-- Count Selection -->
+              <div v-else class="count-selection">
+                <p class="selection-label">How many words?</p>
+                <div class="count-buttons">
+                  <button
+                    v-for="count in [5, 10, 15]"
+                    :key="count"
+                    class="count-btn"
+                    :class="{ active: relearnCount === count }"
+                    @click="relearnCount = count"
+                  >
+                    {{ count }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="!relearnSuccess && !isRelearnProcessing" class="modal-footer">
+            <button class="modal-btn secondary" @click="closeRelearnDialog" :disabled="isRelearnProcessing">Cancel</button>
+            <button class="modal-btn primary" @click="simulateRelearn" :disabled="isRelearnProcessing || relearnCount < 1">
+              Relearn {{ relearnCount }} Words
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -1248,6 +1370,21 @@ onUnmounted(() => {
   .words-subtitle {
     font-size: 17px;
   }
+  .selection-label {
+    font-size: 15px !important;
+  }
+
+  .count-btn {
+    font-size: 17px !important;
+  }
+
+  .success-message {
+    font-size: 17px !important;
+  }
+
+  .success-title{
+    font-size: 22px !important;
+  }
 }
 
 .add-btn {
@@ -1278,6 +1415,46 @@ onUnmounted(() => {
 }
 
 .add-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ─── Header Actions Container ─── */
+.header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* ─── Relearn Button ─── */
+.relearn-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 12px;
+  border: none;
+  background: #0891b2;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .relearn-btn {
+    font-size: 17px;
+  }
+}
+
+.relearn-btn:hover:not(:disabled) {
+  background: #0e7490;
+  transform: translateY(-1px);
+}
+
+.relearn-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
@@ -2531,7 +2708,7 @@ onUnmounted(() => {
 }
 
 .modal-hint {
-  font-size: 13px;
+  font-size: 15.5px;
   color: #9c99ab;
   line-height: 1.5;
   margin: 0;
@@ -2539,7 +2716,7 @@ onUnmounted(() => {
 
 @media (max-width: 768px) {
   .modal-hint {
-    font-size: 16px;
+    font-size: 18px !important;
   }
 }
 
@@ -2683,6 +2860,132 @@ onUnmounted(() => {
 .modal-btn.primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ─── Relearn Modal ─── */
+.relearn-modal {
+  max-width: 500px;
+}
+
+.relearn-success-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 20px 0;
+}
+
+.success-icon-container {
+  margin-bottom: 20px;
+}
+
+.success-icon {
+  stroke: #22c55e;
+  animation: successPulse 0.6s ease-out;
+}
+
+@keyframes successPulse {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.success-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #e2e0e8;
+  margin: 0 0 12px 0;
+}
+
+.success-message {
+  font-size: 15.5px;
+  color: #b8b5c8;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.processing-state {
+  padding: 20px 0;
+}
+
+.progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0891b2, #06b6d4);
+  transition: width 0.3s ease;
+  border-radius: 4px;
+}
+
+.progress-text {
+  font-size: 14px;
+  color: #9c99ab;
+  text-align: center;
+  margin: 0;
+}
+
+.count-selection {
+  padding: 20px 0;
+}
+
+.selection-label {
+  font-size: 14px;
+  color: #9c99ab;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 16px 0;
+  font-weight: 600;
+}
+
+.count-buttons {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.count-btn {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #b8b5c8;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.count-btn:hover {
+  border-color: rgba(8, 145, 178, 0.3);
+  background: rgba(8, 145, 178, 0.1);
+  color: #06b6d4;
+}
+
+.count-btn.active {
+  background: #0891b2;
+  color: white;
+  border-color: #0891b2;
 }
 
 /* ─── Mobile Add Panel (Bottom Sheet) ─── */
@@ -3151,6 +3454,15 @@ onUnmounted(() => {
     border-radius: 12px;
   }
 
+  .relearn-btn span {
+    display: none;
+  }
+
+  .relearn-btn {
+    padding: 10px;
+    border-radius: 12px;
+  }
+
   .words-toolbar {
     flex-direction: row;
     align-items: center;
@@ -3209,6 +3521,41 @@ onUnmounted(() => {
   .word-definition {
     -webkit-line-clamp: 1;
   }
+
+  /* Relearn Modal - Mobile */
+  .relearn-modal {
+    max-width: 95vw;
+  }
+
+  .modal-hint {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  .success-title {
+    font-size: 16px;
+  }
+
+  .success-message {
+    font-size: 13px;
+  }
+
+  .selection-label {
+    font-size: 13px;
+  }
+
+  .count-buttons {
+    gap: 10px;
+  }
+
+  .count-btn {
+    font-size: 13px;
+    padding: 8px;
+  }
+
+  .progress-text {
+    font-size: 13px;
+  }
 }
 
 @media (min-width: 769px) {
@@ -3216,6 +3563,6 @@ onUnmounted(() => {
   .mobile-add-panel,
   .mobile-backdrop {
     display: none;
-  }
+  }  
 }
 </style>

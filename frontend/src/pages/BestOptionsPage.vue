@@ -488,6 +488,10 @@ onUnmounted(stopPolling)
   .word {
     font-size: 18px;
   }
+
+  .quiz {
+    padding: 0 15px !important;
+  }
 }
 .word:hover {
   background: rgba(124,58,237,0.2);
