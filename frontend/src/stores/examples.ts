@@ -45,6 +45,9 @@ interface ExamplesState {
   error: string | null
   noWords: boolean
   isPolling: boolean
+
+  // Favorites counter
+  unmarkedFavoritesCount: number
 }
 
 export const useExamplesStore = defineStore('examples', () => {
@@ -59,6 +62,7 @@ export const useExamplesStore = defineStore('examples', () => {
     error: null,
     noWords: false,
     isPolling: false,
+    unmarkedFavoritesCount: 0,
   })
 
   // ─── Getters ───
@@ -160,6 +164,11 @@ export const useExamplesStore = defineStore('examples', () => {
     }
   }
 
+  function setUnmarkedFavoritesCount(count: number) {
+    state.value.unmarkedFavoritesCount = count
+    console.log('[setUnmarkedFavoritesCount] Updated to:', count)
+  }
+
   function setGenerating(value: boolean) {
     state.value.generating = value
   }
@@ -196,6 +205,7 @@ export const useExamplesStore = defineStore('examples', () => {
       error: null,
       noWords: false,
       isPolling: false,
+      unmarkedFavoritesCount: 0,
     }
   }
 
@@ -482,6 +492,21 @@ export const useExamplesStore = defineStore('examples', () => {
     }
   }
 
+  async function fetchUnmarkedFavoritesCount() {
+    // Fetch the count of unmarked favorite examples from the backend
+    console.log('[fetchUnmarkedFavoritesCount] Fetching unmarked favorites count from backend')
+
+    try {
+      const response = await api.get('/examples/favorites/count')
+      const count = response.data?.count ?? 0
+
+      state.value.unmarkedFavoritesCount = count
+      console.log('[fetchUnmarkedFavoritesCount] Count loaded:', count)
+    } catch (e: any) {
+      console.error('[fetchUnmarkedFavoritesCount] Error:', e)
+    }
+  }
+
   return {
     // State
     bufferIds: computed(() => state.value.bufferIds),
@@ -492,6 +517,7 @@ export const useExamplesStore = defineStore('examples', () => {
     error: computed(() => state.value.error),
     noWords: computed(() => state.value.noWords),
     isPolling: computed(() => state.value.isPolling),
+    unmarkedFavoritesCount: computed(() => state.value.unmarkedFavoritesCount),
 
     // Getters
     currentExample,
@@ -513,6 +539,7 @@ export const useExamplesStore = defineStore('examples', () => {
     setError,
     setNoWords,
     setIsPolling,
+    setUnmarkedFavoritesCount,
     clearState,
     isQueueItemResolved,
     markQueueItemAsResolved,
@@ -523,5 +550,6 @@ export const useExamplesStore = defineStore('examples', () => {
     syncBuffer,
     syncAndFetchNext,
     navigateExample,
+    fetchUnmarkedFavoritesCount,
   }
 })

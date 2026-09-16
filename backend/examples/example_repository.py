@@ -467,3 +467,20 @@ class ExampleRepository:
             "limit": limit,
             "pages": pages
         }
+
+    def count_unmarked_favorites(self) -> int:
+        """
+        Cuenta el total de ejemplos favoritos no marcados.
+
+        Retorna el número de ejemplos donde is_favorite=True e is_marked=False.
+        """
+        count = self.session.exec(
+            select(func.count(Example.id))
+            .where(
+                Example.is_favorite == True,
+                Example.is_marked == False
+            )
+        ).first() or 0
+
+        logger.debug(f"[ExampleRepository] Unmarked favorite examples count: {count}")
+        return count

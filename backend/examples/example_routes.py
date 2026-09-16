@@ -952,9 +952,13 @@ def toggle_example_favorite(
         }
     )
 
+    # Obtener el contador actualizado de favoritos no marcados
+    unmarked_count = example_repo.count_unmarked_favorites()
+
     return {
         "example_id": example_id,
-        "is_favorite": is_favorite
+        "is_favorite": is_favorite,
+        "unmarked_favorites_count": unmarked_count
     }
 
 
@@ -988,9 +992,14 @@ def toggle_example_marked(
         }
     )
 
+    # Obtener el contador actualizado de favoritos no marcados
+    example_repo = ExampleRepository(db)
+    unmarked_count = example_repo.count_unmarked_favorites()
+
     return {
         "example_id": example_id,
-        "is_marked": is_marked
+        "is_marked": is_marked,
+        "unmarked_favorites_count": unmarked_count
     }
 
 
@@ -1062,6 +1071,32 @@ def get_favorite_examples(
         "page": paginated_data["page"],
         "limit": paginated_data["limit"],
         "pages": paginated_data["pages"],
+        "status": "ok"
+    }
+
+
+@router.get("/favorites/count")
+@log_endpoint
+def get_favorites_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Obtiene el contador de ejemplos favoritos no marcados del usuario.
+
+    Retorna:
+    - count: Total de ejemplos donde is_favorite=True e is_marked=False
+    - status: "ok"
+    """
+    logger.info(f"[get_favorites_count] User {current_user.id}: Fetching unmarked favorites count")
+
+    example_repo = ExampleRepository(db)
+    count = example_repo.count_unmarked_favorites()
+
+    logger.debug(f"[get_favorites_count] User {current_user.id} has {count} unmarked favorites")
+
+    return {
+        "count": count,
         "status": "ok"
     }
 

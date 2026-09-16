@@ -295,6 +295,11 @@ async function toggleExampleFav() {
 
     if (response.data && response.data.is_favorite !== undefined) {
       examplesStore.updateExampleFavorite(response.data.is_favorite)
+
+      // Update the unmarked favorites count if provided
+      if (response.data.unmarked_favorites_count !== undefined) {
+        examplesStore.setUnmarkedFavoritesCount(response.data.unmarked_favorites_count)
+      }
     }
   } catch (e) {
     alert('Failed to toggle favorite')
@@ -577,6 +582,9 @@ onMounted(async () => {
   isComponentMounted.value = true
 
   try {
+    // Load the unmarked favorites count
+    await examplesStore.fetchUnmarkedFavoritesCount()
+
     // Restaurar sesión guardada y cargar ejemplos en UNA sola llamada atómica
     // Backend intenta restaurar buffer de sesión guardada si no se proporciona
     // Acción: "resume" (chequea visitados + carga nuevo buffer si todos fueron visitados + obtiene ejemplos)
@@ -668,7 +676,7 @@ onUnmounted(() => {
         <button class="top-bar-btn favorites-btn" title="View favorite examples" @click="openFavoritesModalHandler">
           <Icon icon="mdi:heart-multiple" width="24" />
           <span class="favorites-label">Favorites</span>
-          <span v-if="examplesStore.favoriteCount > 0" class="favorites-badge">{{ examplesStore.favoriteCount }}</span>
+          <span v-if="examplesStore.unmarkedFavoritesCount > 0" class="favorites-badge">{{ examplesStore.unmarkedFavoritesCount }}</span>
         </button>
         <button class="top-bar-btn add-words-btn" title="Add words" @click="openExtractedWordsModalHandler">
           <Icon icon="solar:add-linear" width="24" />
@@ -1071,6 +1079,10 @@ onUnmounted(() => {
 
   .favorites-label {
     font-size: 16px;
+  }
+
+  .sentence-top-bar {
+    justify-content: space-between;
   }
 }
 </style>
