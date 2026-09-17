@@ -186,11 +186,11 @@ onUnmounted(() => {
     <!-- Empty State -->
     <div v-else-if="collocations.length === 0" class="empty-state">
       <Icon icon="fluent-emoji:smiling-face" width="48" />
-      <p>No collocations yet. Create some to get started!</p>
+      <p>Nothing here yet. Generate some to get started!</p>
       <button @click="generateMoreCollocations" class="generate-btn" :disabled="isGenerating">
         <Icon v-if="!isGenerating" icon="solar:bolt-2-linear" width="18" />
         <span v-if="isGenerating">Generating...</span>
-        <span v-else>Generate Collocations</span>
+        <span v-else>Generate More</span>
       </button>
     </div>
 

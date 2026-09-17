@@ -387,6 +387,16 @@ def generate_collocations(
         LearningState.REVIEW
     ]
 
+    # Obtener palabras vistas (excluyendo NEW)
+    in_progress_states = [
+        LearningState.LEARNING,
+        LearningState.REINFORCING,
+        LearningState.SPACING,
+        LearningState.ALMOST_LEARNED,
+        LearningState.LEARNED,
+        LearningState.REVIEW
+    ]
+
     # Obtener palabras en progreso primero
     in_progress_words = db.exec(
         select(Word)
@@ -394,7 +404,6 @@ def generate_collocations(
         .where(
             Word.user_id == current_user.id,
             Word.is_active == True,
-            WordStatistics.type == ContentType.EXAMPLE,
             WordStatistics.learning_state.in_(in_progress_states)
         )
         .distinct(Word.id)
@@ -402,17 +411,51 @@ def generate_collocations(
 
     logger.info(f"Found {len(in_progress_words)} in-progress words for user {current_user.id}")
 
-    if not in_progress_words:
-        logger.warning(f"No in-progress words available for user {current_user.id}")
+    selected_words = in_progress_words
+
+    # FALLBACK 1: Si no hay en progreso, intentar con palabras NEW
+    if not selected_words:
+        logger.info(f"No in-progress words, trying fallback with NEW words for user {current_user.id}")
+        new_words = db.exec(
+            select(Word)
+            .join(WordStatistics)
+            .where(
+                Word.user_id == current_user.id,
+                Word.is_active == True,
+                WordStatistics.learning_state == LearningState.NEW
+            )
+            .distinct(Word.id)
+        ).all()
+
+        logger.info(f"Found {len(new_words)} NEW words for fallback for user {current_user.id}")
+        selected_words = new_words
+
+    # FALLBACK 2: Si tampoco hay palabras NEW, traer cualquier palabra activa
+    if not selected_words:
+        logger.info(f"No NEW words, trying all active words for user {current_user.id}")
+        any_words = db.exec(
+            select(Word)
+            .where(
+                Word.user_id == current_user.id,
+                Word.is_active == True
+            )
+        ).all()
+
+        logger.info(f"Found {len(any_words)} active words (fallback 2) for user {current_user.id}")
+        selected_words = any_words
+
+    # Si tampoco hay palabras activas, retornar error
+    if not selected_words:
+        logger.warning(f"No words available at all for user {current_user.id}")
         return {
             "status": "no_words",
-            "message": "No words available to generate collocations",
+            "message": "No words available to generate collocations. Please add some words first.",
             "count": 0,
             "items": []
         }
 
     # Revolver y seleccionar máximo 15 palabras
-    selected_words = list(in_progress_words)
+    selected_words = list(selected_words)
     random.shuffle(selected_words)
     selected_words = selected_words[:15]
 

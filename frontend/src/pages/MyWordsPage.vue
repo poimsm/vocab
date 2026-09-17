@@ -740,7 +740,7 @@ onUnmounted(() => {
         :disabled="filterMode === 'favorites'"
         @click="setLearningStateMastered"
       >
-        Mastered
+        Learned
       </button>
 
       <!-- View Mode Toggle -->
@@ -828,7 +828,7 @@ onUnmounted(() => {
           :class="{ active: learningStateFilter === 'mastered' }"
           @click="setLearningStateMastered(); closeFilterMenu()"
         >
-          <span>Mastered</span>
+          <span>Learned</span>
           <svg v-if="learningStateFilter === 'mastered'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="20 6 9 17 4 12"/>
           </svg>

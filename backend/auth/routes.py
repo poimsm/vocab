@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlmodel import Session, select
 from db import get_db
-from models import User, Word, Example, ExampleWord, ExampleType
+from models import User, Word, Example, ExampleWord, ExampleType, WordStatistics, LearningState, ContentType
 from auth.repository import hash_password, verify_password, create_access_token
 from pydantic import BaseModel, EmailStr
 from logging_client import logger
@@ -57,6 +57,17 @@ def assign_default_words(user_id: int, db: Session):
             )
             db.add(word)
             db.flush()  # Flush to get the word ID
+
+            # Create WordStatistics for this word (NEW state, both content types)
+            for content_type in [ContentType.EXAMPLE, ContentType.BEST_OPTIONS]:
+                word_stats = WordStatistics(
+                    word_id=word.id,
+                    type=content_type,
+                    learning_state=LearningState.NEW,
+                    times_seen=0,
+                    current_cycle_seen=0
+                )
+                db.add(word_stats)
 
             # Create examples for this word
             examples_list = word_data.get("examples", [])
