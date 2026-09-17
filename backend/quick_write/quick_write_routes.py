@@ -16,7 +16,8 @@ from quick_write.quick_write_schemas import (
 from quick_write.quick_write_repository import QuickWriteRepository
 from quick_write.grammar_engine import GrammarEngine
 from words.word_repository import WordRepository
-from models import ContentType
+from models import ContentType, LearningState
+from sqlmodel import select
 from activity.user_activity_service import UserActivityService
 import ai
 
@@ -121,19 +122,47 @@ def generate_quick_write_exercises(
 
     # Si no se proporcionan word_ids, obtenerlas por prioridad de aprendizaje
     if not word_ids:
-        logger.debug(f"[generate_quick_write_exercises] No word_ids provided, fetching 30 words by learning priority")
+        logger.debug(f"[generate_quick_write_exercises] No word_ids provided, fetching words by learning priority")
         word_repo = WordRepository(db)
+
+        # NIVEL 1: Intentar con tipo EXAMPLE
         words = word_repo.get_words_by_learning_priority(
             user_id=target_user_id,
             limit=40,
             content_type=ContentType.EXAMPLE
         )
 
+        # FALLBACK 1: Si no hay con tipo EXAMPLE, intentar con BEST_OPTIONS
+        if not words:
+            logger.info(f"[generate_quick_write_exercises] No words with ContentType.EXAMPLE, trying BEST_OPTIONS")
+            words = word_repo.get_words_by_learning_priority(
+                user_id=target_user_id,
+                limit=40,
+                content_type=ContentType.BEST_OPTIONS
+            )
+
+        # FALLBACK 2: Si no hay con ningún tipo específico, traer cualquier palabra activa
+        if not words:
+            logger.info(f"[generate_quick_write_exercises] No words with specific content_type, trying all active words")
+            from models import Word
+            words = db.exec(
+                select(Word).where(
+                    Word.user_id == target_user_id,
+                    Word.is_active == True
+                )
+            ).all()
+
+            # Si hay más que el límite, tomar una muestra aleatoria
+            if len(words) > 40:
+                import random
+                words = random.sample(words, 40)
+                logger.info(f"[generate_quick_write_exercises] Sampled {len(words)} random active words")
+
         if not words:
             raise HTTPException(status_code=400, detail="No words available for exercise generation")
 
         word_ids = [word.id for word in words]
-        logger.info(f"[generate_quick_write_exercises] Fetched {len(word_ids)} words by learning priority")
+        logger.info(f"[generate_quick_write_exercises] Fetched {len(word_ids)} words")
     else:
         logger.info(f"[generate_quick_write_exercises] Using provided {len(word_ids)} word IDs")
 
