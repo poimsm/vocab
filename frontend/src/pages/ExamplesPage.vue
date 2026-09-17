@@ -521,6 +521,10 @@ function handleCloseWordDetail() {
   closeWordDetail()
 }
 
+function handleSpeak() {
+  trackButtonClick('speak_word_from_detail')
+}
+
 function handleSpeakWord(word: string) {
   trackButtonClick('speak_word_from_detail', { word })
   speak(word)
@@ -742,7 +746,7 @@ onUnmounted(() => {
   <WordDetailPanel
     :word="selectedWord"
     @close="handleCloseWordDetail"
-    @speak="handleSpeakWord"
+    @speak="handleSpeak"
     @toggle-favorite="handleToggleFavoriteWord"
     @toggle-known="handleToggleKnownWord"
   />
@@ -752,8 +756,8 @@ onUnmounted(() => {
     :modelValue="isMobileDetailOpen"
     :word="selectedWord"
     @update:modelValue="handleCloseMobileDetail"
-    @speak-word="handleSpeakWord"
-    @speak="speak"
+    @speak-word="handleSpeak"
+    @speak="handleSpeakWord"
     @toggle-favorite="handleToggleFavoriteWord"
     @toggle-known="handleToggleKnownWord"
   />
