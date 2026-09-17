@@ -71,12 +71,13 @@ def seed_missing_profiles():
             return False
 
 
-def clone_user(source_user_id: int, target_user_id: int):
+def clone_user(source_user_id: int, target_user_id: int, clean: bool = False):
     """Clona un usuario con todos sus datos.
 
     Args:
         source_user_id: ID del usuario a clonar
         target_user_id: ID del usuario destino
+        clean: Si es True, limpia todos los datos del usuario destino primero
     """
     from seeds.seed_clone_user import seed_clone_user
     from db import engine
@@ -85,7 +86,7 @@ def clone_user(source_user_id: int, target_user_id: int):
 
     with Session(engine) as session:
         try:
-            seed_clone_user(session, source_user_id, target_user_id)
+            seed_clone_user(session, source_user_id, target_user_id, clean=clean)
             print(f"✅ Usuario {source_user_id} clonado exitosamente a {target_user_id}")
             return True
         except Exception as e:
@@ -147,7 +148,7 @@ def main():
         except ValueError:
             print("❌ Error: Los IDs deben ser números válidos")
             return
-        clone_user(source_user_id, target_user_id)
+        clone_user(source_user_id, target_user_id, clean=True)
 
     elif command in ["-h", "--help", "help"]:
         print(__doc__)
