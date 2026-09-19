@@ -252,6 +252,7 @@ class ContentQueue(SQLModel, table=True):
     user_id: int = Field(foreign_key="users.id", index=True)
     priority: float = Field(default=0.0, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
 
 
 class GenerationQueueMonitorStatus(str, enum.Enum):

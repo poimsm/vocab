@@ -69,10 +69,10 @@ def seed_clone_user(session: Session, source_user_id: int, target_user_id: int, 
             session.exec(delete(ExampleWord).where(ExampleWord.word_id.in_(
                 select(Word.id).where(Word.user_id == target_user_id)
             )))
-            # Eliminar Examples que no tienen ExampleWords (huérfanos)
-            session.exec(delete(Example).where(~Example.id.in_(
-                select(ExampleWord.example_id)
-            )))
+            # NOTA: NO eliminamos Examples huérfanos porque:
+            # - Un Example podría tener referencias de otros usuarios (shared records)
+            # - Los huérfanos no causan problemas (no se acceden sin ExampleWord)
+            # - Evitamos risgo de borrar datos de otros usuarios
             session.exec(delete(WordStatistics).where(
                 WordStatistics.word_id.in_(
                     select(Word.id).where(Word.user_id == target_user_id)
@@ -186,10 +186,10 @@ def seed_clone_user(session: Session, source_user_id: int, target_user_id: int, 
 
         logger.info(f"[seed_clone_user] ✓ {len(source_example_words)} example_word(s) clonado(s)")
 
-        # 4. Clonar BestOptions
-        source_best_options = session.exec(select(BestOption)).all()
-        # Filtrar solo best_options que tienen relación con palabras del usuario clonado
-        source_best_options = [b for b in source_best_options if b.word_id in user_word_ids]
+        # 4. Clonar BestOptions (SOLO del usuario origen, usando SQL filter)
+        source_best_options = session.exec(
+            select(BestOption).where(BestOption.word_id.in_(user_word_ids))
+        ).all()
         logger.info(f"[seed_clone_user] Clonando {len(source_best_options)} best_option(s)...")
 
         for source_bo in source_best_options:

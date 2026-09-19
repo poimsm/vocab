@@ -941,7 +941,7 @@ def toggle_example_favorite(
     logger.info(f"[toggle_example_favorite] User {current_user.id}: Toggling favorite for example {example_id}")
 
     example_repo = ExampleRepository(db)
-    is_favorite = example_repo.toggle_favorite(example_id)
+    is_favorite = example_repo.toggle_favorite(current_user.id, example_id)
 
     # Obtener el ejemplo actualizado para devolver el estado is_marked
     example = db.exec(
@@ -966,7 +966,7 @@ def toggle_example_favorite(
     )
 
     # Obtener el contador actualizado de favoritos no marcados
-    unmarked_count = example_repo.count_unmarked_favorites()
+    unmarked_count = example_repo.count_unmarked_favorites(current_user.id)
 
     return {
         "example_id": example_id,
@@ -991,7 +991,7 @@ def toggle_example_marked(
     logger.info(f"[toggle_example_marked] User {current_user.id}: Toggling marked status for example {example_id}")
 
     example_repo = ExampleRepository(db)
-    is_marked = example_repo.toggle_marked(example_id)
+    is_marked = example_repo.toggle_marked(current_user.id, example_id)
 
     logger.debug(f"[toggle_example_marked] Example {example_id} is_marked: {is_marked}")
 
@@ -1008,7 +1008,7 @@ def toggle_example_marked(
 
     # Obtener el contador actualizado de favoritos no marcados
     example_repo = ExampleRepository(db)
-    unmarked_count = example_repo.count_unmarked_favorites()
+    unmarked_count = example_repo.count_unmarked_favorites(current_user.id)
 
     return {
         "example_id": example_id,
@@ -1062,7 +1062,7 @@ def get_favorite_examples(
     )
 
     example_repo = ExampleRepository(db)
-    paginated_data = example_repo.get_examples(page=page, limit=limit, is_marked=is_marked, sort_by=sort_by)
+    paginated_data = example_repo.get_examples(current_user.id, page=page, limit=limit, is_marked=is_marked, sort_by=sort_by)
 
     # Segmentar el texto de cada ejemplo
     examples_response = []
@@ -1105,7 +1105,7 @@ def get_favorites_count(
     logger.info(f"[get_favorites_count] User {current_user.id}: Fetching unmarked favorites count")
 
     example_repo = ExampleRepository(db)
-    count = example_repo.count_unmarked_favorites()
+    count = example_repo.count_unmarked_favorites(current_user.id)
 
     logger.debug(f"[get_favorites_count] User {current_user.id} has {count} unmarked favorites")
 

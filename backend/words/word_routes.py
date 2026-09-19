@@ -68,6 +68,7 @@ def get_words(
     limit: int = Query(15, ge=1, le=100),
     learning_state: str = Query(None),
     is_favorite: bool = Query(False),
+    is_boosted: bool = Query(False),
     search: str = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -79,7 +80,7 @@ def get_words(
     learning_state: None (all), new, learning (in progress), mastered (learned)
     is_favorite: True para traer solo favoritas, False para traer todas
     """
-    logger.info(f"[get_words] User {current_user.id}: Fetching words (sort={sort}, page={page}, limit={limit}, learning_state={learning_state}, is_favorite={is_favorite}, search={search})")
+    logger.info(f"[get_words] User {current_user.id}: Fetching words (sort={sort}, page={page}, limit={limit}, learning_state={learning_state}, is_favorite={is_favorite}, is_boosted={is_boosted}, search={search})")
 
     # Log de actividad
     UserActivityService.log_page_view(
@@ -92,6 +93,7 @@ def get_words(
             "limit": limit,
             "learning_state": learning_state,
             "is_favorite": is_favorite,
+            "is_boosted": is_boosted,
             "search": search
         }
     )
@@ -104,14 +106,17 @@ def get_words(
         limit=limit,
         learning_state=learning_state,
         is_favorite=is_favorite,
+        is_boosted=is_boosted,
         search=search
     )
 
     logger.debug(f"[get_words] Retrieved {len(paginated_data['items'])} words")
 
-    # Contar total de palabras favoritas del usuario
+    # Contar total de palabras favoritas y boosteadas del usuario
     total_favorites = word_repo.get_total_favorites(current_user.id)
+    total_boosted = word_repo.get_total_boosted(current_user.id)
     paginated_data["total_favorites"] = total_favorites
+    paginated_data["total_boosted"] = total_boosted
 
     # Transformar palabras para respuesta
     paginated_data["items"] = [
@@ -125,6 +130,7 @@ def get_words(
             "level": WordLevel.to_str(w.level),
             "context": TextFormatter.capitalize(w.context),
             "is_favorite": w.is_favorite,
+            "is_boosted": w.is_boosted,
             "is_learned": word_repo.is_learned(w.id, ContentType.EXAMPLE),
             "total_examples": total_examples
         }
@@ -514,6 +520,60 @@ def toggle_favorite(
     return {
         "id": updated_word.id,
         "is_favorite": updated_word.is_favorite
+    }
+
+
+@router.patch("/words/{word_id}/boost")
+@log_endpoint
+def toggle_boost(
+    word_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Activa/desactiva palabra como boosteada.
+
+    Cuando se activa el boost:
+    - Aumenta la prioridad en el PriorityEngine (40% vs 20%)
+    - Reduce penalizaciones por exposición reciente
+    - Genera 1-2 ejemplos adicionales automáticamente
+    """
+    logger.info(f"[toggle_boost] User {current_user.id}: Toggling boost for word {word_id}")
+
+    word_repo = WordRepository(db)
+    word = word_repo.get(db, word_id)
+
+    if not word or word.user_id != current_user.id:
+        logger.warning(f"[toggle_boost] Word {word_id} not found")
+        raise HTTPException(status_code=404, detail="Word not found")
+
+    was_boosted = word.is_boosted
+    updated_word = word_repo.toggle_boost(word_id)
+    logger.debug(f"[toggle_boost] Word {word_id} boost toggled to {updated_word.is_boosted}")
+
+    # Si se activó el boost, generar ejemplos adicionales de forma asíncrona
+    if updated_word.is_boosted and not was_boosted:
+        from celery_app import celery_app
+        celery_app.send_task(
+            'tasks.words.generate_boost_examples',
+            args=[current_user.id, word_id]
+        )
+        logger.info(f"[toggle_boost] Scheduled additional examples for boosted word {word_id}")
+
+    # Log de actividad
+    UserActivityService.log_button_click(
+        db=db,
+        user_id=current_user.id,
+        button_name="toggle_boost",
+        details={
+            "word_id": word_id,
+            "was_boosted": was_boosted,
+            "is_boosted": updated_word.is_boosted
+        }
+    )
+
+    return {
+        "id": updated_word.id,
+        "is_boosted": updated_word.is_boosted
     }
 
 

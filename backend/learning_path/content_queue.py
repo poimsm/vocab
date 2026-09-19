@@ -47,13 +47,15 @@ class ContentQueue:
         if existing:
             return existing
 
+        now = datetime.now(timezone.utc)
         item = ContentQueueModel(
             user_id=user_id,
             type=content_type,
             content_id=content_id,
             priority=priority,
             status=ContentQueueStatus.PENDING,
-            created_at=datetime.now(timezone.utc),
+            created_at=now,
+            updated_at=now,
         )
 
         self.session.add(item)
@@ -132,12 +134,14 @@ class ContentQueue:
     ) -> List[ContentQueueModel]:
         """
         Obtiene los próximos contenidos pendientes para el usuario,
-        respetando el orden en que fueron planificados.
+        usando PriorityEngine para recalcular prioridades en tiempo real.
 
+        Esto asegura que palabras boosteadas tengan mayor frecuencia.
         Filtra items donde TODAS las palabras están en estado LEARNED.
         """
         from logging_client import logger
-        from models import WordStatistics, LearningState, Example, BestOption, ExampleWord
+        from models import WordStatistics, LearningState, Example, BestOption, ExampleWord, Word
+        from learning_path.priority_engine import PriorityEngine
 
         statement = (
             select(ContentQueueModel)
@@ -146,15 +150,12 @@ class ContentQueue:
                 ContentQueueModel.type == content_type,
                 ContentQueueModel.status == ContentQueueStatus.PENDING,
             )
-            .order_by(
-                ContentQueueModel.priority.desc(),
-                ContentQueueModel.created_at.asc(),
-            )
-            .limit(amount * 2)  # Obtener más para compensar filtrados
+            .limit(amount * 3)  # Obtener más para compensar filtrados
         )
 
         all_items = self.session.exec(statement).all()
-        result = []
+        priority_engine = PriorityEngine()
+        items_with_priority = []
 
         for item in all_items:
             # Obtener las palabras asociadas al contenido
@@ -171,6 +172,8 @@ class ContentQueue:
 
             # Contar palabras en estado LEARNED
             learned_count = 0
+            max_priority = 0.0
+
             for word_id in word_ids:
                 stats = self.session.exec(
                     select(WordStatistics)
@@ -179,19 +182,69 @@ class ContentQueue:
                         WordStatistics.type == content_type
                     )
                 ).first()
+
                 if stats and stats.learning_state == LearningState.LEARNED:
                     learned_count += 1
 
+                # Calcular prioridad usando PriorityEngine
+                if stats:
+                    word = self.session.get(Word, word_id)
+                    priority = priority_engine.calculate_priority(word, stats)
+                    max_priority = max(max_priority, priority)
+
             # Incluir solo si NO todas las palabras son LEARNED
             if learned_count < len(word_ids):
-                result.append(item)
-                if len(result) >= amount:
-                    break
+                items_with_priority.append((item, max_priority))
             else:
                 logger.debug(
                     f"[ContentQueue] Filtering out {content_type} item {item.content_id}: "
                     f"all {len(word_ids)} words are LEARNED"
                 )
+
+        # Separar boosteados de no-boosteados
+        boosted_items = []
+        normal_items = []
+
+        for item, priority in items_with_priority:
+            # Obtener las palabras para verificar si está boosteada
+            if content_type == ContentType.EXAMPLE:
+                word_ids = self.session.exec(
+                    select(ExampleWord.word_id)
+                    .where(ExampleWord.example_id == item.content_id)
+                ).all()
+            else:
+                best_option = self.session.get(BestOption, item.content_id)
+                word_ids = [best_option.word_id] if best_option else []
+
+            is_boosted = False
+            for word_id in word_ids:
+                word = self.session.get(Word, word_id)
+                if word and word.is_boosted:
+                    is_boosted = True
+                    break
+
+            if is_boosted:
+                boosted_items.append((item, priority))
+            else:
+                normal_items.append((item, priority))
+
+        # Intercalar: 1 boosteado cada 3-4 normales para evitar que domine
+        result = []
+        boost_idx = 0
+        normal_idx = 0
+        boost_interval = 3  # 1 boosteado cada 3 normales
+
+        while len(result) < amount and (normal_idx < len(normal_items) or boost_idx < len(boosted_items)):
+            # Agregar items normales
+            for _ in range(boost_interval):
+                if len(result) < amount and normal_idx < len(normal_items):
+                    result.append(normal_items[normal_idx][0])
+                    normal_idx += 1
+
+            # Agregar 1 boosteado
+            if len(result) < amount and boost_idx < len(boosted_items):
+                result.append(boosted_items[boost_idx][0])
+                boost_idx += 1
 
         return result
 
@@ -235,7 +288,10 @@ class ContentQueue:
         if item is None:
             return None
 
+        from datetime import datetime, timezone
+
         item.status = ContentQueueStatus.CONSUMED
+        item.updated_at = datetime.now(timezone.utc)
 
         # Marcar el contenido como consumido para evitar que vuelva a aparecer
         if item.type == ContentType.EXAMPLE:

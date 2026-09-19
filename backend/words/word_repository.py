@@ -36,6 +36,7 @@ class WordRepository:
         limit: int = 15,
         learning_state: str = None,
         is_favorite: bool = False,
+        is_boosted: bool = False,
         search: str = None,
     ) -> Dict[str, Any]:
         """
@@ -48,6 +49,7 @@ class WordRepository:
           - learning: LEARNING + REINFORCING + SPACING + ALMOST_LEARNED
           - mastered: LEARNED + REVIEW
         is_favorite: Filter only favorite words
+        is_boosted: Filter only boosted words
         """
         # Obtener palabras del usuario
         statement = (
@@ -58,6 +60,10 @@ class WordRepository:
         # Filtrar por favoritos si se solicita
         if is_favorite:
             statement = statement.where(Word.is_favorite == True)
+
+        # Filtrar por boosted si se solicita
+        if is_boosted:
+            statement = statement.where(Word.is_boosted == True)
 
         # Filtrar por búsqueda (en word y meaning)
         if search:
@@ -296,6 +302,24 @@ class WordRepository:
 
         return word
 
+    def toggle_boost(self, word_id: int) -> Optional[Word]:
+        """Activa/desactiva boost de una palabra"""
+        word = self.session.get(Word, word_id)
+
+        if not word:
+            return None
+
+        word.is_boosted = not word.is_boosted
+        if word.is_boosted:
+            word.boosted_at = datetime.now(timezone.utc)
+        else:
+            word.boosted_at = None
+        self.session.add(word)
+        self.session.commit()
+        self.session.refresh(word)
+
+        return word
+
     def delete(self, word_id: int) -> bool:
         """Marca una palabra como inactiva (soft delete)"""
         word = self.session.get(Word, word_id)
@@ -393,6 +417,16 @@ class WordRepository:
                 Word.user_id == user_id,
                 Word.is_active == True,
                 Word.is_favorite == True
+            )
+        ).one() or 0
+
+    def get_total_boosted(self, user_id: int) -> int:
+        """Obtiene el total de palabras boosteadas del usuario"""
+        return self.session.exec(
+            select(func.count()).select_from(Word).where(
+                Word.user_id == user_id,
+                Word.is_active == True,
+                Word.is_boosted == True
             )
         ).one() or 0
 

@@ -3,13 +3,14 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import UserProfile from '@/components/UserProfile.vue'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 
 const hideLayout = computed(() => route.meta.hideLayout as boolean)
-const mobileNavRef = ref<HTMLElement | null>(null)
+const mobileNavRef = ref<HTMLElement>()
 
 // Scroll to active tab when route changes
 watch(() => route.name, async () => {
@@ -37,12 +38,31 @@ function scrollToActiveTab() {
 }
 
 const sidebarCollapsed = ref(false)
+const drawerOpen = ref(false)
+const logoutMenuOpen = ref(false)
 
 function toggleSidebar() {
   sidebarCollapsed.value = !sidebarCollapsed.value
 }
 
+function toggleDrawer() {
+  drawerOpen.value = !drawerOpen.value
+}
+
+function closeDrawer() {
+  drawerOpen.value = false
+}
+
+function toggleLogoutMenu() {
+  logoutMenuOpen.value = !logoutMenuOpen.value
+}
+
+function closeLogoutMenu() {
+  logoutMenuOpen.value = false
+}
+
 function handleLogout() {
+  closeLogoutMenu()
   authStore.logout()
   router.push({ name: 'login' })
 }
@@ -70,12 +90,7 @@ const modules = [
     <!-- Desktop Sidebar (Solo visible si el usuario está autenticado y no en hideLayout) -->
     <aside v-if="authStore.isAuthenticated && !hideLayout" class="sidebar">
       <div class="sidebar-top" :class="{ 'sidebar-top-expanded': !sidebarCollapsed }">
-        <div class="logo">
-          <div class="logo-bear">
-            <Icon icon="fluent-emoji:bear" width="28" />
-          </div>
-          <span class="logo-text">Lexio</span>
-        </div>
+        <img src="@/assets/logo.svg" alt="Logo" class="logo" />
 
         <button
           class="collapse-btn"
@@ -113,24 +128,39 @@ const modules = [
         </router-link>
       </nav>
 
-      <!-- Botón de Cerrar Sesión en Escritorio -->
+      <!-- User Info en Escritorio -->
       <div class="sidebar-footer">
-        <button 
-          class="logout-btn" 
-          @click="handleLogout" 
-          :title="sidebarCollapsed ? 'Logout' : ''"
+        <button
+          class="user-footer-btn"
+          @click="toggleLogoutMenu"
+          :title="sidebarCollapsed ? (authStore.userEmail ?? '') : ''"
         >
-          <span class="nav-icon">
-            <Icon icon="solar:logout-3-linear" width="20" />
-          </span>
-          <span class="nav-label">Logout</span>
+          <UserProfile :compact="sidebarCollapsed" />
         </button>
+
+        <!-- Logout Menu Overlay (close on click outside) -->
+        <transition name="fade">
+          <div v-if="logoutMenuOpen" class="logout-overlay" @click="closeLogoutMenu"></div>
+        </transition>
+
+        <!-- Logout Menu Popup -->
+        <transition name="fade">
+          <div v-if="logoutMenuOpen" class="logout-menu">
+            <button class="logout-menu-item" @click="handleLogout">
+              <Icon icon="solar:logout-3-linear" width="18" />
+              <span>Logout</span>
+            </button>
+          </div>
+        </transition>
       </div>
     </aside>
 
     <div class="main">
       <!-- Mobile Navigation (Solo visible si el usuario está autenticado y no en hideLayout) -->
       <div v-if="authStore.isAuthenticated && !hideLayout" ref="mobileNavRef" class="mobile-nav">
+        <button class="mobile-menu-btn" @click="toggleDrawer">
+          <Icon :icon="drawerOpen ? 'solar:close-circle-linear' : 'solar:hamburger-menu-linear'" width="20" />
+        </button>
         <router-link
           v-for="module in modules"
           :key="module.id"
@@ -148,17 +178,61 @@ const modules = [
             <span>{{ module.label }}</span>
           </a>
         </router-link>
-        
-        <!-- Botón Logout Móvil -->
-        <button @click="handleLogout" class="mobile-tab mobile-logout">
-          <Icon icon="solar:logout-3-linear" width="18" />
-        </button>
       </div>
 
       <!-- Aquí renderizamos de forma dinámica las páginas inyectadas por el Router -->
       <div class="content">
         <router-view />
       </div>
+
+      <!-- Mobile Drawer -->
+      <transition name="drawer">
+        <div v-if="drawerOpen" class="drawer-overlay" @click="closeDrawer"></div>
+      </transition>
+      <transition name="slide-in">
+        <aside v-if="drawerOpen" class="mobile-drawer">
+          <div class="drawer-header">
+            <h2>Menu</h2>
+            <button class="drawer-close" @click="closeDrawer">
+              <Icon icon="solar:close-circle-linear" width="24" />
+            </button>
+          </div>
+
+          <button class="drawer-user" @click="toggleLogoutMenu">
+            <UserProfile class="drawer-profile" />
+          </button>
+
+          <nav class="drawer-nav">
+            <router-link
+              v-for="module in modules"
+              :key="module.id"
+              :to="module.to"
+              custom
+              v-slot="{ navigate, href, isActive }"
+            >
+              <a
+                :href="href"
+                @click="navigate; closeDrawer()"
+                class="drawer-item"
+                :class="{ active: route.name === module.to.name }"
+              >
+                <Icon :icon="module.icon" width="20" />
+                <span>{{ module.label }}</span>
+              </a>
+            </router-link>
+          </nav>
+
+          <!-- Logout Menu Popup en Mobile -->
+          <transition name="fade">
+            <div v-if="logoutMenuOpen" class="logout-menu-mobile">
+              <button class="logout-menu-item" @click="handleLogout">
+                <Icon icon="solar:logout-3-linear" width="18" />
+                <span>Logout</span>
+              </button>
+            </div>
+          </transition>
+        </aside>
+      </transition>
     </div>
   </div>
 </template>
@@ -209,51 +283,50 @@ const modules = [
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
   padding: 0 4px;
-  min-height: 36px;
+  min-height: 52px;
+  gap: 8px;
+  width: 98%;
 }
 
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 18px;
-  font-weight: 700;
-  color: #e2e0e8;
-  overflow: hidden;
-}
-
-.logo-bear {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: #f5f0e8;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-.logo-text {
-  opacity: 1;
-  transform: translateX(0);
+/* Hide UserProfile when sidebar collapsed */
+.layout.sidebar-collapsed .sidebar-top :deep(.user-profile) {
+  opacity: 0;
+  transform: scale(0.8);
+  pointer-events: none;
+  position: absolute;
   transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
-/* Hide logo text when collapsed */
-.layout.sidebar-collapsed .logo-text {
-  opacity: 0;
-  transform: translateX(-8px);
-  pointer-events: none;
-  position: absolute;
+/* Desktop UserProfile styling */
+.sidebar-top :deep(.user-profile) {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+}
+
+.user-profile {
+  padding: 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+}
+
+.sidebar-top :deep(.user-name) {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sidebar-top :deep(.user-email) {
+  font-size: 12px;
 }
 
 /* Collapse toggle button */
 .collapse-btn {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 8px;
   border: none;
   background: rgba(255, 255, 255, 0.06);
@@ -272,11 +345,9 @@ const modules = [
   color: #e2e0e8;
 }
 
-/* When collapsed, center the collapse button under the logo */
+/* When collapsed, center the collapse button */
 .layout.sidebar-collapsed .sidebar-top {
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
+  justify-content: center;
   padding: 0;
 }
 
@@ -314,7 +385,7 @@ const modules = [
   }
 }
 
-.nav-item:hover, .logout-btn:hover {
+.nav-item:hover {
   background: rgba(255, 255, 255, 0.06);
   color: #e2e0e8;
 }
@@ -324,17 +395,120 @@ const modules = [
   color: #9b8fb5;
 }
 
+.logo {
+  height: 28px;
+  width: auto;
+  max-width: 28px;
+  opacity: 0.9;
+  flex-shrink: 0;
+}
+
+.logo:hover {
+  opacity: 1;
+}
+
+/* Hide logo when sidebar collapsed */
+.layout.sidebar-collapsed .logo {
+  max-width: 0;
+  opacity: 0;
+}
+
 .sidebar-footer {
   margin-top: auto;
   padding-top: 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
+  position: relative;
 }
 
-.logout-btn {
+.user-footer-btn {
+  border: none;
+  background: transparent;
+  padding: 12px 0px;
+  margin: 0;
+  cursor: pointer;
   width: 100%;
-  color: #f87171;
+  border-radius: 0;
+  transition: background 0.2s ease;
+  text-align: left;
 }
-.logout-btn:hover {
+
+.user-footer-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* UserProfile styling in footer */
+.sidebar-footer :deep(.user-profile) {
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  gap: 12px;
+}
+
+.sidebar-footer :deep(.user-name) {
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.sidebar-footer :deep(.user-email) {
+  font-size: 12px;
+  text-align: left;
+}
+
+/* When collapsed, show only compact version */
+.layout.sidebar-collapsed .user-footer-btn {
+  padding: 0;
+}
+
+.layout.sidebar-collapsed .sidebar-footer :deep(.user-profile) {
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.layout.sidebar-collapsed .sidebar-footer :deep(.avatar) {
+  width: 36px;
+  height: 36px;
+}
+
+.logout-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 105;
+}
+
+.logout-menu {
+  position: absolute;
+  bottom: 60px;
+  left: 12px;
+  right: 12px;
+  background: #3d3a52;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+  z-index: 110;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.logout-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: transparent;
+  color: #f87171;
+  cursor: pointer;
+  font-size: 15px;
+  transition: all 0.15s ease;
+}
+
+.logout-menu-item:hover {
   background: rgba(248, 113, 113, 0.1);
   color: #f87171;
 }
@@ -381,6 +555,10 @@ const modules = [
   display: none;
 }
 
+.mobile-user-header {
+  display: none;
+}
+
 .content {
   flex: 1;
   min-height: 0;
@@ -400,15 +578,179 @@ const modules = [
 
   .mobile-nav {
     display: flex;
+    align-items: center;
     gap: 10px;
     overflow-x: auto;
-    padding: 12px;
+    padding: 8px 12px;
     position: sticky;
     top: 0;
     background: #2d2a3e;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     scrollbar-width: none;
     z-index: 100;
+  }
+
+  .mobile-menu-btn {
+    border: none;
+    background: rgba(255, 255, 255, 0.06);
+    color: #9c99ab;
+    cursor: pointer;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+  }
+
+  .mobile-menu-btn:active {
+    background: rgba(255, 255, 255, 0.12);
+    color: #e2e0e8;
+  }
+
+  /* Drawer Overlay */
+  .drawer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 199;
+  }
+
+  /* Mobile Drawer */
+  .mobile-drawer {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 280px;
+    background: #2d2a3e;
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    flex-direction: column;
+    z-index: 200;
+    overflow-y: auto;
+  }
+
+  .drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .drawer-header h2 {
+    margin: 0;
+    font-size: 18px;
+    color: #e2e0e8;
+  }
+
+  .drawer-close {
+    border: none;
+    background: transparent;
+    color: #9c99ab;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    transition: color 0.2s ease;
+  }
+
+  .drawer-close:active {
+    color: #e2e0e8;
+  }
+
+  .drawer-user {
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: transparent;
+    padding: 16px;
+    margin: 0;
+    width: 100%;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.2s ease;
+  }
+
+  .drawer-user:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .drawer-profile :deep(.user-profile) {
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    gap: 12px;
+  }
+
+  .drawer-profile :deep(.avatar) {
+    width: 48px;
+    height: 48px;
+    font-size: 18px;
+  }
+
+  .drawer-profile :deep(.user-info) {
+    gap: 4px;
+  }
+
+  .drawer-profile :deep(.user-name) {
+    font-size: 16px;
+    font-weight: 600;
+    text-align: left;
+  }
+
+  .drawer-profile :deep(.user-email) {
+    font-size: 13px;
+    text-align: left;
+  }
+
+  .drawer-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 0;
+    flex: 1;
+  }
+
+  .drawer-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    color: #9c99ab;
+    text-decoration: none;
+    transition: all 0.15s ease;
+    border-left: 3px solid transparent;
+  }
+
+  .drawer-item:active {
+    background: rgba(255, 255, 255, 0.06);
+    color: #e2e0e8;
+  }
+
+  .drawer-item.active {
+    background: rgba(155, 143, 181, 0.12);
+    color: #9b8fb5;
+    border-left-color: #9b8fb5;
+  }
+
+  .logout-menu-mobile {
+    padding: 12px 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    margin-top: auto;
+  }
+
+  .logout-menu-mobile .logout-menu-item {
+    width: 100%;
+    padding-left: 16px;
+    padding-right: 16px;
   }
 
   .mobile-nav::-webkit-scrollbar {
@@ -440,12 +782,6 @@ const modules = [
     background: rgba(155, 143, 181, 0.18);
     color: #9b8fb5;
   }
-  
-  .mobile-logout {
-    color: #f87171;
-    background: rgba(248, 113, 113, 0.05);
-    margin-left: auto;
-  }
 
   .content {
     flex: 1;
@@ -468,5 +804,36 @@ const modules = [
   width: 100%;
   margin: 0;
   padding: 0;
+}
+
+/* ─── Drawer Transitions ─── */
+.drawer-enter-active,
+.drawer-leave-active {
+  transition: opacity 0.25s ease;
+}
+
+.drawer-enter-from,
+.drawer-leave-to {
+  opacity: 0;
+}
+
+.slide-in-enter-active,
+.slide-in-leave-active {
+  transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.slide-in-enter-from,
+.slide-in-leave-to {
+  transform: translateX(-100%);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

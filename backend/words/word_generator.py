@@ -446,6 +446,112 @@ def create_bulk_task(
         )
 
 
+@celery_app.task(name="tasks.words.generate_boost_examples")
+def generate_boost_examples(
+    user_id: int,
+    word_id: int,
+) -> None:
+    """
+    Genera 2-3 ejemplos adicionales para una palabra boosteada.
+
+    Esto aumenta la exposición inmediata de la palabra sin esperar
+    a que se genere contenido en el ciclo normal.
+
+    Los ejemplos se agregan a ContentQueue con ALTA PRIORIDAD para que
+    aparezcan frecuentemente intercalados con otros contenidos.
+    """
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + '/..')
+
+    from db import engine
+    from models import Word, ContentType, ExampleType, WordStatistics
+    from examples.example_repository import ExampleRepository
+    from learning_path.content_queue import ContentQueue as ContentQueueManager
+    from learning_path.priority_engine import PriorityEngine
+
+    logger.info(f"[GenerateBoostExamples] Generating additional examples for boosted word {word_id} (user {user_id})")
+
+    try:
+        with Session(engine) as db:
+            # Obtener la palabra
+            word = db.exec(
+                select(Word).where(
+                    Word.id == word_id,
+                    Word.user_id == user_id,
+                    Word.is_boosted == True
+                )
+            ).first()
+
+            if not word:
+                logger.warning(f"[GenerateBoostExamples] Boosted word {word_id} not found for user {user_id}")
+                return
+
+            # Obtener estadísticas para calcular prioridad
+            stats = db.exec(
+                select(WordStatistics).where(
+                    WordStatistics.word_id == word_id,
+                    WordStatistics.type == ContentType.EXAMPLE
+                )
+            ).first()
+
+            # Calcular prioridad usando PriorityEngine
+            priority_engine = PriorityEngine()
+            boost_priority = 0.85  # Prioridad alta para boost
+            if stats:
+                boost_priority = priority_engine.calculate_priority(word, stats)
+
+            # Generar solo 1 ejemplo para evitar que domine la cola
+            example_count = 1
+            queue_mgr = ContentQueueManager(db)
+            generated_count = 0
+
+            for i in range(example_count):
+                try:
+                    # Usar AI para generar un ejemplo
+                    generated = ai.generate_example(word.main, word.meaning)
+
+                    if not generated:
+                        logger.warning(f"[GenerateBoostExamples] Could not generate example {i+1} for word {word_id}")
+                        continue
+
+                    # Crear ejemplo en BD
+                    example_repo = ExampleRepository(db)
+                    new_example = example_repo.create(
+                        word_id=word_id,
+                        example_text=generated.get("example"),
+                        definition=generated.get("definition"),
+                        type=ExampleType.EXPLORE,
+                    )
+
+                    if not new_example:
+                        logger.warning(f"[GenerateBoostExamples] Could not create example for word {word_id}")
+                        continue
+
+                    # Agregar a ContentQueue con ALTA PRIORIDAD
+                    queue_mgr.enqueue(
+                        user_id=user_id,
+                        content_type=ContentType.EXAMPLE,
+                        content_id=new_example.id,
+                        priority=boost_priority,  # Usar prioridad calculada
+                    )
+
+                    logger.info(f"[GenerateBoostExamples] Created example {i+1} for boosted word {word_id} with priority {boost_priority}")
+                    generated_count += 1
+
+                except Exception as e:
+                    logger.error(f"[GenerateBoostExamples] Error generating example {i+1}: {e}", exc_info=True)
+                    continue
+
+            logger.info(f"[GenerateBoostExamples] Completed generating {generated_count} examples for boosted word {word_id}")
+
+    except Exception as e:
+        logger.error(
+            f"[GenerateBoostExamples] Error generating boost examples for word {word_id}, user {user_id}: {e}",
+            exc_info=True
+        )
+
+
 class WordGenerator:
     """Wrapper para llamar a tasks de generación de palabras"""
 
@@ -458,3 +564,8 @@ class WordGenerator:
     def create_bulk(user_id: int, texts: List[str]):
         """Solicita creación de múltiples palabras"""
         return create_bulk_task.delay(user_id, texts)
+
+    @staticmethod
+    def generate_boost_examples(user_id: int, word_id: int):
+        """Solicita generación de ejemplos adicionales para palabra boosteada"""
+        return generate_boost_examples.delay(user_id, word_id)

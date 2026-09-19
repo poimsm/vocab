@@ -28,12 +28,13 @@ class ExampleRepository:
 
     def get_available_content_for_path(self, user_id: int) -> List[int]:
         """
-        Obtiene IDs de examples pristine que no están en ContentQueue.
+        Obtiene IDs de examples pristine del usuario que no están en ContentQueue.
 
         Estos examples pueden ser reutilizados en lugar de generar nuevos.
+        Solo retorna ejemplos que pertenecen al usuario especificado.
         """
 
-        # Obtener IDs de examples ya encolados
+        # Obtener IDs de examples ya encolados para este usuario
         enqueued_ids = self.session.exec(
             select(ContentQueue.content_id)
             .where(
@@ -45,14 +46,19 @@ class ExampleRepository:
 
         enqueued_ids = set(enqueued_ids)
 
-        # Obtener examples pristine que no estén encolados
+        # Obtener examples pristine del usuario que no estén encolados
         examples = self.session.exec(
             select(Example.id)
+            .join(ExampleWord, Example.id == ExampleWord.example_id)  # ← NUEVO: JOIN para acceder a user_id
+            .join(Word, ExampleWord.word_id == Word.id)              # ← NUEVO: JOIN para acceder a user_id
             .where(
+                Word.user_id == user_id,  # ← NUEVO: Filtrar solo del usuario
                 Example.id.notin_(enqueued_ids) if enqueued_ids else True,
             )
+            .distinct()  # Evitar duplicados si un ejemplo tiene múltiples palabras del usuario
         ).all()
 
+        logger.debug(f"[ExampleRepository] Found {len(examples)} available content for path (user {user_id})")
         return examples
 
     def count_available_examples_for_word(self, word_id: int) -> int:
@@ -346,16 +352,37 @@ class ExampleRepository:
 
         return segments
 
-    def toggle_favorite(self, example_id: int) -> bool:
+    def toggle_favorite(self, user_id: int, example_id: int) -> bool:
         """
-        Alterna el estado de favorito de un ejemplo.
+        Alterna el estado de favorito de un ejemplo (SOLO si pertenece al usuario).
 
         Cuando se marca como favorito:
         - Actualiza favorited_at con la fecha actual (aparecerá primero en el listado)
         - Resetea is_marked a False (favorite siempre se inicia sin marcar)
 
-        Retorna el nuevo estado de is_favorite.
+        Args:
+            user_id: ID del usuario (REQUERIDO para validar pertenencia)
+            example_id: ID del ejemplo a alternar
+
+        Retorna el nuevo estado de is_favorite (False si el usuario no es propietario).
         """
+        # Verificar que el ejemplo pertenece al usuario
+        example_owner = self.session.exec(
+            select(Word.user_id)
+            .join(ExampleWord, Word.id == ExampleWord.word_id)
+            .join(Example, ExampleWord.example_id == Example.id)
+            .where(Example.id == example_id)
+            .limit(1)
+        ).first()
+
+        if not example_owner:
+            logger.warning(f"[ExampleRepository] Example {example_id} not found for any user")
+            return False
+
+        if example_owner != user_id:
+            logger.warning(f"[ExampleRepository] User {user_id} attempted to modify example {example_id} of user {example_owner} (SECURITY: Blocked)")
+            return False
+
         example = self.session.get(Example, example_id)
 
         if not example:
@@ -368,7 +395,7 @@ class ExampleRepository:
             example.favorited_at = datetime.now(timezone.utc)
             # Resetear marcado cuando se agrega a favoritos
             example.is_marked = False
-            logger.debug(f"[ExampleRepository] Example {example_id} added to favorites, is_marked reset to False")
+            logger.debug(f"[ExampleRepository] Example {example_id} added to favorites by user {user_id}, is_marked reset to False")
         else:
             example.favorited_at = None
 
@@ -376,15 +403,36 @@ class ExampleRepository:
         self.session.commit()
         self.session.refresh(example)
 
-        logger.debug(f"[ExampleRepository] Example {example_id} is_favorite toggled to {example.is_favorite}")
+        logger.debug(f"[ExampleRepository] Example {example_id} is_favorite toggled to {example.is_favorite} by user {user_id}")
         return example.is_favorite
 
-    def toggle_marked(self, example_id: int) -> bool:
+    def toggle_marked(self, user_id: int, example_id: int) -> bool:
         """
-        Alterna el estado de marcado de un ejemplo.
+        Alterna el estado de marcado de un ejemplo (SOLO si pertenece al usuario).
 
-        Retorna el nuevo estado de is_marked.
+        Args:
+            user_id: ID del usuario (REQUERIDO para validar pertenencia)
+            example_id: ID del ejemplo a alternar
+
+        Retorna el nuevo estado de is_marked (False si el usuario no es propietario).
         """
+        # Verificar que el ejemplo pertenece al usuario
+        example_owner = self.session.exec(
+            select(Word.user_id)
+            .join(ExampleWord, Word.id == ExampleWord.word_id)
+            .join(Example, ExampleWord.example_id == Example.id)
+            .where(Example.id == example_id)
+            .limit(1)
+        ).first()
+
+        if not example_owner:
+            logger.warning(f"[ExampleRepository] Example {example_id} not found for any user")
+            return False
+
+        if example_owner != user_id:
+            logger.warning(f"[ExampleRepository] User {user_id} attempted to modify example {example_id} of user {example_owner} (SECURITY: Blocked)")
+            return False
+
         example = self.session.get(Example, example_id)
 
         if not example:
@@ -396,14 +444,15 @@ class ExampleRepository:
         self.session.commit()
         self.session.refresh(example)
 
-        logger.debug(f"[ExampleRepository] Example {example_id} is_marked toggled to {example.is_marked}")
+        logger.debug(f"[ExampleRepository] Example {example_id} is_marked toggled to {example.is_marked} by user {user_id}")
         return example.is_marked
 
-    def get_examples(self, page: int = 1, limit: int = 15, is_marked: bool | None = None, sort_by: str = 'not_marked_first') -> dict:
+    def get_examples(self, user_id: int, page: int = 1, limit: int = 15, is_marked: bool | None = None, sort_by: str = 'not_marked_first') -> dict:
         """
-        Obtiene ejemplos favoritos con paginación.
+        Obtiene ejemplos favoritos del usuario con paginación.
 
         Args:
+            user_id: ID del usuario (REQUERIDO para filtrar por propietario)
             page: Número de página
             limit: Items por página
             is_marked: Filtrar por estado de marcado (True/False/None para sin filtro) - DEPRECATED en favor de sort_by
@@ -414,13 +463,16 @@ class ExampleRepository:
 
         Retorna un diccionario con:
         - items: List de ejemplos
-        - total: Total de ejemplos favoritos
+        - total: Total de ejemplos favoritos del usuario
         - page: Página actual
         - limit: Items por página
         - pages: Total de páginas
         """
-        # Construir condiciones de filtro
-        filters = [Example.is_favorite == True]
+        # Construir condiciones de filtro - INCLUIR FILTRO POR USUARIO
+        filters = [
+            Example.is_favorite == True,
+            Word.user_id == user_id,  # ← NUEVO: Filtrar solo ejemplos del usuario
+        ]
 
         # Si se usa sort_by='done', filtrar solo marcados
         if sort_by == 'done':
@@ -432,9 +484,11 @@ class ExampleRepository:
         elif is_marked is not None:
             filters.append(Example.is_marked == is_marked)
 
-        # Contar total de ejemplos favoritos
+        # Contar total de ejemplos favoritos del usuario
         total = self.session.exec(
             select(func.count(Example.id))
+            .join(ExampleWord, Example.id == ExampleWord.example_id)  # ← NUEVO: JOIN para acceder a user_id
+            .join(Word, ExampleWord.word_id == Word.id)              # ← NUEVO: JOIN para acceder a user_id
             .where(*filters)
         ).first() or 0
 
@@ -443,7 +497,13 @@ class ExampleRepository:
         pages = (total + limit - 1) // limit if total > 0 else 1
 
         # Construir query base
-        query = select(Example).where(*filters)
+        query = (
+            select(Example)
+            .join(ExampleWord, Example.id == ExampleWord.example_id)  # ← NUEVO: JOIN para filtrar
+            .join(Word, ExampleWord.word_id == Word.id)              # ← NUEVO: JOIN para filtrar
+            .where(*filters)
+            .distinct()  # Evitar duplicados si un ejemplo tiene múltiples palabras
+        )
 
         # Aplicar ordenamiento según sort_by
         if sort_by == 'random':
@@ -465,7 +525,7 @@ class ExampleRepository:
             query.offset(offset).limit(limit)
         ).all()
 
-        logger.debug(f"[ExampleRepository] Retrieved {len(examples)} favorite examples (page {page}, total {total}, sort_by={sort_by})")
+        logger.debug(f"[ExampleRepository] Retrieved {len(examples)} favorite examples for user {user_id} (page {page}, total {total}, sort_by={sort_by})")
 
         return {
             "items": examples,
@@ -475,19 +535,25 @@ class ExampleRepository:
             "pages": pages
         }
 
-    def count_unmarked_favorites(self) -> int:
+    def count_unmarked_favorites(self, user_id: int) -> int:
         """
-        Cuenta el total de ejemplos favoritos no marcados.
+        Cuenta el total de ejemplos favoritos no marcados del usuario.
 
-        Retorna el número de ejemplos donde is_favorite=True e is_marked=False.
+        Args:
+            user_id: ID del usuario (REQUERIDO para filtrar por propietario)
+
+        Retorna el número de ejemplos del usuario donde is_favorite=True e is_marked=False.
         """
         count = self.session.exec(
             select(func.count(Example.id))
+            .join(ExampleWord, Example.id == ExampleWord.example_id)  # ← NUEVO: JOIN para acceder a user_id
+            .join(Word, ExampleWord.word_id == Word.id)              # ← NUEVO: JOIN para acceder a user_id
             .where(
+                Word.user_id == user_id,  # ← NUEVO: Filtrar solo del usuario
                 Example.is_favorite == True,
                 Example.is_marked == False
             )
         ).first() or 0
 
-        logger.debug(f"[ExampleRepository] Unmarked favorite examples count: {count}")
+        logger.debug(f"[ExampleRepository] Unmarked favorite examples count for user {user_id}: {count}")
         return count

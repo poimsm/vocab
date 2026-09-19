@@ -1781,7 +1781,9 @@ class ContentPlanner:
             # Si TODAS las palabras son LEARNED, este item es inservible
             if learned_count == len(word_ids) and len(word_ids) > 0:
                 # Marcar como CONSUMED para limpiar la cola
+                from datetime import datetime, timezone
                 item.status = ContentQueueStatus.CONSUMED
+                item.updated_at = datetime.now(timezone.utc)
                 self.session.add(item)
                 consumed_count += 1
                 logger.debug(

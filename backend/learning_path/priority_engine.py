@@ -77,7 +77,10 @@ class PriorityEngine:
         Sólo representa qué tan conveniente es volver a planificarla.
         """
 
-        now = now or datetime.now(timezone.utc)
+        if now is None:
+            now = datetime.now(timezone.utc)
+        else:
+            now = ensure_aware_datetime(now)
 
         learning_need = self.calculate_learning_need(
             statistics,
@@ -94,16 +97,17 @@ class PriorityEngine:
         recent_penalty = self.calculate_recent_exposure_penalty(
             statistics,
             now,
+            word,
         )
         expected_penalty = self.calculate_expected_exposure_penalty(
             expected_exposure,
         )
 
         priority = (
-            learning_need * 0.40
-            + review_urgency * 0.25
-            + new_word_boost * 0.15
-            + user_boost * 0.20
+            learning_need * 0.30      # reducido de 0.40
+            + review_urgency * 0.20   # reducido de 0.25
+            + new_word_boost * 0.10   # reducido de 0.15
+            + user_boost * 0.40       # AUMENTADO de 0.20 ⚡ Boost tiene mayor impacto
         )
 
         priority -= recent_penalty
@@ -237,7 +241,8 @@ class PriorityEngine:
         if word.boosted_at is None:
             return 1.0
 
-        elapsed = datetime.now(timezone.utc) - word.boosted_at
+        boosted_at = ensure_aware_datetime(word.boosted_at)
+        elapsed = datetime.now(timezone.utc) - boosted_at
         hours = elapsed.total_seconds() / 3600.0
 
         # El boost puede ir perdiendo fuerza con el tiempo.
@@ -250,6 +255,7 @@ class PriorityEngine:
         self,
         statistics: WordStatistics,
         now: datetime,
+        word: Optional[Word] = None,
     ) -> float:
         """
         Penaliza palabras que fueron vistas recientemente.
@@ -258,6 +264,8 @@ class PriorityEngine:
         monopolizando todos los slots del segmento.
 
         Es una penalización suave, no una exclusión.
+
+        Si la palabra está boosteada, la penalización se reduce a la mitad.
         """
 
         if statistics.last_seen_at is None:
@@ -267,19 +275,23 @@ class PriorityEngine:
         elapsed = now - last_seen
         hours = elapsed.total_seconds() / 3600.0
 
+        penalty = 0.0
         if hours < 1:
-            return 0.35
+            penalty = 0.35
+        elif hours < 6:
+            penalty = 0.25
+        elif hours < 24:
+            penalty = 0.15
+        elif hours < 48:
+            penalty = 0.05
+        else:
+            penalty = 0.0
 
-        if hours < 6:
-            return 0.25
+        # Si la palabra está boosteada, reducir la penalización
+        if word and word.is_boosted:
+            penalty *= 0.5
 
-        if hours < 24:
-            return 0.15
-
-        if hours < 48:
-            return 0.05
-
-        return 0.0
+        return penalty
 
     def calculate_expected_exposure_penalty(
         self,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import api from '@/utils/api'
 import { wordApi } from '@/services/wordApi'
@@ -31,6 +31,7 @@ interface Word {
   category: string
   frequency: WordFrequency
   isFavorite: boolean
+  is_boosted: boolean
   isLearned: boolean
   addedAt: string
   totalExamples: number
@@ -51,6 +52,7 @@ const error = ref<string | null>(null)
 const searchQuery = ref('')
 const filterMode = ref<FilterMode>('all')
 const learningStateFilter = ref<LearningStateFilter>('all')
+const showBoostedOnly = ref(false)
 const selectedWord = ref<Word | null>(null)
 const showMobileDetail = ref(false)
 const showFilterMenu = ref(false)
@@ -86,6 +88,10 @@ const relearnSuccess = ref(false)
 // ─── View Mode State ───
 const viewMode = ref<'list' | 'grid'>('list')
 
+// ─── Boost State ───
+const boostedWords = ref<Set<number>>(new Set())
+const totalBoosted = ref(0)
+
 // ─── Helpers ───
 const levelColor = (level: WordLevel | number) => {
   const s = typeof level === 'number' ? String(level) : (level || '').toString().toLowerCase()
@@ -119,6 +125,13 @@ const frequencyLabel = (freq: WordFrequency) => {
   if (!freq) return ''
   return freq.charAt(0).toUpperCase() + freq.slice(1)
 }
+
+// ─── Filtered Words ───
+// Nota: El backend ya filtra por is_boosted cuando showBoostedOnly=true,
+// así que simplemente devolvemos words.value
+const filteredWords = computed(() => {
+  return words.value
+})
 
 // ─── Text-to-Speech ───
 function speak(text: string) {
@@ -170,6 +183,10 @@ async function fetchWords(reset = false) {
       params.is_favorite = true
     }
 
+    if (showBoostedOnly.value) {
+      params.is_boosted = true
+    }
+
     if (searchQuery.value.trim()) {
       params.search = searchQuery.value.trim()
     }
@@ -185,6 +202,7 @@ const data = response.data
       category: item.context || item.type || 'General',
       frequency: item.frequency,
       isFavorite: item.is_favorite,
+      is_boosted: item.is_boosted,
       isLearned: item.is_learned,
       addedAt: item.created_at ? item.created_at.split('T')[0] : '—',
       totalExamples: item.total_examples,
@@ -194,15 +212,25 @@ const data = response.data
       sourceText: item.source_text
     }))
 
+    // Actualizar Set de palabras boosteadas
     if (reset) {
+      boostedWords.value.clear()
       words.value = newItems
     } else {
       words.value.push(...newItems)
     }
 
+    // Llenar el Set con palabras boosteadas
+    newItems.forEach(item => {
+      if (item.is_boosted) {
+        boostedWords.value.add(item.id)
+      }
+    })
+
     totalPages.value = data.pages || 1
     totalWords.value = data.total || 0
     totalFavorites.value = data.total_favorites || 0
+    totalBoosted.value = data.total_boosted || 0
     hasMore.value = data.page < data.pages
   } catch (e: any) {
     error.value = e.message
@@ -559,9 +587,47 @@ function toggleFavoritesFilter() {
   }
 }
 
+function toggleBoostedFilter() {
+  trackButtonClick('toggle_boosted_filter', { show_boosted_only: showBoostedOnly.value })
+  showBoostedOnly.value = !showBoostedOnly.value
+  fetchWords(true) // Recargar palabras con el nuevo filtro
+}
+
 function toggleFavorite(word: Word) {
   trackButtonClick('toggle_favorite', { word_id: word.id, is_favorite: word.isFavorite })
   toggleFavoriteApi(word)
+}
+
+async function toggleBoostApi(word: Word) {
+  try {
+    const wasBoosted = word.is_boosted
+    const response = await api.patch(`words/words/${word.id}/boost`)
+
+    // Actualizar el estado del word
+    word.is_boosted = response.data.is_boosted
+
+    // Actualizar el Set local
+    if (response.data.is_boosted) {
+      boostedWords.value.add(word.id)
+    } else {
+      boostedWords.value.delete(word.id)
+    }
+
+    // Actualizar contador
+    if (response.data.is_boosted && !wasBoosted) {
+      totalBoosted.value++
+    } else if (!response.data.is_boosted && wasBoosted) {
+      totalBoosted.value--
+    }
+
+  } catch (err) {
+    error.value = "Error toggling boost"
+  }
+}
+
+function toggleBoost(word: Word) {
+  trackButtonClick('toggle_boost', { word_id: word.id, is_boosted: word.is_boosted })
+  toggleBoostApi(word)
 }
 
 function deleteWord(id: number) {
@@ -685,6 +751,18 @@ onUnmounted(() => {
           <span>Favorites</span>
           <span v-if="totalFavorites > 0" class="fav-count">{{ totalFavorites }}</span>
         </button>
+        <button
+          class="filter-tab"
+          :class="{ active: showBoostedOnly }"
+          @click="toggleBoostedFilter"
+          title="Show only boosted words"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+          <span>Boosted</span>
+          <span v-if="totalBoosted > 0" class="boosted-count-badge">{{ totalBoosted }}</span>
+        </button>
       </div>
       <!-- Mobile Search Button -->
       <button class="mobile-search-btn" @click="toggleSearchMobile">
@@ -702,11 +780,37 @@ onUnmounted(() => {
         </svg>
         <span v-if="totalFavorites > 0" class="mobile-fav-badge">{{ totalFavorites }}</span>
       </button>
+      <!-- Mobile Boosted Button -->
+      <button class="mobile-boosted-btn" :class="{ active: showBoostedOnly }" @click="toggleBoostedFilter" title="Show only boosted words">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+        <span v-if="totalBoosted > 0" class="boosted-count">{{ totalBoosted }}</span>
+      </button>
       <!-- Mobile Filter Button -->
       <button class="mobile-filter-btn" :class="{ active: learningStateFilter !== 'all' }" @click="toggleFilterMenu">
         <Icon icon="solar:filter-outline" width="18" />
       </button>
     </div>
+
+    <!-- Active Filter Banner -->
+    <transition name="slide-down">
+      <div v-if="showBoostedOnly" class="active-filter-banner">
+        <div class="banner-content">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+          <span class="banner-text">
+            Filtering <strong>{{ words.length }}</strong> of <strong>{{ totalBoosted }}</strong> boosted word{{ totalBoosted !== 1 ? 's' : '' }}
+          </span>
+          <button class="banner-close" @click="toggleBoostedFilter" title="Clear filter">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </transition>
 
     <!-- Learning State Filter -->
     <div class="learning-state-filter" :class="{ disabled: filterMode === 'favorites' }">
@@ -853,7 +957,7 @@ onUnmounted(() => {
       <!-- Word List — NO internal scroll, flows naturally with the page -->
       <div class="word-list" :class="{ 'grid-view': viewMode === 'grid' }">
         <div
-          v-for="word in words"
+          v-for="word in filteredWords"
           :key="word.id"
           class="word-card"
           :class="{ active: selectedWord?.id === word.id, pending: word.status === 'pending' }"
@@ -877,18 +981,30 @@ onUnmounted(() => {
               </div>
               <p class="word-definition">{{ word.definition }}</p>
             </div>
-            <button
-              class="fav-btn"
-              :class="{ active: word.isFavorite }"
-              @click.stop="toggleFavorite(word)"
-            >
-              <svg v-if="word.isFavorite" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-              </svg>
-              <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-              </svg>
-            </button>
+            <div class="word-card-actions">
+              <button
+                class="boost-btn"
+                :class="{ active: word.is_boosted }"
+                @click.stop="toggleBoost(word)"
+                title="Boost this word for super priority"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>
+              </button>
+              <button
+                class="fav-btn"
+                :class="{ active: word.isFavorite }"
+                @click.stop="toggleFavorite(word)"
+              >
+                <svg v-if="word.isFavorite" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+                <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+              </button>
+            </div>
           </div>
           <div class="word-meta">
             <span class="meta-tag level" :style="{ color: levelColor(word.level) }">
@@ -941,18 +1057,30 @@ onUnmounted(() => {
                   <Icon icon="solar:volume-loud-linear" width="20" />
                 </button>
               </div>
-              <button
-                class="detail-fav-btn"
-                :class="{ active: selectedWord.isFavorite }"
-                @click="toggleFavorite(selectedWord)"
-              >
-                <svg v-if="selectedWord.isFavorite" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                </svg>
-                <svg v-else width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-                </svg>
-              </button>
+              <div class="detail-actions">
+                <button
+                  class="detail-boost-btn"
+                  :class="{ active: selectedWord && selectedWord.is_boosted }"
+                  @click="toggleBoost(selectedWord)"
+                  title="Boost this word for super priority"
+                >
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                  </svg>
+                </button>
+                <button
+                  class="detail-fav-btn"
+                  :class="{ active: selectedWord.isFavorite }"
+                  @click="toggleFavorite(selectedWord)"
+                >
+                  <svg v-if="selectedWord.isFavorite" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                  </svg>
+                  <svg v-else width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                  </svg>
+                </button>
+              </div>
             </div>
 
             <p class="detail-definition">{{ selectedWord.definition }}</p>
@@ -1059,18 +1187,30 @@ onUnmounted(() => {
             </svg>
           </button>
           <h3 class="mobile-detail-title">Word Detail</h3>
-          <button
-            class="mobile-fav-btn"
-            :class="{ active: selectedWord.isFavorite }"
-            @click="toggleFavorite(selectedWord)"
-          >
-            <svg v-if="selectedWord.isFavorite" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-            </svg>
-            <svg v-else width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-            </svg>
-          </button>
+          <div class="mobile-detail-actions">
+            <button
+              class="mobile-boost-btn"
+              :class="{ active: boostedWords.has(selectedWord.id) }"
+              @click="toggleBoost(selectedWord)"
+              title="Boost this word for super priority"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+              </svg>
+            </button>
+            <button
+              class="mobile-fav-btn"
+              :class="{ active: selectedWord.isFavorite }"
+              @click="toggleFavorite(selectedWord)"
+            >
+              <svg v-if="selectedWord.isFavorite" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+              </svg>
+              <svg v-else width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div class="mobile-detail-content">
@@ -1595,6 +1735,105 @@ onUnmounted(() => {
   }
 }
 
+.boosted-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffc107;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+@media (max-width: 768px) {
+  .boosted-count-badge {
+    font-size: 14px;
+  }
+}
+
+/* ─── Active Filter Banner ─── */
+.active-filter-banner {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(255, 193, 7, 0.15) 0%, rgba(255, 193, 7, 0.08) 100%);
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  animation: slideDown 0.3s ease-out;
+}
+
+.banner-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  color: #ffc107;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.banner-content svg {
+  flex-shrink: 0;
+  color: #ffc107;
+}
+
+.banner-text {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.banner-text strong {
+  color: #fff;
+  font-weight: 700;
+}
+
+.banner-close {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: #ffc107;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.banner-close:hover {
+  color: #fff;
+  background: rgba(255, 193, 7, 0.15);
+  border-radius: 6px;
+}
+
+@media (max-width: 768px) {
+  .active-filter-banner {
+    padding: 10px 12px;
+  }
+
+  .banner-content {
+    font-size: 12px;
+  }
+
+  .banner-content svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .banner-close {
+    width: 20px;
+    height: 20px;
+  }
+}
+
 /* ─── Learning State Filter ─── */
 .learning-state-filter {
   display: flex;
@@ -1666,6 +1905,50 @@ onUnmounted(() => {
   border-radius: 999px;
   background: #f472b6;
   color: white;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.mobile-boosted-btn {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #9c99ab;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  display: flex;
+}
+
+.mobile-boosted-btn:hover {
+  background: rgba(255, 193, 7, 0.1);
+  color: #ffc107;
+}
+
+.mobile-boosted-btn.active {
+  color: #ffc107;
+  background: rgba(255, 193, 7, 0.15);
+  border-color: rgba(255, 193, 7, 0.2);
+}
+
+.boosted-count {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #ffc107;
+  color: #1a1625;
   font-size: 10px;
   font-weight: 700;
 }
@@ -2169,6 +2452,39 @@ onUnmounted(() => {
   color: #f472b6;
 }
 
+/* ─── Boost Button ─── */
+.word-card-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.boost-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: #9c99ab;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.boost-btn:hover {
+  background: rgba(255, 193, 7, 0.1);
+  color: #ffc107;
+}
+
+.boost-btn.active {
+  color: #ffc107;
+  background: rgba(255, 193, 7, 0.15);
+  box-shadow: 0 0 12px rgba(255, 193, 7, 0.3);
+}
+
 /* ─── Meta Tags ─── */
 .word-meta {
   display: flex;
@@ -2337,6 +2653,36 @@ onUnmounted(() => {
 .detail-fav-btn.active {
   color: #f472b6;
   background: rgba(244, 114, 182, 0.1);
+}
+
+.detail-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.detail-boost-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: #9c99ab;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.detail-boost-btn:hover {
+  background: rgba(255, 193, 7, 0.15);
+  color: #ffc107;
+}
+
+.detail-boost-btn.active {
+  color: #ffc107;
+  background: rgba(255, 193, 7, 0.2);
+  box-shadow: 0 0 16px rgba(255, 193, 7, 0.4);
 }
 
 .detail-definition {
@@ -3230,6 +3576,36 @@ onUnmounted(() => {
 
 .mobile-fav-btn.active {
   color: #f472b6;
+}
+
+.mobile-detail-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.mobile-boost-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: #9c99ab;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.mobile-boost-btn:hover {
+  background: rgba(255, 193, 7, 0.1);
+  color: #ffc107;
+}
+
+.mobile-boost-btn.active {
+  color: #ffc107;
+  background: rgba(255, 193, 7, 0.15);
+  box-shadow: 0 0 12px rgba(255, 193, 7, 0.3);
 }
 
 .mobile-detail-content {
