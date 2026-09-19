@@ -295,6 +295,7 @@ const formattedDate = computed(() => {
   /* Solo scrollea internamente si el contenido es más alto que la ventana */
   max-height: 100vh;
   overflow-y: auto;
+  z-index: 999;
 }
 
 .word-panel::-webkit-scrollbar {
