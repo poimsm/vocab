@@ -6,7 +6,7 @@ Keeps counters updated for words, examples, best_options, etc.
 """
 from datetime import datetime, timezone
 from sqlmodel import Session, select
-from models import UserProfile
+from auth.models import UserProfile
 from logging_client import logger
 
 
@@ -239,7 +239,10 @@ class UserProfileManager:
         Returns:
             Updated profile
         """
-        from models import Word, ExampleWord, BestOption, Collocation, QuickWrite
+        from features.words.models import Word, ExampleWord
+        from features.best_options.models import BestOption
+        from features.collocations.models import Collocation
+        from features.quick_write.models import QuickWrite
         from sqlmodel import func, select
 
         try:

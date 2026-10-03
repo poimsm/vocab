@@ -92,7 +92,7 @@ def test_nltk():
 
         # Test 5: approximate_text_form function
         try:
-            from examples.helpers import approximate_text_form
+            from features.examples.helpers import approximate_text_form
             test_cases = [
                 ("He bore the pain silently", "borne"),
                 ("She buried her loved one", "burial"),
@@ -135,7 +135,7 @@ def test_approximate_text_form(request: ApproximateTextFormRequest):
     Simula cómo se extrae el text_form del ejemplo.
     """
     try:
-        from examples.helpers import approximate_text_form
+        from features.examples.helpers import approximate_text_form
 
         example_text = request.example_text.strip()
         word_main = request.word_main.strip()
@@ -188,7 +188,7 @@ def test_approximate_text_form_batch(test_cases: list = Body(..., description="L
     ]
     """
     try:
-        from examples.helpers import approximate_text_form
+        from features.examples.helpers import approximate_text_form
 
         if not test_cases:
             return {
@@ -266,8 +266,9 @@ def fix_example_words(dry_run: bool = True, db: Session = Depends(get_db)):
     """
     try:
         from sqlmodel import select
-        from models import ExampleWord, Example, Word
-        from examples.helpers import approximate_text_form
+        from features.words.models import ExampleWord, Word
+        from features.examples.models import Example
+        from features.examples.helpers import approximate_text_form
 
         # Obtener todos los ExampleWords con sus relaciones
         statement = select(ExampleWord, Example, Word).join(

@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y openjdk-21-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
 # 1. Copiamos el requirements que está en la raíz del contexto (.)
-COPY requirements.txt ..
+COPY requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt \
     && python -m nltk.downloader punkt wordnet stopwords punkt_tab

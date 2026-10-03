@@ -9,7 +9,8 @@ from pydantic import BaseModel
 from db import get_db
 from logging_client import logger
 from auth.repository import get_current_user
-from models import User, ActivityType, UserActivity
+from auth.models import User
+from core.activity.models import ActivityType, UserActivity
 from decorators import log_endpoint
 from activity.user_activity_service import UserActivityService
 

@@ -8,7 +8,7 @@ Uso:
     python manage.py load-global-config
 """
 from sqlmodel import Session, select
-from models import GlobalConfiguration
+from core.config.models import GlobalConfiguration
 from datetime import datetime, timezone
 from logging_client import logger
 

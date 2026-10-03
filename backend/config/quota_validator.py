@@ -7,7 +7,7 @@ according to configuration (first user-specific, then global).
 Uses UserProfileManager to obtain current counters efficiently.
 """
 from sqlmodel import Session, func, select
-from models import User
+from auth.models import User
 from config.global_config import GlobalConfigManager
 from config.user_config import UserConfigManager
 from config.user_profile import UserProfileManager

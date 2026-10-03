@@ -6,7 +6,8 @@ from datetime import datetime, timezone, timedelta
 from sqlmodel import Session, select
 import json
 
-from models import UserActivity, ActivityType, User
+from core.activity.models import UserActivity, ActivityType
+from auth.models import User
 from logging_client import logger
 
 

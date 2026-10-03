@@ -2,7 +2,7 @@ import sys
 import os
 from sqlmodel import Session, select
 from db import engine
-from models import User
+from auth.models import User
 from auth.repository import hash_password
 from logging_client import logger 
 

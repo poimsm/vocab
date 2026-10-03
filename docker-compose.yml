@@ -12,14 +12,30 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # 2. BROKER DE MENSAJES (Redis)
-  redis:
-    image: redis:7-alpine
-    container_name: redis_container
+  # 2. BROKER DE MENSAJES (RabbitMQ)
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq_container
     restart: always
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${RABBITMQ_PORT:-5672}:5672"   # Puerto principal de comunicación para Celery
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672" # Puerto para el Panel Web de administración
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # 3. BACKEND (FastAPI)
   backend:
@@ -30,30 +46,70 @@ services:
     restart: always
     env_file:
       - .env
+    environment:
+      PYTHONPATH: /app
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      DATABASE_URL: ${DATABASE_URL}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
     depends_on:
-      - postgres_db
-      - redis
+      postgres_db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    working_dir: /app
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
-  # 4. CELERY WORKER
-  celery_worker:
+  # 4.A. WORKER EXCLUSIVO PARA IA (Secuencial y estricto)
+  worker_ai:
     build:
       context: .
       dockerfile: ./backend/Dockerfile
-    container_name: celery_worker_container
+    container_name: worker_ai_container
     restart: always
     env_file:
       - .env
+    environment:
+      PYTHONPATH: /app
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      DATABASE_URL: ${DATABASE_URL}
     volumes:
       - ./backend:/app
     depends_on:
-      - postgres_db
-      - redis
-    command: celery -A ${CELERY_APP_MODULE:-worker.celery_app} worker --loglevel=${CELERY_LOG_LEVEL:-info}
+      postgres_db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    working_dir: /app
+    command: celery -A ${CELERY_APP_MODULE} worker -Q ai_queue -c 1 --loglevel=${CELERY_LOG_LEVEL}
+
+  # 4.B. WORKER PARA TAREAS GENERALES EN SEGUNDO PLANO
+  worker_background:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    container_name: worker_background_container
+    restart: always
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      DATABASE_URL: ${DATABASE_URL}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    working_dir: /app
+    command: celery -A ${CELERY_APP_MODULE} worker -Q background_queue -c 2 --loglevel=${CELERY_LOG_LEVEL}
 
   # 5. FRONTEND (Vue + Nginx)
   nginx:
@@ -76,7 +132,7 @@ services:
     container_name: logging_service_container
     restart: always
     ports:
-      - "8001:8000"
+      - "${LOGGING_SERVICE_PORT:-8001}:8000"
     volumes:
       - ./logs:/app/logs
     environment:
@@ -84,3 +140,4 @@ services:
 
 volumes:
   postgres_data:
+  rabbitmq_data:

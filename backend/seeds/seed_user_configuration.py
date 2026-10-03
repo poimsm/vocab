@@ -9,7 +9,7 @@ Uso:
     python manage.py load-user-configuration 5
 """
 from sqlmodel import Session, select
-from models import User
+from auth.models import User
 from config.user_config import UserConfigManager
 from logging_client import logger
 

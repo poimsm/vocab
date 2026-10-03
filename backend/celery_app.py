@@ -1,7 +1,7 @@
 # backend/celery_app.py
 import os
 from celery import Celery
-from celery.schedules import crontab
+from kombu import Exchange, Queue
 from logging_client import logger
 
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL")
@@ -15,31 +15,54 @@ celery_app = Celery(
 )
 logger.info("Celery application created successfully")
 
-# Configure Celery
+# 1. Descubrir y registrar todas las tareas (para que se ejecuten los decoradores @subscribe_to)
+# Celery busca automáticamente módulos llamados 'tasks.py' en los paquetes listados
+celery_app.autodiscover_tasks([
+    "features.examples",
+    "features.best_options",
+    "features.words",
+    "features.quick_write",
+    "core.boost",
+    "core.central_queue",
+    "core.delivery",
+    "core.generation_ai",
+    "core.learning_path",
+])
+
+# 2. Generar las colas automáticamente basadas en las suscripciones registradas
+from core.event_bus import get_event_queues
+
+event_queues = get_event_queues()
+
+# Colas de propósito general (si quieres colas adicionales que no sean basadas en eventos)
+app_events_exchange = Exchange('app_events', type='topic', durable=True)
+default_queues = [
+    Queue(
+        "ai_queue",
+        exchange=app_events_exchange,
+        routing_key="ai.#",
+        durable=True
+    ),
+    Queue(
+        "background_queue",
+        exchange=app_events_exchange,
+        routing_key="background.#",
+        durable=True
+    ),
+]
+
+# 3. Configuración principal de Celery con todas las colas
 celery_app.conf.update(
     worker_log_format='%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
     worker_task_log_format='%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
-)
 
-# Importar tasks manualmente de examples y words
-celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
-    worker_concurrency=1,  # Procesa estrictamente una tarea por vez
-    imports=[
-        "examples.example_generator",
-        "best_options.best_options_generator",
-        "words.word_generator",
-        "quick_write.quick_write_generator",
-    ],
-    # Celery Beat: Tareas programadas
-    # beat_schedule={
-    #     "spaced-repetition-daily": {
-    #         "task": "tasks.examples.spaced_repetition_daily",
-    #         "schedule": crontab(hour=2, minute=0),  # Ejecutar diariamente a las 2 AM UTC
-    #     },
-    # },
+    worker_concurrency=1,
+
+    # Combina colas de eventos + colas por defecto
+    task_queues=event_queues + default_queues,
 )

@@ -4,8 +4,27 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from sqlmodel import SQLModel
-import models
 import os
+
+# Import all models to register them with SQLAlchemy/SQLModel
+from auth.models import User, UserProfile
+from features.words.models import Word, WordLevel, WordStatistics, ExampleWord
+from features.examples.models import Example, ExampleType, ExploreConfiguration
+from features.best_options.models import BestOption
+from features.quick_write.models import QuickWrite
+from features.collocations.models import Collocation
+from core.learning_path.models import (
+    LearningPath, LearningPathHistory, LearningPathCursor,
+    LearningPathQueue, LearningPathAnomaly, PathRepairLog, LearningPathGenerationMonitor
+)
+from core.config.models import GlobalConfiguration, UserConfiguration
+from core.activity.models import ActivityType, UserActivity
+from core.sync.models import ResolveLock
+from core.generation_ai.models import GenerationAIRegistry
+from core.boost.models import BoostGenerationMonitor
+from core.central_queue.models import CentralLockState, CentralQueue
+from core.delivery.models import DeliveryBuffer
+from core.explore.models import ExploreSession
 
 from alembic import context
 from logging_client import logger

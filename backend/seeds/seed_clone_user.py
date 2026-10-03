@@ -9,7 +9,7 @@ Copia todos los datos de un usuario a otro, incluyendo:
 - ContentQueue
 - QuickWrites
 - Collocations
-- UserExampleSession
+- ExploreSession
 - UserConfiguration
 
 Uso:
@@ -18,12 +18,14 @@ Uso:
 import traceback
 from datetime import datetime, timezone
 from sqlmodel import Session, select, delete
-from models import (
-    User, Word, WordStatistics, Example, ExampleWord, BestOption,
-    LearningPath, LearningPathHistory, LearningPathCursor,
-    ContentQueue, QuickWrite, Collocation, UserExampleSession,
-    UserConfiguration
-)
+from auth.models import User, UserConfiguration
+from features.words.models import Word, WordStatistics, ExampleWord
+from features.examples.models import Example
+from features.best_options.models import BestOption
+from features.quick_write.models import QuickWrite
+from features.collocations.models import Collocation
+from core.learning_path.models import LearningPath, LearningPathHistory, LearningPathCursor, LearningPathQueue
+from core.explore.models import ExploreSession
 from logging_client import logger
 
 
@@ -55,10 +57,10 @@ def seed_clone_user(session: Session, source_user_id: int, target_user_id: int, 
         if clean:
             logger.info(f"[seed_clone_user] Limpiando datos del usuario destino {target_user_id}...")
             # Eliminar en orden de dependencias (inverso al que los creamos)
-            session.exec(delete(ContentQueue).where(ContentQueue.user_id == target_user_id))
+            session.exec(delete(LearningPathQueue).where(LearningPathQueue.user_id == target_user_id))
             session.exec(delete(QuickWrite).where(QuickWrite.user_id == target_user_id))
             session.exec(delete(Collocation).where(Collocation.user_id == target_user_id))
-            session.exec(delete(UserExampleSession).where(UserExampleSession.user_id == target_user_id))
+            session.exec(delete(ExploreSession).where(ExploreSession.user_id == target_user_id))
             session.exec(delete(LearningPathCursor).where(LearningPathCursor.user_id == target_user_id))
             session.exec(delete(LearningPathHistory).where(LearningPathHistory.user_id == target_user_id))
             session.exec(delete(LearningPath).where(LearningPath.user_id == target_user_id))
@@ -259,12 +261,12 @@ def seed_clone_user(session: Session, source_user_id: int, target_user_id: int, 
 
         logger.info(f"[seed_clone_user] ✓ {len(source_cursors)} learning_path_cursor(s) clonado(s)")
 
-        # 8. Clonar ContentQueue
-        source_cq = session.exec(select(ContentQueue).where(ContentQueue.user_id == source_user_id)).all()
-        logger.info(f"[seed_clone_user] Clonando {len(source_cq)} content_queue item(s)...")
+        # 8. Clonar LearningPathQueue
+        source_cq = session.exec(select(LearningPathQueue).where(LearningPathQueue.user_id == source_user_id)).all()
+        logger.info(f"[seed_clone_user] Clonando {len(source_cq)} learning_path_queue item(s)...")
 
         for source_item in source_cq:
-            new_item = ContentQueue(
+            new_item = LearningPathQueue(
                 content_id=source_item.content_id,
                 type=source_item.type,
                 status=source_item.status,
@@ -275,7 +277,7 @@ def seed_clone_user(session: Session, source_user_id: int, target_user_id: int, 
             )
             session.add(new_item)
 
-        logger.info(f"[seed_clone_user] ✓ {len(source_cq)} content_queue item(s) clonado(s)")
+        logger.info(f"[seed_clone_user] ✓ {len(source_cq)} learning_path_queue item(s) clonado(s)")
 
         # 9. Clonar QuickWrites
         source_qw = session.exec(select(QuickWrite).where(QuickWrite.user_id == source_user_id)).all()
@@ -320,23 +322,23 @@ def seed_clone_user(session: Session, source_user_id: int, target_user_id: int, 
 
         logger.info(f"[seed_clone_user] ✓ {len(source_collocations)} collocation(s) clonado(s)")
 
-        # 11. Clonar UserExampleSession
-        source_ues = session.exec(select(UserExampleSession).where(UserExampleSession.user_id == source_user_id)).all()
-        logger.info(f"[seed_clone_user] Clonando {len(source_ues)} user_example_session(s)...")
+        # 11. Clonar ExploreSession
+        source_explore_sessions = session.exec(select(ExploreSession).where(ExploreSession.user_id == source_user_id)).all()
+        logger.info(f"[seed_clone_user] Clonando {len(source_explore_sessions)} explore_session(s)...")
 
-        for source_ues_item in source_ues:
-            new_ues = UserExampleSession(
+        for source_explore_session in source_explore_sessions:
+            new_explore_session = ExploreSession(
                 user_id=target_user_id,
-                buffer_queue_item_ids=source_ues_item.buffer_queue_item_ids,
-                buffer_position=source_ues_item.buffer_position,
-                visited_queue_item_ids=source_ues_item.visited_queue_item_ids,
-                resolved_queue_item_ids=source_ues_item.resolved_queue_item_ids,
+                buffer_delivery_ids=source_explore_session.buffer_delivery_ids,
+                buffer_position=source_explore_session.buffer_position,
+                visited_delivery_ids=source_explore_session.visited_delivery_ids,
+                resolved_delivery_ids=source_explore_session.resolved_delivery_ids,
                 created_at=datetime.now(timezone.utc),
                 updated_at=datetime.now(timezone.utc),
             )
-            session.add(new_ues)
+            session.add(new_explore_session)
 
-        logger.info(f"[seed_clone_user] ✓ {len(source_ues)} user_example_session(s) clonado(s)")
+        logger.info(f"[seed_clone_user] ✓ {len(source_explore_sessions)} explore_session(s) clonado(s)")
 
         # 12. Clonar UserConfiguration
         source_uc = session.exec(select(UserConfiguration).where(UserConfiguration.user_id == source_user_id)).first()

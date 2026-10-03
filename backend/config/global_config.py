@@ -7,7 +7,7 @@ Includes in-memory cache to avoid frequent queries.
 from typing import Optional, Dict
 from datetime import datetime, timezone
 from sqlmodel import Session, select
-from models import GlobalConfiguration
+from core.config.models import GlobalConfiguration
 from logging_client import logger
 
 

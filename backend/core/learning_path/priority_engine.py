@@ -1,0 +1,280 @@
+from datetime import datetime, timezone
+from typing import Optional, List, Tuple
+
+from sqlmodel import Session, select
+
+# Importa tus modelos reales
+from features.words.models import Word, WordStatistics
+from core.learning_path.models import LearningState
+
+
+def ensure_aware_datetime(dt: Optional[datetime]) -> Optional[datetime]:
+    """
+    Convierte un datetime naive a aware (UTC).
+    Si ya es aware, lo retorna sin cambios.
+    Si es None, retorna None.
+    """
+    if dt is None:
+        return None
+
+    if dt.tzinfo is None:
+        # Es naive, convertir a aware (asumir UTC)
+        return dt.replace(tzinfo=timezone.utc)
+
+    return dt
+
+
+class PriorityEngine:
+    """
+    Calcula la necesidad/prioridad actual de una palabra.
+
+    Esta clase NO modifica la base de datos.
+    NO crea LearningPath.
+    NO genera contenido.
+
+    Su única responsabilidad es transformar el estado actual
+    de una palabra en métricas útiles para el ContentPlanner.
+    """
+
+    def calculate_priority(
+        self,
+        word: Word,
+        statistics: WordStatistics,
+        now: Optional[datetime] = None,
+        expected_exposure: float = 0.0,
+        spacing_words_count: int = 0,
+    ) -> float:
+        """
+        Calcula la prioridad final de la palabra.
+
+        La prioridad combina:
+
+        - necesidad según learning_state
+        - urgencia por spaced repetition
+        - prioridad de palabra nueva
+        - penalización por exposición reciente
+        - penalización por contenido/exposición ya planificada
+
+        El resultado está limitado entre 0.0 y 1.0.
+
+        expected_exposure representa contenido que ya se espera
+        que contribuya a la exposición futura de la palabra.
+
+        spacing_words_count: total de palabras en estado SPACING.
+        Si > 6, aumenta la prioridad de palabras SPACING para que se consuman más rápido.
+
+        Importante:
+        no significa que la palabra esté aprendida o no.
+        Sólo representa qué tan conveniente es volver a planificarla.
+        """
+
+        if now is None:
+            now = datetime.now(timezone.utc)
+        else:
+            now = ensure_aware_datetime(now)
+
+        learning_need = self.calculate_learning_need(
+            statistics,
+            spacing_words_count=spacing_words_count,
+        )
+        review_urgency = self.calculate_review_urgency(
+            statistics,
+            now,
+        )
+        new_word_boost = self.calculate_new_word_boost(
+            statistics,
+        )
+        recent_penalty = self.calculate_recent_exposure_penalty(
+            statistics,
+            now,
+        )
+        expected_penalty = self.calculate_expected_exposure_penalty(
+            expected_exposure,
+        )
+
+        priority = (
+            learning_need * 0.40
+            + review_urgency * 0.25
+            + new_word_boost * 0.15
+        )
+
+        priority -= recent_penalty
+        priority -= expected_penalty
+
+        return max(0.0, min(1.0, priority))
+
+    def calculate_learning_need(
+        self,
+        statistics: WordStatistics,
+        spacing_words_count: int = 0,
+    ) -> float:
+        """
+        Determina la necesidad base según el estado de aprendizaje.
+
+        NEW:
+            prioridad muy alta porque todavía no ha comenzado
+            su aprendizaje.
+
+        LEARNING:
+            prioridad alta.
+
+        REINFORCING:
+            prioridad media/alta.
+
+        SPACING:
+            prioridad muy baja (fase de espaciamiento prolongado).
+            Se muestra muy raramente para simular olvido natural.
+
+            AJUSTE DINÁMICO: Si hay más de 6 palabras en SPACING,
+            aumenta la prioridad para evitar acumulación.
+
+        LEARNED:
+            prioridad baja.
+
+        REVIEW:
+            vuelve a aumentar porque necesita recuperación
+            después de un período sin exposición.
+        """
+
+        values = {
+            LearningState.NEW: 1.00,
+            LearningState.LEARNING: 0.85,
+            LearningState.REINFORCING: 0.65,
+            LearningState.SPACING: 0.20,
+            LearningState.ALMOST_LEARNED: 0.05,
+            LearningState.LEARNED: 0.00,             
+            LearningState.REVIEW: 0.80,
+        }
+
+        priority = values.get(
+            statistics.learning_state,
+            0.50,
+        )
+
+        if (statistics.learning_state == LearningState.SPACING and
+            spacing_words_count > 3):
+
+            if spacing_words_count <= 5:
+                priority += 0.40
+            elif spacing_words_count <= 8:
+                priority += 0.60
+            else:
+                priority += 0.90
+
+        return priority
+
+    def calculate_review_urgency(
+        self,
+        statistics: WordStatistics,
+        now: datetime,
+    ) -> float:
+        """
+        Aumenta gradualmente la prioridad mientras más tiempo
+        haya pasado desde la última exposición.
+
+        No intenta implementar todavía un algoritmo completo
+        de spaced repetition.
+
+        Simplemente produce una señal de urgencia que luego
+        puede evolucionar hacia algo más sofisticado.
+        """
+
+        if statistics.last_seen_at is None:
+            return 1.0
+
+        last_seen = ensure_aware_datetime(statistics.last_seen_at)
+        elapsed = now - last_seen
+        days = elapsed.total_seconds() / 86400.0
+
+        if days <= 1:
+            return 0.0
+
+        if days >= 30:
+            return 1.0
+
+        return min(1.0, days / 30.0)
+
+    def calculate_new_word_boost(
+        self,
+        statistics: WordStatistics,
+    ) -> float:
+        """
+        Da prioridad temporal a palabras nuevas.
+
+        Una palabra NEW no debería tener que esperar demasiado
+        tiempo antes de entrar al LearningPath.
+        """
+
+        if statistics.learning_state == LearningState.NEW:
+            return 1.0
+
+        return 0.0
+
+
+    def calculate_recent_exposure_penalty(
+        self,
+        statistics: WordStatistics,
+        now: datetime,
+    ) -> float:
+        """
+        Penaliza palabras que fueron vistas recientemente.
+
+        Esto evita que una palabra con alta prioridad termine
+        monopolizando todos los slots del segmento.
+
+        Es una penalización suave, no una exclusión.
+        """
+
+        if statistics.last_seen_at is None:
+            return 0.0
+
+        last_seen = ensure_aware_datetime(statistics.last_seen_at)
+        elapsed = now - last_seen
+        hours = elapsed.total_seconds() / 3600.0
+
+        penalty = 0.0
+        if hours < 1:
+            penalty = 0.35
+        elif hours < 6:
+            penalty = 0.25
+        elif hours < 24:
+            penalty = 0.15
+        elif hours < 48:
+            penalty = 0.05
+        else:
+            penalty = 0.0
+
+        return penalty
+
+    def calculate_expected_exposure_penalty(
+        self,
+        expected_exposure: float,
+    ) -> float:
+        """
+        Penaliza palabras que ya tienen bastante exposición futura
+        planificada o contenido preparado.
+
+        Esto evita generar contenido innecesario.
+
+        Por ejemplo:
+
+            expected_exposure = 0
+                -> no penalty
+
+            expected_exposure = 1
+                -> pequeña penalty
+
+            expected_exposure = 3
+                -> penalty considerable
+
+            expected_exposure >= 5
+                -> fuerte penalty
+        """
+
+        if expected_exposure <= 0:
+            return 0.0
+
+        if expected_exposure >= 5:
+            return 0.40
+
+        return expected_exposure * 0.08

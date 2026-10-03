@@ -2,7 +2,7 @@
 User Configuration Manager
 """
 from sqlmodel import Session, select
-from models import UserConfiguration
+from core.config.models import UserConfiguration
 from logging_client import logger
 from config.global_config import GlobalConfigManager
 

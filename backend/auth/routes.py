@@ -2,13 +2,17 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlmodel import Session, select
 from db import get_db
-from models import User, Word, Example, ExampleWord, ExampleType, WordStatistics, LearningState, ContentType
+from auth.models import User
+from features.words.models import Word, WordStatistics, ExampleWord
+from features.examples.models import Example, ExampleType
+from core.learning_path.models import LearningState
+from core.enums import ContentType
 from auth.repository import hash_password, verify_password, create_access_token
 from pydantic import BaseModel, EmailStr
 from logging_client import logger
 from decorators import log_endpoint
 from pathlib import Path
-from examples.helpers import approximate_text_form
+from features.examples.helpers import approximate_text_form
 from config import QuotaValidator
 
 router = APIRouter()

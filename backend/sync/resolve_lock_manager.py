@@ -17,7 +17,7 @@ import time
 from datetime import datetime, timezone
 from sqlmodel import Session, select
 from logging_client import logger
-from models import ResolveLock
+from core.sync.models import ResolveLock
 
 
 class ResolveLockManager:

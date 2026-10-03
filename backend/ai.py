@@ -1,7 +1,7 @@
 import os
 import json
 from openai import OpenAI
-import models
+from features.words.models import Word
 from logging_client import logger
 
 client = OpenAI(api_key=os.getenv("AI_KEY"))
@@ -235,7 +235,7 @@ Rules:
 
 
 def generate_examples_for_single_word(
-    word: models.Word,
+    word: Word,
     amount: int = 1,
     db = None
 ):
@@ -248,7 +248,8 @@ def generate_examples_for_single_word(
     existing_examples = []
     if db is not None:
         from sqlmodel import select
-        from models import Example, ExampleWord
+        from features.examples.models import Example
+        from features.words.models import ExampleWord
 
         try:
             existing_examples = db.exec(
@@ -326,7 +327,7 @@ Example:
         return None
 
 
-def generate_examples_from_words(words: list[models.Word]):
+def generate_examples_from_words(words: list[Word]):
     logger.info(f"generate_examples_from_words")
     payload = [
         {
@@ -448,7 +449,7 @@ Format:
     return response.choices[0].message.content
 
 
-def generate_best_options_from_words(words: list[models.Word]):
+def generate_best_options_from_words(words: list[Word]):
     logger.info(f"generate_best_options_from_words")
     payload = [
         {
@@ -550,7 +551,7 @@ WORDS:
         return None
 
 
-def generate_quick_write_exercises(words: list[models.Word]):
+def generate_quick_write_exercises(words: list[Word]):
     logger.info("generate_quick_write_exercises")
 
     word_count = len(words)
@@ -726,7 +727,7 @@ text:
     return response.choices[0].message.content.strip()
 
 
-def generate_natural_pairs_from_words(words: list[models.Word]):
+def generate_natural_pairs_from_words(words: list[Word]):
     logger.info("generate_natural_pairs_from_words")
 
     payload = [

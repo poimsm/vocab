@@ -8,7 +8,7 @@ Uso:
     python manage.py seed-missing-user-profiles
 """
 from sqlmodel import Session, select
-from models import User, UserProfile
+from auth.models import User, UserProfile
 from config.user_profile import UserProfileManager
 from logging_client import logger
 
