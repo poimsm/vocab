@@ -113,6 +113,36 @@ def explore_examples(
         response_builder = ExploreResponseBuilder(db)
         examples = response_builder.build_examples_response(buffer_ids, delivery_item_map, current_user.id)
 
+        # Marcar delivery items como DISPATCHED
+        from core.delivery.repository import DeliveryRepository
+        delivery_repo = DeliveryRepository(db)
+        dispatched_count = delivery_repo.mark_multiple_as_dispatched(buffer_ids)
+        logger.debug(
+            f"[explore_examples] Marked {dispatched_count} delivery items as DISPATCHED"
+        )
+
+        # Actualizar sesión de exploración con los IDs y posición actual
+        # Esto asegura que al refrescar, se restauren exactamente los mismos items
+        from core.explore.explore_repository import ExploreRepository
+        explore_repo = ExploreRepository(db)
+        explore_repo.update_session(current_user.id, buffer_ids, buffer_position)
+        logger.debug(
+            f"[explore_examples] Updated explore session: {len(buffer_ids)} items at position {buffer_position}"
+        )
+
+        # Publicar evento de despacho para cada item siendo entregado al usuario
+        # Esto dispara la tarea que marca la queue_item como CONSUMED
+        from core.event_bus import publish_event_background
+        for delivery_item in delivery_items:
+            publish_event_background(
+                'delivery.item_dispatched',
+                user_id=current_user.id,
+                learning_path_queue_item_id=delivery_item.learning_path_queue_id,
+            )
+            logger.debug(
+                f"[explore_examples] Published delivery.item_dispatched for queue_item {delivery_item.learning_path_queue_id}"
+            )
+
     logger.info(
         f"[explore_examples] Completed with status={status}, returned {len(examples)} examples, "
         f"buffer_size={len(buffer_ids)}, position={buffer_position}"

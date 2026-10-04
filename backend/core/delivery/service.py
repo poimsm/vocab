@@ -4,7 +4,7 @@ from sqlmodel import Session
 from core.delivery.repository import DeliveryRepository
 from core.delivery.enums import DeliveryStatus
 from core.enums import ContentSourceType, ContentType
-from core.event_bus import publish_event
+from core.event_bus import publish_event_background
 from logging_client import logger
 from core.boost.repository import BoostRepository
 from core.learning_path.services import LearningPathService
@@ -202,31 +202,7 @@ class DeliveryService:
             f"Checking learning path status..."
         )
 
-        # 3a. Chequear si hay generación en progreso
-        if learning_path_service.is_content_generating(user_id, content_type_enum):
-            logger.info(
-                f"[DeliveryService] Learning path content is currently generating for user {user_id}"
-            )
-            return {
-                "status": "generating",
-                "content": [],
-            }
-
-        # 3b. Chequear si hay palabras disponibles para generar
-        has_available_words = learning_path_service.has_available_words_for_generation(
-            user_id, content_type_enum
-        )
-
-        if not has_available_words:
-            logger.warning(
-                f"[DeliveryService] No available words for user {user_id} to generate content"
-            )
-            return {
-                "status": "no_words",
-                "content": [],
-            }
-
-        # 3c. Hay palabras disponibles pero no se está generando: intenta obtener contenido
+        # 3a. Intentar obtener contenido disponible (primero, antes de chequear estado de generación)
         logger.debug(
             f"[DeliveryService] Checking for learning path content for user {user_id}..."
         )
@@ -235,7 +211,7 @@ class DeliveryService:
         )
 
         if items:
-            # Hay contenido disponible
+            # Hay contenido disponible (probablemente pre-generado transferido)
             logger.info(
                 f"[DeliveryService] Found {len(items)} learning path content items for user {user_id}"
             )
@@ -255,13 +231,37 @@ class DeliveryService:
                 ],
             }
 
-        # 3d. No hay contenido pero hay palabras disponibles: triggear generación
+        # 3b. No hay contenido: chequear si hay generación en progreso
+        if learning_path_service.is_content_generating(user_id, content_type_enum):
+            logger.info(
+                f"[DeliveryService] Learning path content is currently generating for user {user_id}"
+            )
+            return {
+                "status": "generating",
+                "content": [],
+            }
+
+        # 3c. Chequear si hay palabras disponibles para generar
+        has_available_words = learning_path_service.has_available_words_for_generation(
+            user_id, content_type_enum
+        )
+
+        if not has_available_words:
+            logger.warning(
+                f"[DeliveryService] No available words for user {user_id} to generate content"
+            )
+            return {
+                "status": "no_words",
+                "content": [],
+            }
+
+        # 3d. Hay palabras disponibles pero no se está generando: triggear generación
         logger.info(
             f"[DeliveryService] No learning path content in buffer but words available for user {user_id}. "
             f"Triggering generation..."
         )
-        publish_event(
-            'event.learning_path.content_exhausted',
+        publish_event_background(
+            'content.exhausted',
             user_id=user_id,
             content_type=content_type_enum.value,
         )

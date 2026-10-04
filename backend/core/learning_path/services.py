@@ -182,7 +182,7 @@ class LearningPathService:
         # Delegar al repositorio la lógica de verificación
         return self.content_repo.is_content_learned(
             content_id=queue_item.content_id,
-            content_type=queue_item.type,
+            content_type=queue_item.content_type,
             user_id=user_id,
         )
 
@@ -251,7 +251,7 @@ class LearningPathService:
             tracker = LearningTracker(self.db, self.content_repo)
             tracker.record_exposure(
                 user_id=user_id,
-                content_type=queue_item.type,
+                content_type=queue_item.content_type,
                 content_id=queue_item.content_id,
             )
 

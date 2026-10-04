@@ -108,14 +108,3 @@ class ContentRepository(Protocol):
         """
         ...
 
-    def mark_as_consumed(self, content_id: int, content_type: ContentType) -> None:
-        """
-        Marca un contenido como consumido (is_consumed=True).
-
-        El contenido consumido no debe volver a aparecer en la queue.
-
-        Args:
-            content_id: ID del contenido
-            content_type: Tipo de contenido (EXAMPLE, BEST_OPTIONS, etc)
-        """
-        ...

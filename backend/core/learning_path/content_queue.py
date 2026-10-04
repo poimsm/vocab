@@ -44,7 +44,7 @@ class ContentQueue:
             select(LearningPathQueue)
             .where(
                 LearningPathQueue.user_id == user_id,
-                LearningPathQueue.type == content_type,
+                LearningPathQueue.content_type == content_type,
                 LearningPathQueue.content_id == content_id,
                 LearningPathQueue.status == LearningPathQueueStatus.PENDING,
             )
@@ -56,7 +56,7 @@ class ContentQueue:
         now = datetime.now(timezone.utc)
         item = LearningPathQueue(
             user_id=user_id,
-            type=content_type,
+            content_type=content_type,
             content_id=content_id,
             priority=priority,
             status=LearningPathQueueStatus.PENDING,
@@ -126,7 +126,7 @@ class ContentQueue:
 
         if content_type is not None:
             statement = statement.where(
-                LearningPathQueue.type == content_type
+                LearningPathQueue.content_type == content_type
             )
 
         return self.session.exec(statement).first()
@@ -152,7 +152,7 @@ class ContentQueue:
             select(LearningPathQueue)
             .where(
                 LearningPathQueue.user_id == user_id,
-                LearningPathQueue.type == content_type,
+                LearningPathQueue.content_type == content_type,
                 LearningPathQueue.status == LearningPathQueueStatus.PENDING,
             )
             .limit(amount * 3)  # Obtener más para compensar filtrados
@@ -229,8 +229,7 @@ class ContentQueue:
         Marca un elemento como CONSUMED.
 
         Actualiza:
-        - ContentQueue.status = CONSUMED
-        - Example/BestOption.is_consumed = True (para nunca volver a encolar)
+        - LearningPathQueue.status = CONSUMED
 
         El LearningTracker se encarga de registrar
         las exposiciones de las palabras.
@@ -247,13 +246,10 @@ class ContentQueue:
         item.status = LearningPathQueueStatus.CONSUMED
         item.updated_at = now
 
-        # Marcar el contenido como consumido para evitar que vuelva a aparecer
-        if self.content_repo:
-            self.content_repo.mark_as_consumed(item.content_id, item.type)
-            logger.info(
-                f"[ContentQueue] CONSUMED: queue_item_id={queue_id}, "
-                f"content_id={item.content_id}, content_type={item.type}"
-            )
+        logger.info(
+            f"[ContentQueue] CONSUMED: queue_item_id={queue_id}, "
+            f"content_id={item.content_id}, content_type={item.content_type}"
+        )
 
         self.session.add(item)
         self.session.commit()
@@ -286,7 +282,7 @@ class ContentQueue:
 
         if content_type is not None:
             statement = statement.where(
-                LearningPathQueue.type == content_type
+                LearningPathQueue.content_type == content_type
             )
 
         all_items = self.session.exec(statement).all()
@@ -296,7 +292,7 @@ class ContentQueue:
             # Obtener las palabras asociadas al contenido
             word_ids = []
             if self.content_repo:
-                word_ids = self.content_repo.get_target_word_ids(item.content_id, item.type)
+                word_ids = self.content_repo.get_target_word_ids(item.content_id, item.content_type)
 
             # Contar palabras en estado LEARNED
             learned_count = 0
@@ -305,7 +301,7 @@ class ContentQueue:
                     select(WordStatistics)
                     .where(
                         WordStatistics.word_id == word_id,
-                        WordStatistics.type == item.type
+                        WordStatistics.type == item.content_type
                     )
                 ).first()
                 if stats and stats.learning_state == LearningState.LEARNED:
@@ -331,7 +327,7 @@ class ContentQueue:
             select(LearningPathQueue)
             .where(
                 LearningPathQueue.user_id == user_id,
-                LearningPathQueue.type == content_type,
+                LearningPathQueue.content_type == content_type,
                 LearningPathQueue.content_id == content_id,
                 LearningPathQueue.status == LearningPathQueueStatus.PENDING,
             )

@@ -4,7 +4,8 @@ from db import engine
 from celery_app import celery_app
 from core.generation_ai.models import GenerationAIRegistry
 from core.generation_ai.repository import GenerationAIRepository
-from core.event_bus import subscribe_to
+from core.event_bus import subscribe_to_background
+from core.celery_queues import CeleryQueue
 from logging_client import logger
 from typing import List, Optional
 from core.generation_ai.enums import GenerationAIStatus
@@ -24,8 +25,8 @@ def on_ai_generation_side_event(item_id: int, payload: str, **kwargs):
             session.commit()
 
 
-@subscribe_to('event.word.cancelled')
-@celery_app.task(name="generation_ai.on_word_cancelled")
+@subscribe_to_background('word.cancelled')
+@celery_app.task(name="generation_ai.on_word_cancelled", queue=CeleryQueue.BACKGROUND)
 def on_word_cancelled(user_id: int, word_id: int, source_type: str = "BOOST", **kwargs):
     """
     Suscriptor al evento 'event.word.cancelled'.
@@ -42,8 +43,8 @@ def on_word_cancelled(user_id: int, word_id: int, source_type: str = "BOOST", **
             f"[GenerationAI] Global cancellation event triggered: {cancelled_count} pending AI task(s) discarded for word_id={word_id}.")
 
 
-@subscribe_to('event.word.unboosted')
-@celery_app.task(name="generation_ai.on_word_unboosted")
+@subscribe_to_background('word.unboosted')
+@celery_app.task(name="generation_ai.on_word_unboosted", queue=CeleryQueue.BACKGROUND)
 def on_word_unboosted(user_id: int, word_id: int, **kwargs):
     """
     Suscriptor al evento 'event.word.unboosted'.
@@ -74,8 +75,8 @@ def on_ai_failed(central_queue_id: int, **kwargs):
         repository.mark_as_failed(central_queue_id)
 
 
-@subscribe_to('event.content.generated')
-@celery_app.task(name="generation_ai.on_content_generated")
+@subscribe_to_background('content.generated')
+@celery_app.task(name="generation_ai.on_content_generated", queue=CeleryQueue.BACKGROUND)
 def on_content_generated(
     user_id: int,
     word_id: Optional[int],

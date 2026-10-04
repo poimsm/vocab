@@ -12,6 +12,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     && python -m nltk.downloader punkt wordnet stopwords punkt_tab
 
+# Pre-download LanguageTool to avoid runtime download
+RUN python -c "from language_tool_python import LanguageTool; LanguageTool('en-US')"
+
 # 2. Copiamos TODO el contenido de la carpeta local backend/ dentro de /app
 COPY ./backend/ .
 

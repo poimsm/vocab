@@ -22,7 +22,6 @@ class Example(SQLModel, table=True):
     sequence: int = Field(default=0, index=True)
     enqueued: bool = Field(default=False, index=True)
     is_favorite: bool = Field(default=False)
-    is_consumed: bool = Field(default=False, index=True)
     is_marked: bool = Field(default=False, index=True)
 
     example_words: List["ExampleWord"] = Relationship(back_populates="example")

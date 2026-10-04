@@ -1,6 +1,14 @@
 import enum
 
 
+class LearningPathGenerationMonitorStatus(str, enum.Enum):
+    """Estados del monitor de generación de contenido del learning path."""
+    IDLE = "idle"                # Sin generar
+    GENERATING = "generating"    # Generando
+    COMPLETED = "completed"      # Completado exitosamente
+    FAILED = "failed"            # Error durante la generación
+
+
 class LearningState(str, enum.Enum):
     """Estados de aprendizaje de una palabra."""
     NEW = "new"
@@ -15,6 +23,7 @@ class LearningState(str, enum.Enum):
 class LearningPathQueueStatus(str, enum.Enum):
     """Estados de items en la cola de learning path."""
     PENDING = "pending"
+    TRANSFERRED = "transferred"
     CONSUMED = "consumed"
 
 

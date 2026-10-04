@@ -1,8 +1,8 @@
 """initial
 
-Revision ID: 0b4e127c5aab
+Revision ID: 952bb3a8a569
 Revises: 
-Create Date: 2026-10-03 08:58:32.999077
+Create Date: 2026-10-04 11:04:29.242076
 
 """
 from typing import Sequence, Union
@@ -13,7 +13,7 @@ import sqlmodel
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '0b4e127c5aab'
+revision: str = '952bb3a8a569'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -77,13 +77,11 @@ def upgrade() -> None:
     sa.Column('sequence', sa.Integer(), nullable=False),
     sa.Column('enqueued', sa.Boolean(), nullable=False),
     sa.Column('is_favorite', sa.Boolean(), nullable=False),
-    sa.Column('is_consumed', sa.Boolean(), nullable=False),
     sa.Column('is_marked', sa.Boolean(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_examples_enqueued'), 'examples', ['enqueued'], unique=False)
     op.create_index(op.f('ix_examples_favorited_at'), 'examples', ['favorited_at'], unique=False)
-    op.create_index(op.f('ix_examples_is_consumed'), 'examples', ['is_consumed'], unique=False)
     op.create_index(op.f('ix_examples_is_marked'), 'examples', ['is_marked'], unique=False)
     op.create_index(op.f('ix_examples_normalized'), 'examples', ['normalized'], unique=False)
     op.create_index(op.f('ix_examples_sequence'), 'examples', ['sequence'], unique=False)
@@ -116,27 +114,10 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
-    op.create_table('content_queue',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('content_id', sa.Integer(), nullable=False),
-    sa.Column('type', sa.Enum('EXAMPLE', 'BEST_OPTIONS', name='contenttype'), nullable=False),
-    sa.Column('status', sa.Enum('PENDING', 'CONSUMED', name='learningpathqueuestatus'), nullable=False),
-    sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('priority', sa.Float(), nullable=False),
-    sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
-    sa.Column('updated_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
-    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_content_queue_content_id'), 'content_queue', ['content_id'], unique=False)
-    op.create_index(op.f('ix_content_queue_priority'), 'content_queue', ['priority'], unique=False)
-    op.create_index(op.f('ix_content_queue_status'), 'content_queue', ['status'], unique=False)
-    op.create_index(op.f('ix_content_queue_type'), 'content_queue', ['type'], unique=False)
-    op.create_index(op.f('ix_content_queue_updated_at'), 'content_queue', ['updated_at'], unique=False)
-    op.create_index(op.f('ix_content_queue_user_id'), 'content_queue', ['user_id'], unique=False)
     op.create_table('explore_sessions',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('content_type', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('buffer_delivery_ids', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('buffer_position', sa.Integer(), nullable=False),
     sa.Column('visited_delivery_ids', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
@@ -146,9 +127,10 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_explore_sessions_content_type'), 'explore_sessions', ['content_type'], unique=False)
     op.create_index(op.f('ix_explore_sessions_created_at'), 'explore_sessions', ['created_at'], unique=False)
-    op.create_index(op.f('ix_explore_sessions_user_id'), 'explore_sessions', ['user_id'], unique=True)
-    op.create_table('generation_ai_queue',
+    op.create_index(op.f('ix_explore_sessions_user_id'), 'explore_sessions', ['user_id'], unique=False)
+    op.create_table('generation_ai_registry',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('central_queue_id', sa.Integer(), nullable=True),
@@ -161,10 +143,10 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_generation_ai_queue_source_type'), 'generation_ai_queue', ['source_type'], unique=False)
-    op.create_index(op.f('ix_generation_ai_queue_status'), 'generation_ai_queue', ['status'], unique=False)
-    op.create_index(op.f('ix_generation_ai_queue_user_id'), 'generation_ai_queue', ['user_id'], unique=False)
-    op.create_index(op.f('ix_generation_ai_queue_word_id'), 'generation_ai_queue', ['word_id'], unique=False)
+    op.create_index(op.f('ix_generation_ai_registry_source_type'), 'generation_ai_registry', ['source_type'], unique=False)
+    op.create_index(op.f('ix_generation_ai_registry_status'), 'generation_ai_registry', ['status'], unique=False)
+    op.create_index(op.f('ix_generation_ai_registry_user_id'), 'generation_ai_registry', ['user_id'], unique=False)
+    op.create_index(op.f('ix_generation_ai_registry_word_id'), 'generation_ai_registry', ['word_id'], unique=False)
     op.create_table('learning_path_anomalies',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
@@ -206,7 +188,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('content_type', sa.Enum('EXAMPLE', 'BEST_OPTIONS', name='contenttype'), nullable=False),
-    sa.Column('status', sqlmodel.sql.sqltypes.AutoString(length=20), nullable=False),
+    sa.Column('status', sa.Enum('IDLE', 'GENERATING', 'COMPLETED', 'FAILED', name='learningpathgenerationmonitorstatus'), nullable=False),
     sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
     sa.Column('updated_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
     sa.Column('started_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=True),
@@ -222,6 +204,24 @@ def upgrade() -> None:
     op.create_index(op.f('ix_learning_path_generation_monitors_status'), 'learning_path_generation_monitors', ['status'], unique=False)
     op.create_index(op.f('ix_learning_path_generation_monitors_updated_at'), 'learning_path_generation_monitors', ['updated_at'], unique=False)
     op.create_index(op.f('ix_learning_path_generation_monitors_user_id'), 'learning_path_generation_monitors', ['user_id'], unique=False)
+    op.create_table('learning_path_queue',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('content_id', sa.Integer(), nullable=False),
+    sa.Column('content_type', sa.Enum('EXAMPLE', 'BEST_OPTIONS', name='contenttype'), nullable=False),
+    sa.Column('status', sa.Enum('PENDING', 'TRANSFERRED', 'CONSUMED', name='learningpathqueuestatus'), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('priority', sa.Float(), nullable=False),
+    sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
+    sa.Column('updated_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_learning_path_queue_content_id'), 'learning_path_queue', ['content_id'], unique=False)
+    op.create_index(op.f('ix_learning_path_queue_content_type'), 'learning_path_queue', ['content_type'], unique=False)
+    op.create_index(op.f('ix_learning_path_queue_priority'), 'learning_path_queue', ['priority'], unique=False)
+    op.create_index(op.f('ix_learning_path_queue_status'), 'learning_path_queue', ['status'], unique=False)
+    op.create_index(op.f('ix_learning_path_queue_updated_at'), 'learning_path_queue', ['updated_at'], unique=False)
+    op.create_index(op.f('ix_learning_path_queue_user_id'), 'learning_path_queue', ['user_id'], unique=False)
     op.create_table('path_repair_logs',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
@@ -348,12 +348,10 @@ def upgrade() -> None:
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('sequence', sa.Integer(), nullable=False),
     sa.Column('enqueued', sa.Boolean(), nullable=False),
-    sa.Column('is_consumed', sa.Boolean(), nullable=False),
     sa.ForeignKeyConstraint(['word_id'], ['words.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_best_options_enqueued'), 'best_options', ['enqueued'], unique=False)
-    op.create_index(op.f('ix_best_options_is_consumed'), 'best_options', ['is_consumed'], unique=False)
     op.create_index(op.f('ix_best_options_normalized'), 'best_options', ['normalized'], unique=False)
     op.create_index(op.f('ix_best_options_sequence'), 'best_options', ['sequence'], unique=False)
     op.create_index(op.f('ix_best_options_word_id'), 'best_options', ['word_id'], unique=False)
@@ -532,7 +530,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_best_options_word_id'), table_name='best_options')
     op.drop_index(op.f('ix_best_options_sequence'), table_name='best_options')
     op.drop_index(op.f('ix_best_options_normalized'), table_name='best_options')
-    op.drop_index(op.f('ix_best_options_is_consumed'), table_name='best_options')
     op.drop_index(op.f('ix_best_options_enqueued'), table_name='best_options')
     op.drop_table('best_options')
     op.drop_index(op.f('ix_words_normalized'), table_name='words')
@@ -560,6 +557,13 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_path_repair_logs_success'), table_name='path_repair_logs')
     op.drop_index(op.f('ix_path_repair_logs_created_at'), table_name='path_repair_logs')
     op.drop_table('path_repair_logs')
+    op.drop_index(op.f('ix_learning_path_queue_user_id'), table_name='learning_path_queue')
+    op.drop_index(op.f('ix_learning_path_queue_updated_at'), table_name='learning_path_queue')
+    op.drop_index(op.f('ix_learning_path_queue_status'), table_name='learning_path_queue')
+    op.drop_index(op.f('ix_learning_path_queue_priority'), table_name='learning_path_queue')
+    op.drop_index(op.f('ix_learning_path_queue_content_type'), table_name='learning_path_queue')
+    op.drop_index(op.f('ix_learning_path_queue_content_id'), table_name='learning_path_queue')
+    op.drop_table('learning_path_queue')
     op.drop_index(op.f('ix_learning_path_generation_monitors_user_id'), table_name='learning_path_generation_monitors')
     op.drop_index(op.f('ix_learning_path_generation_monitors_updated_at'), table_name='learning_path_generation_monitors')
     op.drop_index(op.f('ix_learning_path_generation_monitors_status'), table_name='learning_path_generation_monitors')
@@ -579,21 +583,15 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_learning_path_anomalies_auto_repair_attempted'), table_name='learning_path_anomalies')
     op.drop_index(op.f('ix_learning_path_anomalies_anomaly_type'), table_name='learning_path_anomalies')
     op.drop_table('learning_path_anomalies')
-    op.drop_index(op.f('ix_generation_ai_queue_word_id'), table_name='generation_ai_queue')
-    op.drop_index(op.f('ix_generation_ai_queue_user_id'), table_name='generation_ai_queue')
-    op.drop_index(op.f('ix_generation_ai_queue_status'), table_name='generation_ai_queue')
-    op.drop_index(op.f('ix_generation_ai_queue_source_type'), table_name='generation_ai_queue')
-    op.drop_table('generation_ai_queue')
+    op.drop_index(op.f('ix_generation_ai_registry_word_id'), table_name='generation_ai_registry')
+    op.drop_index(op.f('ix_generation_ai_registry_user_id'), table_name='generation_ai_registry')
+    op.drop_index(op.f('ix_generation_ai_registry_status'), table_name='generation_ai_registry')
+    op.drop_index(op.f('ix_generation_ai_registry_source_type'), table_name='generation_ai_registry')
+    op.drop_table('generation_ai_registry')
     op.drop_index(op.f('ix_explore_sessions_user_id'), table_name='explore_sessions')
     op.drop_index(op.f('ix_explore_sessions_created_at'), table_name='explore_sessions')
+    op.drop_index(op.f('ix_explore_sessions_content_type'), table_name='explore_sessions')
     op.drop_table('explore_sessions')
-    op.drop_index(op.f('ix_content_queue_user_id'), table_name='content_queue')
-    op.drop_index(op.f('ix_content_queue_updated_at'), table_name='content_queue')
-    op.drop_index(op.f('ix_content_queue_type'), table_name='content_queue')
-    op.drop_index(op.f('ix_content_queue_status'), table_name='content_queue')
-    op.drop_index(op.f('ix_content_queue_priority'), table_name='content_queue')
-    op.drop_index(op.f('ix_content_queue_content_id'), table_name='content_queue')
-    op.drop_table('content_queue')
     op.drop_index(op.f('ix_users_email'), table_name='users')
     op.drop_table('users')
     op.drop_index(op.f('ix_global_configurations_key'), table_name='global_configurations')
@@ -604,7 +602,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_examples_sequence'), table_name='examples')
     op.drop_index(op.f('ix_examples_normalized'), table_name='examples')
     op.drop_index(op.f('ix_examples_is_marked'), table_name='examples')
-    op.drop_index(op.f('ix_examples_is_consumed'), table_name='examples')
     op.drop_index(op.f('ix_examples_favorited_at'), table_name='examples')
     op.drop_index(op.f('ix_examples_enqueued'), table_name='examples')
     op.drop_table('examples')
@@ -622,12 +619,4 @@ def downgrade() -> None:
     op.drop_table('central_queue')
     op.drop_index(op.f('ix_central_lock_state_state'), table_name='central_lock_state')
     op.drop_table('central_lock_state')
-    # Drop ENUM types
-    op.execute('DROP TYPE IF EXISTS contenttype')
-    op.execute('DROP TYPE IF EXISTS exampletype')
-    op.execute('DROP TYPE IF EXISTS learningpathqueuestatus')
-    op.execute('DROP TYPE IF EXISTS pathanomalytype')
-    op.execute('DROP TYPE IF EXISTS deliverystatus')
-    op.execute('DROP TYPE IF EXISTS contentsourcetype')
-    op.execute('DROP TYPE IF EXISTS generationaistatus')
     # ### end Alembic commands ###

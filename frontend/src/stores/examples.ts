@@ -111,18 +111,25 @@ export const useExamplesStore = defineStore('examples', () => {
   }
 
   function loadExamples(examples: ExampleItem[], bufferIds: number[], bufferPosition: number) {
-    console.log('[loadExamples] Received examples:', examples.length, 'buffer ids:', bufferIds.length, 'position:', bufferPosition)
-    console.log('[loadExamples] Current state - currentIndex:', state.value.currentIndex, 'examples before:', state.value.examples.length)
+    // Ensure examples and bufferIds are arrays
+    const safeExamples = Array.isArray(examples) ? examples : []
+    const safeBufIds = Array.isArray(bufferIds) ? bufferIds : []
+    const previousBufIds = Array.isArray(state.value.bufferIds) ? state.value.bufferIds : []
 
-    if (examples.length > 0) {
+    console.log('[loadExamples] Received examples:', safeExamples.length, 'buffer ids:', safeBufIds.length, 'position:', bufferPosition)
+    console.log('[loadExamples] Current state - currentIndex:', state.value.currentIndex, 'examples before:', state.value.examples.length)
+    console.log('[loadExamples] Previous bufferIds:', previousBufIds, 'New bufferIds:', safeBufIds)
+
+    if (safeExamples.length > 0) {
       const wasEmpty = state.value.examples.length === 0
 
       // Check if buffer IDs changed (buffer was refilled with new items)
-      const bufferChanged = bufferIds.length !== state.value.bufferIds.length ||
-                            !bufferIds.every((id, i) => id === state.value.bufferIds[i])
+      // Compare arrays by length first, then by content
+      const bufferChanged = safeBufIds.length !== previousBufIds.length ||
+                            safeBufIds.some((id, i) => previousBufIds[i] !== id)
 
-      state.value.examples = examples
-      state.value.bufferIds = bufferIds
+      state.value.examples = safeExamples
+      state.value.bufferIds = safeBufIds
       state.value.bufferPosition = bufferPosition
 
       // Reset to 0 if: buffer was empty OR buffer IDs changed (new batch)
@@ -132,7 +139,7 @@ export const useExamplesStore = defineStore('examples', () => {
         console.log('[loadExamples]', wasEmpty ? 'Was empty' : 'Buffer changed', ', currentIndex set to 0')
       } else {
         // Clamp currentIndex to valid range
-        state.value.currentIndex = Math.min(state.value.currentIndex, examples.length - 1)
+        state.value.currentIndex = Math.min(state.value.currentIndex, safeExamples.length - 1)
         console.log('[loadExamples] Same buffer, currentIndex clamped to:', state.value.currentIndex)
       }
     } else {
@@ -241,7 +248,7 @@ export const useExamplesStore = defineStore('examples', () => {
       const response = await api.post('/examples/explore', {
         actions: ['next'],
         limit,
-        buffer_queue_item_ids: state.value.bufferIds,
+        buffer_delivery_ids: state.value.bufferIds,
         buffer_position: state.value.currentIndex,
       })
 
@@ -264,7 +271,7 @@ export const useExamplesStore = defineStore('examples', () => {
       state.value.generating = false
       loadExamples(
         data.examples || [],
-        data.buffer_queue_item_ids || [],
+        data.buffer_delivery_ids || [],
         data.buffer_position ?? 0
       )
       // Sincronizar resueltos con el servidor (cuando se resetea buffer, el servidor devuelve lista vacía)
@@ -287,7 +294,7 @@ export const useExamplesStore = defineStore('examples', () => {
         actions: ['resolve', 'next'],
         resolve_queue_item_id: queueItemId,
         limit,
-        buffer_queue_item_ids: state.value.bufferIds,
+        buffer_delivery_ids: state.value.bufferIds,
         buffer_position: state.value.currentIndex,
       })
 
@@ -307,7 +314,7 @@ export const useExamplesStore = defineStore('examples', () => {
       state.value.generating = false
       loadExamples(
         data.examples || [],
-        data.buffer_queue_item_ids || [],
+        data.buffer_delivery_ids || [],
         data.buffer_position ?? 0
       )
     } catch (e: any) {
@@ -333,7 +340,7 @@ export const useExamplesStore = defineStore('examples', () => {
       await api.post('/examples/explore', {
         actions: actions,  // ['sync'] if already resolved, ['resolve'] otherwise
         resolve_queue_item_id: queueItemId,
-        buffer_queue_item_ids: state.value.bufferIds,
+        buffer_delivery_ids: state.value.bufferIds,
         buffer_position: state.value.currentIndex,
         limit: 4,
       })
@@ -355,7 +362,7 @@ export const useExamplesStore = defineStore('examples', () => {
       await api.post('/examples/explore', {
         actions: ['sync'],  // Sync position only
         limit: 4,
-        buffer_queue_item_ids: state.value.bufferIds,
+        buffer_delivery_ids: state.value.bufferIds,
         buffer_position: state.value.currentIndex,
       })
     } catch (e: any) {
@@ -372,15 +379,15 @@ export const useExamplesStore = defineStore('examples', () => {
       const response = await api.post('/examples/explore', {
         actions: ['sync-buffer'],
         limit,
-        buffer_queue_item_ids: state.value.bufferIds,
+        buffer_delivery_ids: state.value.bufferIds,
         buffer_position: state.value.currentIndex,
       })
 
       const data = response.data
-      console.log('[syncBuffer] Buffer synced and refilled:', data.buffer_queue_item_ids.length, 'items')
+      console.log('[syncBuffer] Buffer synced and refilled:', data.buffer_delivery_ids.length, 'items')
 
       // Update buffer with synced and refilled data
-      state.value.bufferIds = data.buffer_queue_item_ids || []
+      state.value.bufferIds = data.buffer_delivery_ids || []
       state.value.bufferPosition = data.buffer_position ?? 0
     } catch (e: any) {
       console.error('[syncBuffer] Error:', e)
@@ -399,7 +406,7 @@ export const useExamplesStore = defineStore('examples', () => {
       const response = await api.post('/examples/explore', {
         actions: ['sync', 'next'],
         limit,
-        buffer_queue_item_ids: state.value.bufferIds,
+        buffer_delivery_ids: state.value.bufferIds,
         buffer_position: state.value.currentIndex,
       })
 
@@ -421,7 +428,7 @@ export const useExamplesStore = defineStore('examples', () => {
       state.value.generating = false
       loadExamples(
         data.examples || [],
-        data.buffer_queue_item_ids || [],
+        data.buffer_delivery_ids || [],
         data.buffer_position ?? 0
       )
       state.value.resolvedQueueItemIds.clear()
@@ -464,7 +471,7 @@ export const useExamplesStore = defineStore('examples', () => {
         actions,
         resolve_queue_item_id: queueItemId,
         limit,
-        buffer_queue_item_ids: state.value.bufferIds,
+        buffer_delivery_ids: state.value.bufferIds,
         buffer_position: state.value.currentIndex,
       })
 
@@ -493,7 +500,7 @@ export const useExamplesStore = defineStore('examples', () => {
         state.value.generating = false
         loadExamples(
           data.examples || [],
-          data.buffer_queue_item_ids || [],
+          data.buffer_delivery_ids || [],
           data.buffer_position ?? 0
         )
         state.value.resolvedQueueItemIds.clear()

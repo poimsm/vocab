@@ -4,6 +4,7 @@ from logging_client import logger
 
 from core.enums import ContentType
 from core.explore.protocols import ContentValidator
+from core.learning_path.repository import LearningPathRepository
 
 
 class ExploreBufferService:
@@ -171,6 +172,8 @@ class ExploreBufferService:
         """
         Carga un nuevo batch de items desde DeliveryBuffer.
 
+        Resetea el monitor de generación si se carga contenido exitosamente.
+
         Returns:
             Lista de IDs de delivery buffer items cargados
         """
@@ -191,5 +194,11 @@ class ExploreBufferService:
             delivery_id = item.get("id")
             if delivery_id:
                 batch_ids.append(delivery_id)
+
+        # Resetear monitor de generación si se cargó contenido exitosamente
+        if batch_ids and status == "ok":
+            logger.debug(f"[load_next_batch] Resetting generation monitor for user {user_id}")
+            repo = LearningPathRepository(self.db)
+            repo.reset_generation_monitor(user_id, content_type)
 
         return batch_ids

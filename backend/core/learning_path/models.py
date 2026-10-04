@@ -9,6 +9,7 @@ from core.learning_path.enums import (
     LearningState,
     LearningPathQueueStatus,
     PathAnomalyType,
+    LearningPathGenerationMonitorStatus,
 )
 
 from core.enums import ContentType
@@ -175,10 +176,9 @@ class LearningPathGenerationMonitor(SQLModel, table=True):
 
     content_type: ContentType = Field(index=True, nullable=False)
 
-    # Estados: "idle" (sin generar), "generating" (generando), "completed" (completado), "failed" (error)
-    status: str = Field(
-        default="idle",
-        max_length=20,
+    # Estado de generación
+    status: LearningPathGenerationMonitorStatus = Field(
+        default=LearningPathGenerationMonitorStatus.IDLE,
         index=True,
         nullable=False
     )

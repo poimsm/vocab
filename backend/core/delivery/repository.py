@@ -48,11 +48,42 @@ class DeliveryRepository:
         )
         return list(self.session.exec(statement).all())
 
+    def mark_as_dispatched(self, buffer_id: int) -> Optional[DeliveryBuffer]:
+        """Marca un contenido como despachado al usuario (enviado al explore buffer)."""
+        item = self.session.get(DeliveryBuffer, buffer_id)
+        if item and item.status == DeliveryStatus.PENDING:
+            item.status = DeliveryStatus.DISPATCHED
+            self.session.add(item)
+            self.session.commit()
+            self.session.refresh(item)
+        return item
+
+    def mark_multiple_as_dispatched(self, buffer_ids: list) -> int:
+        """Marca múltiples contenidos como despachados."""
+        if not buffer_ids:
+            return 0
+
+        statement = (
+            select(DeliveryBuffer)
+            .where(
+                DeliveryBuffer.id.in_(buffer_ids),
+                DeliveryBuffer.status == DeliveryStatus.PENDING,
+            )
+        )
+        items = self.session.exec(statement).all()
+
+        for item in items:
+            item.status = DeliveryStatus.DISPATCHED
+            self.session.add(item)
+
+        self.session.commit()
+        return len(items)
+
     def mark_as_served(self, buffer_id: int) -> Optional[DeliveryBuffer]:
         """Marca un contenido como entregado/mostrado en la pantalla del usuario."""
         item = self.session.get(DeliveryBuffer, buffer_id)
         if item and item.status == DeliveryStatus.PENDING:
-            item.status = DeliveryStatus.SERVED
+            item.status = DeliveryStatus.DISPATCHED
             self.session.add(item)
             self.session.commit()
             self.session.refresh(item)
@@ -61,8 +92,8 @@ class DeliveryRepository:
     def mark_as_consumed(self, buffer_id: int) -> Optional[DeliveryBuffer]:
         """Marca el contenido como completado/superado por el usuario."""
         item = self.session.get(DeliveryBuffer, buffer_id)
-        if item and item.status in (DeliveryStatus.PENDING, DeliveryStatus.SERVED):
-            item.status = DeliveryStatus.CONSUMED
+        if item and item.status == DeliveryStatus.DISPATCHED:
+            item.status = DeliveryStatus.DISPATCHED
             item.consumed_at = datetime.now(timezone.utc)
             self.session.add(item)
             self.session.commit()

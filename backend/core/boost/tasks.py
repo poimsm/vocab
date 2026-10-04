@@ -4,15 +4,16 @@ from celery_app import celery_app
 from core.boost.repository import BoostRepository
 from core.boost.strategies import BoostDemandStrategy
 from core.generation_ai.repository import GenerationAIRepository
-from core.event_bus import subscribe_to
+from core.event_bus import subscribe_to_background
+from core.celery_queues import CeleryQueue
 from core.enums import ContentType
 from core.generation_ai.enums import GenerationAIStatus
 from logging_client import logger
 from typing import Optional
 
 
-@subscribe_to('event.word.unboosted')
-@celery_app.task(name="boost.on_word_unboosted")
+@subscribe_to_background('word.unboosted')
+@celery_app.task(name="boost.on_word_unboosted", queue=CeleryQueue.BACKGROUND)
 def deactivate_word_task(user_id: int, word_id: int) -> None:
     """Suscriptor al evento 'event.word.unboosted'. Desactiva el boost cuando se des-boostea."""
     logger.info(f"[Celery] Procesando desactivación de boost para user_id={user_id}, word_id={word_id}")
@@ -29,8 +30,8 @@ def deactivate_word_task(user_id: int, word_id: int) -> None:
         logger.info(f"[Boost] Boost desactivado exitosamente para word_id={word_id}.")
 
 
-@subscribe_to('event.boost.content_exhausted')
-@celery_app.task(name="boost.on_content_exhausted")
+@subscribe_to_background('boost.content.exhausted')
+@celery_app.task(name="boost.on_content_exhausted", queue=CeleryQueue.BACKGROUND)
 def refill_boost_content_task(
     user_id: int,
     word_id: int,
@@ -90,8 +91,8 @@ def refill_boost_content_task(
         )
 
 
-@subscribe_to('event.content.generated')
-@celery_app.task(name="boost.on_content_generated")
+@subscribe_to_background('content.generated')
+@celery_app.task(name="boost.on_content_generated", queue=CeleryQueue.BACKGROUND)
 def on_content_generated(
     user_id: int,
     word_id: Optional[int],

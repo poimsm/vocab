@@ -115,8 +115,7 @@ class ExampleRepository:
             .where(
                 ExampleWord.word_id == word_id,
                 Example.type == ExampleType.EXPLORE,
-                Example.enqueued == False,
-                Example.is_consumed == False
+                Example.enqueued == False
             )
             .group_by(Example.id, Example.sequence)
             .subquery()

@@ -9,21 +9,20 @@ from features.examples.helpers import approximate_text_form
 from features.examples.repository import ExampleRepository
 from core.generation_ai.repository import GenerationAIRepository
 from core.generation_ai.enums import GenerationAIStatus
-from core.event_bus import subscribe_to, publish_event
+from core.event_bus import subscribe_to_ai, publish_event_ai
 from core.enums import ContentType, ContentSourceType
 from db import engine
 from features.words.models import Word, ExampleWord
 from features.examples.models import Example, ExampleType
 
 
-@subscribe_to('event.generation.content_requested', queue_name=CeleryQueue.AI)
+@subscribe_to_ai('generation.content_requested')
 @celery_app.task(name="tasks.examples.generate_simple", queue=CeleryQueue.AI)
 def generate_simple_examples_task(
     user_id: int,
     word_ids: List[int],
     content_type: str = ContentType.EXAMPLE.value,
     amount: int = 1,
-    pre_generated_examples: dict = None,
     queue_item_id: Optional[int] = None,
     content_source_type: str = ContentSourceType.LEARNING_PATH.value,
 ) -> None:
@@ -33,15 +32,10 @@ def generate_simple_examples_task(
     Solo procesa si content_type es EXAMPLE. Otros tipos de contenido serán
     manejados por tasks específicas en sus respectivos módulos.
 
-    Genera examples simples, donde cada example está asociado
-    principalmente a una sola word.
-
-    Puede usar ejemplos pre-generados (del enriquecimiento) o generar nuevos.
-
-    Si pre_generated_examples viene con formato {word_id: [example_texts]},
-    usa esos ejemplos. De los 10 ejemplos: primeros 3 son INITIAL, resto EXPLORE.
-
-    Si no viene, genera ejemplos nuevos con ai.generate_examples_for_single_word().
+    Flujo:
+    1. Buscar ejemplos pregenerados no consumidos en LearningPathQueue
+    2. Transferirlos a DeliveryBuffer
+    3. Si no hay suficientes, generar nuevos con AI
     """    
 
     # Validar que sea del tipo EXAMPLE
@@ -61,8 +55,20 @@ def generate_simple_examples_task(
     )
 
     try:
-        # Crear nueva sesión para la tarea
         with Session(engine) as db:
+            # ✅ PASO 1: Buscar ejemplos pregenerados no consumidos en LearningPathQueue
+            transferred_count = _transfer_pregenerated_examples(
+                db=db,
+                user_id=user_id,
+                content_type=content_type,
+            )
+
+            if transferred_count > 0:
+                logger.info(
+                    f"[ExampleGenerator] Transferred {transferred_count} pregenerated examples "
+                    f"to DeliveryBuffer for user {user_id}"
+                )
+
             # ✅ Validar cuota de ejemplos
             from config import QuotaValidator
             try:
@@ -106,19 +112,12 @@ def generate_simple_examples_task(
                         )
                         continue
 
-                    # Intentar obtener ejemplos pre-generados (del enriquecimiento)
-                    is_pre_generated = False
-                    if pre_generated_examples and str(word.id) in pre_generated_examples:
-                        raw_examples = pre_generated_examples[str(word.id)]
-                        is_pre_generated = True
-                        logger.debug(f"[ExampleGenerator] Using pre-generated examples for word {word.id}")
-                    else:
-                        # Generar nuevos ejemplos con IA solo si hace falta
-                        logger.info(
-                            f"[ExampleGenerator] Word {word.id} has only {available_count} available examples, generating new ones..."
-                        )
-                        raw_examples = ai.generate_examples_for_single_word(word, amount, db)
-                        logger.debug(f"[ExampleGenerator] Generated new examples for word {word.id}")
+                    # Generar nuevos ejemplos con IA solo si hace falta
+                    logger.info(
+                        f"[ExampleGenerator] Word {word.id} has only {available_count} available examples, generating new ones..."
+                    )
+                    raw_examples = ai.generate_examples_for_single_word(word, amount, db)
+                    logger.debug(f"[ExampleGenerator] Generated new examples for word {word.id}")
 
                     if not raw_examples:
                         logger.warning(
@@ -143,9 +142,7 @@ def generate_simple_examples_task(
                         ).all()
                     )
 
-                    # Asignar tipos:
-                    # - Si son pre-generados: primeros 3 INITIAL, resto EXPLORE
-                    # - Si son generados por IA: todos EXPLORE
+                    # Todos los ejemplos generados por IA son EXPLORE
                     word_examples_count = 0
                     for idx, example_text in filtered_examples:
                         normalized = example_text.lower().strip()
@@ -159,10 +156,7 @@ def generate_simple_examples_task(
                             continue
 
                         try:
-                            if is_pre_generated and idx < 3:
-                                example_type = ExampleType.INITIAL
-                            else:
-                                example_type = ExampleType.EXPLORE
+                            example_type = ExampleType.EXPLORE
 
                             # Crear el Example con sequence
                             example = Example(
@@ -254,3 +248,82 @@ def generate_simple_examples_task(
             with Session(engine) as error_db:
                 gen_repo = GenerationAIRepository(error_db)
                 gen_repo.mark_as_failed(queue_item_id, error_message=str(e))
+
+
+def _transfer_pregenerated_examples(
+    db: Session,
+    user_id: int,
+    content_type: str,
+) -> int:
+    """
+    Busca ejemplos pregenerados en estado PENDING en LearningPathQueue
+    y los transfiere a DeliveryBuffer, cambiando su status a TRANSFERRED.
+
+    Flujo:
+    - Filtra por status=PENDING
+    - Crea item en DeliveryBuffer
+    - Marca queue_item status como TRANSFERRED
+    - El estado CONSUMED se actualiza cuando se despacha desde DeliveryBuffer al usuario
+
+    Retorna: cantidad de ejemplos transferidos
+    """
+    from core.learning_path.models import LearningPathQueue
+    from core.learning_path.enums import LearningPathQueueStatus
+    from core.delivery.repository import DeliveryRepository
+
+    # Obtener items PENDING de LearningPathQueue para este usuario
+    pending_items = db.exec(
+        select(LearningPathQueue).where(
+            LearningPathQueue.user_id == user_id,
+            LearningPathQueue.content_type == content_type,
+            LearningPathQueue.status == LearningPathQueueStatus.PENDING,
+        )
+    ).all()
+
+    if not pending_items:
+        logger.debug(
+            f"[ExampleGenerator._transfer_pregenerated_examples] "
+            f"No pregenerated examples found for user {user_id} ({content_type})"
+        )
+        return 0
+
+    transferred_count = 0
+    delivery_repo = DeliveryRepository(db)
+
+    for queue_item in pending_items:
+        try:
+            # Transferir a DeliveryBuffer
+            delivery_repo.push_to_buffer(
+                user_id=user_id,
+                content_id=queue_item.content_id,
+                source_type=ContentSourceType.LEARNING_PATH,
+                content_type=ContentType(content_type),
+                word_id=None,  # No sabemos el word_id exacto del contenido
+                learning_path_queue_id=queue_item.id,
+            )
+
+            # Marcar como TRANSFERRED en LearningPathQueue
+            queue_item.status = LearningPathQueueStatus.TRANSFERRED
+            db.add(queue_item)
+            db.commit()
+
+            transferred_count += 1
+            logger.debug(
+                f"[ExampleGenerator._transfer_pregenerated_examples] "
+                f"Transferred queue_item {queue_item.id} (example {queue_item.content_id}) to DeliveryBuffer"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"[ExampleGenerator._transfer_pregenerated_examples] "
+                f"Error transferring queue_item {queue_item.id}: {e}",
+                exc_info=True,
+            )
+            continue
+
+    logger.info(
+        f"[ExampleGenerator._transfer_pregenerated_examples] "
+        f"Transferred {transferred_count} pregenerated examples for user {user_id}"
+    )
+
+    return transferred_count

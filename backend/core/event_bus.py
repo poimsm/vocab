@@ -140,3 +140,61 @@ def get_subscribers_for_event(event_name: str) -> List[str]:
     if event_name not in _subscribers:
         return []
     return [sub['task_name'] for sub in _subscribers[event_name]]
+
+
+# ============== MÉTODOS ESPECIALIZADOS PARA AI ==============
+
+def subscribe_to_ai(event_name: str):
+    """
+    Suscriptor especializado para tareas de IA.
+    Automáticamente usa queue="ai_queue" y prefijo "ai." en routing_key.
+
+    Uso:
+        @subscribe_to_ai('generation.content_requested')
+        @celery_app.task(name='ai.my_task', queue='ai_queue')
+        def my_ai_task(...):
+            pass
+    """
+    routing_key = f"ai.{event_name}"
+    return subscribe_to(routing_key, queue_name="ai_queue")
+
+
+def publish_event_ai(event_name: str, **kwargs) -> None:
+    """
+    Publica un evento para ser procesado por workers de IA.
+    Automáticamente agrega prefijo "ai." al routing_key.
+
+    Uso:
+        publish_event_ai('generation.content_requested', user_id=1, word_ids=[1,2,3])
+    """
+    routing_key = f"ai.{event_name}"
+    publish_event(routing_key, **kwargs)
+
+
+# ============== MÉTODOS ESPECIALIZADOS PARA BACKGROUND ==============
+
+def subscribe_to_background(event_name: str):
+    """
+    Suscriptor especializado para tareas de background.
+    Automáticamente usa queue="background_queue" y prefijo "background." en routing_key.
+
+    Uso:
+        @subscribe_to_background('content.exhausted')
+        @celery_app.task(name='background.my_task', queue='background_queue')
+        def my_background_task(...):
+            pass
+    """
+    routing_key = f"background.{event_name}"
+    return subscribe_to(routing_key, queue_name="background_queue")
+
+
+def publish_event_background(event_name: str, **kwargs) -> None:
+    """
+    Publica un evento para ser procesado por workers de background.
+    Automáticamente agrega prefijo "background." al routing_key.
+
+    Uso:
+        publish_event_background('content.exhausted', user_id=1, content_type='example')
+    """
+    routing_key = f"background.{event_name}"
+    publish_event(routing_key, **kwargs)

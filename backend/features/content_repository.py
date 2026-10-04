@@ -37,7 +37,6 @@ class UnifiedContentRepository:
                     & (WordStatistics.type == ContentType.EXAMPLE),
                 )
                 .where(
-                    Example.is_consumed == False,
                     WordStatistics.learning_state != LearningState.LEARNED,
                 )
             ).first() or 0
@@ -63,7 +62,6 @@ class UnifiedContentRepository:
                     & (WordStatistics.type == ContentType.EXAMPLE),
                 )
                 .where(
-                    Example.is_consumed == False,
                     WordStatistics.learning_state != LearningState.LEARNED,
                 )
                 .order_by(Example.created_at.asc())
@@ -156,24 +154,3 @@ class UnifiedContentRepository:
                 self.db.add(best_option)
                 self.db.commit()
 
-    def mark_as_consumed(self, content_id: int, content_type: ContentType) -> None:
-        """Marca un contenido como consumido"""
-        if content_type == ContentType.EXAMPLE:
-            example = self.db.get(Example, content_id)
-            if example:
-                example.is_consumed = True
-                self.db.add(example)
-                self.db.commit()
-                logger.info(
-                    f"[UnifiedContentRepository] Marked example {content_id} as consumed"
-                )
-
-        elif content_type == ContentType.BEST_OPTIONS:
-            best_option = self.db.get(BestOption, content_id)
-            if best_option:
-                best_option.is_consumed = True
-                self.db.add(best_option)
-                self.db.commit()
-                logger.info(
-                    f"[UnifiedContentRepository] Marked best_option {content_id} as consumed"
-                )

@@ -4,14 +4,15 @@ from db import engine
 from celery_app import celery_app
 from core.delivery.repository import DeliveryRepository
 from core.delivery.service import DeliveryService
-from core.event_bus import subscribe_to
+from core.event_bus import subscribe_to_background
+from core.celery_queues import CeleryQueue
 from core.enums import ContentSourceType
 from logging_client import logger
 from typing import List, Optional
 from core.generation_ai.enums import GenerationAIStatus
 
-@subscribe_to('event.word.unboosted')
-@celery_app.task(name="delivery.on_word_unboosted")
+@subscribe_to_background('word.unboosted')
+@celery_app.task(name="delivery.on_word_unboosted", queue=CeleryQueue.BACKGROUND)
 def discard_boost_word_task(user_id: int, word_id: int):
     """
     Suscriptor al evento global 'event.word.unboosted'.
@@ -25,8 +26,8 @@ def discard_boost_word_task(user_id: int, word_id: int):
         logger.info(f"[Delivery] Ítems descartados exitosamente para word_id={word_id}.")
 
 
-@subscribe_to('event.content.generated')
-@celery_app.task(name="delivery.on_content_generated")
+@subscribe_to_background('content.generated')
+@celery_app.task(name="delivery.on_content_generated", queue=CeleryQueue.BACKGROUND)
 def register_generated_content_task(
     user_id: int,
     word_id: Optional[int],

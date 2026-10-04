@@ -21,6 +21,8 @@ class BestOptionExploreRequest(BaseModel):
     actions: List[str] = ["next"]  # Acciones a ejecutar: ["resolve", "next"], ["next"], etc.
     resolve_queue_item_id: Optional[int] = None  # Requerido si actions incluye "resolve"
     limit: int = 6  # Para la acción "next"
+    buffer_delivery_ids: List[int] = []  # IDs actuales del buffer
+    buffer_position: int = 0  # Posición actual en el buffer
 
 
 router = APIRouter()
@@ -89,12 +91,14 @@ def explore_best_options(
             content_repo=content_repo,
             content_validator=content_validator
         )
-        status, queue_items = explore_actions.execute_actions(
+        status, buffer_ids, buffer_position = explore_actions.execute_actions(
             user_id=current_user.id,
             actions=request.actions,
             content_type=ContentType.BEST_OPTIONS,
             resolve_queue_item_id=request.resolve_queue_item_id,
             limit=request.limit,
+            buffer_delivery_ids=request.buffer_delivery_ids,
+            buffer_position=request.buffer_position,
         )
     except ValueError as e:
         logger.error(f"[explore_best_options] Validation error: {str(e)}")
@@ -102,15 +106,32 @@ def explore_best_options(
 
     # Build best options response using BestOptionsResponseBuilder
     items = []
-    if queue_items:
+    if buffer_ids:
         response_builder = BestOptionsResponseBuilder(db)
-        items = response_builder.build_best_options_response(queue_items, current_user.id)
+        items = response_builder.build_best_options_response(buffer_ids, current_user.id)
+
+        # Marcar delivery items como DISPATCHED
+        from core.delivery.repository import DeliveryRepository
+        delivery_repo = DeliveryRepository(db)
+        dispatched_count = delivery_repo.mark_multiple_as_dispatched(buffer_ids)
+        logger.debug(
+            f"[explore_best_options] Marked {dispatched_count} delivery items as DISPATCHED"
+        )
+
+        # Actualizar sesión de exploración con los IDs y posición actual
+        from core.explore.explore_repository import ExploreRepository
+        explore_repo = ExploreRepository(db)
+        explore_repo.update_session(current_user.id, buffer_ids, buffer_position, ContentType.BEST_OPTIONS.value)
+        logger.debug(
+            f"[explore_best_options] Updated explore session: {len(buffer_ids)} items at position {buffer_position}"
+        )
 
     logger.info(f"[explore_best_options] Completed with status={status}, returned {len(items)} items")
 
     return {
         "items": items,
-        "total": len(items),
+        "buffer_delivery_ids": buffer_ids,
+        "buffer_position": buffer_position,
         "status": status,
     }
 

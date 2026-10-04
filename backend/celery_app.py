@@ -29,24 +29,30 @@ celery_app.autodiscover_tasks([
     "core.learning_path",
 ])
 
-# 2. Generar las colas automáticamente basadas en las suscripciones registradas
-from core.event_bus import get_event_queues
+# Importar explícitamente para asegurar que los decoradores @subscribe_to se ejecuten
+# Esto garantiza que los eventos encuentren sus suscriptores antes de ser publicados
+try:
+    import core.learning_path.tasks  # noqa
+    import core.generation_ai.tasks  # noqa
+    import core.boost.tasks  # noqa
+    import features.examples.tasks  # noqa
+    logger.info("[Celery] Tareas cargadas explícitamente")
+except ImportError as e:
+    logger.warning(f"[Celery] Error importando algunas tareas: {e}")
 
-event_queues = get_event_queues()
-
-# Colas de propósito general (si quieres colas adicionales que no sean basadas en eventos)
+# 2. Colas estáticas con patrones para AI y Background
 app_events_exchange = Exchange('app_events', type='topic', durable=True)
 default_queues = [
     Queue(
         "ai_queue",
         exchange=app_events_exchange,
-        routing_key="ai.#",
+        routing_key="ai.#",  # ← Todos los eventos que empiezan con "ai."
         durable=True
     ),
     Queue(
         "background_queue",
         exchange=app_events_exchange,
-        routing_key="background.#",
+        routing_key="background.#",  # ← Todos los eventos que empiezan con "background."
         durable=True
     ),
 ]
@@ -63,6 +69,6 @@ celery_app.conf.update(
     enable_utc=True,
     worker_concurrency=1,
 
-    # Combina colas de eventos + colas por defecto
-    task_queues=event_queues + default_queues,
+    # Usa SOLO las colas estáticas con patrones claros
+    task_queues=default_queues,
 )

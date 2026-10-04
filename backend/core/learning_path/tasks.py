@@ -3,14 +3,17 @@ from sqlmodel import Session, select
 from db import engine
 from celery_app import celery_app
 from core.learning_path.repository import LearningPathRepository
+from core.learning_path.models import LearningPathQueue
+from core.learning_path.enums import LearningPathQueueStatus
 from core.enums import ContentType
 from core.generation_ai.enums import GenerationAIStatus
-from core.event_bus import subscribe_to, publish_event
+from core.event_bus import subscribe_to_background, publish_event_ai
+from core.celery_queues import CeleryQueue
 from logging_client import logger
 
 
-@subscribe_to('event.learning_path.content_exhausted')
-@celery_app.task(name="learning_path.on_content_exhausted")
+@subscribe_to_background('content.exhausted')
+@celery_app.task(name="learning_path.on_content_exhausted", queue=CeleryQueue.BACKGROUND)
 def on_content_exhausted(
     user_id: int,
     content_type: str,
@@ -70,10 +73,10 @@ def on_content_exhausted(
                 f"(user_id={user_id}, content_type={content_type})"
             )
 
-            # Disparar evento de solicitud de generación
+            # Disparar evento de solicitud de generación (para AI)
             from core.enums import ContentSourceType
-            publish_event(
-                'event.generation.content_requested',
+            publish_event_ai(
+                'generation.content_requested',
                 user_id=user_id,
                 word_ids=word_ids,
                 content_type=content_type_enum.value,
@@ -92,8 +95,8 @@ def on_content_exhausted(
             )
 
 
-@subscribe_to('event.content.generated')
-@celery_app.task(name="learning_path.on_content_generated")
+@subscribe_to_background('content.generated')
+@celery_app.task(name="learning_path.on_content_generated", queue=CeleryQueue.BACKGROUND)
 def on_content_generated(
     user_id: int,
     word_id: Optional[int],
@@ -149,3 +152,62 @@ def on_content_generated(
                 )
         except ValueError as e:
             logger.error(f"[LearningPath] Invalid content_type '{content_type}': {e}")
+
+
+@subscribe_to_background('delivery.item_dispatched')
+@celery_app.task(name="learning_path.on_delivery_item_dispatched", queue=CeleryQueue.BACKGROUND)
+def on_delivery_item_dispatched(
+    user_id: int,
+    learning_path_queue_item_id: Optional[int],
+    **kwargs
+) -> None:
+    """
+    Suscriptor al evento 'delivery.item_dispatched'.
+    Se dispara cuando un item del DeliveryBuffer es despachado al ExploreBuffer.
+
+    Marca la LearningPathQueue item correspondiente como CONSUMED.
+
+    Args:
+        user_id: ID del usuario
+        learning_path_queue_item_id: ID del item en LearningPathQueue (puede ser None para boost items)
+    """
+    if not learning_path_queue_item_id:
+        logger.debug("[LearningPath] Skipping: item_dispatched has no learning_path_queue_item_id (boost item)")
+        return
+
+    logger.info(
+        f"[LearningPath] Marking learning_path_queue_item {learning_path_queue_item_id} as CONSUMED "
+        f"(user {user_id})"
+    )
+
+    try:
+        with Session(engine) as session:
+            # Obtener el item de la queue
+            queue_item = session.get(LearningPathQueue, learning_path_queue_item_id)
+
+            if not queue_item:
+                logger.warning(
+                    f"[LearningPath] LearningPathQueue item {learning_path_queue_item_id} not found"
+                )
+                return
+
+            if queue_item.user_id != user_id:
+                logger.warning(
+                    f"[LearningPath] User {user_id} does not own queue_item {learning_path_queue_item_id}"
+                )
+                return
+
+            # Marcar como CONSUMED
+            queue_item.status = LearningPathQueueStatus.CONSUMED
+            session.add(queue_item)
+            session.commit()
+
+            logger.info(
+                f"[LearningPath] Successfully marked learning_path_queue_item {learning_path_queue_item_id} as CONSUMED"
+            )
+
+    except Exception as e:
+        logger.error(
+            f"[LearningPath] Error marking queue_item {learning_path_queue_item_id} as CONSUMED: {e}",
+            exc_info=True
+        )

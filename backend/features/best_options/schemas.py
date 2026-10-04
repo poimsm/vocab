@@ -35,6 +35,8 @@ class BestOptionResponse(BaseModel):
     """Schema de respuesta para el endpoint /explore de best options"""
     items: List[BestOptionItem]
     total: int
+    buffer_delivery_ids: List[int] = []
+    buffer_position: int = 0
     status: str = "ok"
 
 

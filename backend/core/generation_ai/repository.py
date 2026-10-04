@@ -146,7 +146,7 @@ class GenerationAIRepository:
             return True
         return False
 
-    def mark_as_failed(self, central_queue_id: int) -> bool:
+    def mark_as_failed(self, central_queue_id: int, error_message: Optional[str] = None) -> bool:
         statement = select(GenerationAIRegistry).where(
             GenerationAIRegistry.central_queue_id == central_queue_id
         )

@@ -24,7 +24,7 @@ class ExampleContentRepository:
 
     def count_available_for_word(self, word_id: int) -> int:
         """Cuenta examples disponibles para una palabra"""
-        # Examples están disponibles si tienen la palabra y no están consumidos
+        # Examples están disponibles si tienen la palabra y no están en estado LEARNED
         count = self.db.exec(
             select(func.count(Example.id))
             .join(
@@ -33,7 +33,6 @@ class ExampleContentRepository:
                 & (WordStatistics.type == ContentType.EXAMPLE),
             )
             .where(
-                Example.is_consumed == False,
                 WordStatistics.learning_state != LearningState.LEARNED,
             )
         ).first() or 0
@@ -42,7 +41,7 @@ class ExampleContentRepository:
 
     def get_available_content_for_word(self, word_id: int) -> Optional[int]:
         """Obtiene el próximo example disponible para una palabra"""
-        # Buscar un example que contenga la palabra y no esté consumido
+        # Buscar un example que contenga la palabra
         example_id = self.db.exec(
             select(Example.id)
             .join(
@@ -51,7 +50,6 @@ class ExampleContentRepository:
                 & (WordStatistics.type == ContentType.EXAMPLE),
             )
             .where(
-                Example.is_consumed == False,
                 WordStatistics.learning_state != LearningState.LEARNED,
             )
             .order_by(Example.created_at.asc())

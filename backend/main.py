@@ -3,6 +3,9 @@ from logging_client import logger
 
 from fastapi.middleware.cors import CORSMiddleware
 
+# ✅ Inicializar Celery PRIMERO para registrar todos los suscriptores de eventos
+from celery_app import celery_app  # noqa
+
 from db import engine
 
 # MODELS - Import all models to register them with SQLAlchemy

@@ -166,7 +166,6 @@ def seed_clone_user(session: Session, source_user_id: int, target_user_id: int, 
                 sequence=source_example.sequence,
                 enqueued=source_example.enqueued,
                 is_favorite=source_example.is_favorite,
-                is_consumed=source_example.is_consumed,
                 is_marked=source_example.is_marked,
                 created_at=datetime.now(timezone.utc),
             )
@@ -204,7 +203,6 @@ def seed_clone_user(session: Session, source_user_id: int, target_user_id: int, 
                 is_active=source_bo.is_active,
                 sequence=source_bo.sequence,
                 enqueued=source_bo.enqueued,
-                is_consumed=source_bo.is_consumed,
                 created_at=datetime.now(timezone.utc),
             )
             session.add(new_bo)
@@ -268,7 +266,7 @@ def seed_clone_user(session: Session, source_user_id: int, target_user_id: int, 
         for source_item in source_cq:
             new_item = LearningPathQueue(
                 content_id=source_item.content_id,
-                type=source_item.type,
+                content_type=source_item.content_type,
                 status=source_item.status,
                 user_id=target_user_id,
                 priority=source_item.priority,
