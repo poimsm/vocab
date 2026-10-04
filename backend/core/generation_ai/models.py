@@ -5,7 +5,7 @@ from core.generation_ai.enums import GenerationAIStatus
 
 
 class GenerationAIRegistry(SQLModel, table=True):
-    __tablename__: str = "generation_ai_queue"
+    __tablename__: str = "generation_ai_registry"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", index=True, nullable=False)

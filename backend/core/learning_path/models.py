@@ -85,11 +85,11 @@ class LearningPathQueue(SQLModel, table=True):
 
     Este modelo pertenece al módulo de learning_path.
     """
-    __tablename__: str = "content_queue"  # Mantenemos el nombre de la tabla para compatibilidad
+    __tablename__: str = "learning_path_queue"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     content_id: int = Field(index=True)
-    type: ContentType = Field(index=True)
+    content_type: ContentType = Field(index=True)
     status: LearningPathQueueStatus = Field(default=LearningPathQueueStatus.PENDING, index=True)
     user_id: int = Field(foreign_key="users.id", index=True)
     priority: float = Field(default=0.0, index=True)

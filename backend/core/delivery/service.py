@@ -7,6 +7,7 @@ from core.enums import ContentSourceType, ContentType
 from core.event_bus import publish_event
 from logging_client import logger
 from core.boost.repository import BoostRepository
+from core.learning_path.services import LearningPathService
 
 class DeliveryService:
     def __init__(self, session: Session):

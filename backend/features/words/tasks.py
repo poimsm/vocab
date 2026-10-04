@@ -137,6 +137,25 @@ def create_single_task(
 
                 logger.debug(f"[WordGenerator] Created {len(examples_list)} examples for word {word.id}")
 
+                # ✅ Agregar ejemplos a LearningPathQueue para que estén disponibles inmediatamente
+                from core.learning_path.models import LearningPathQueue
+                from core.learning_path.enums import LearningPathQueueStatus
+                for example in db.exec(
+                    select(Example).where(Example.id.in_([ew.example_id for ew in db.exec(
+                        select(ExampleWord).where(ExampleWord.word_id == word.id)
+                    ).all()]))
+                ).all():
+                    queue_item = LearningPathQueue(
+                        user_id=user_id,
+                        content_type=ContentType.EXAMPLE,
+                        content_id=example.id,
+                        status=LearningPathQueueStatus.PENDING,
+                        priority=0.5,
+                    )
+                    db.add(queue_item)
+                db.commit()
+                logger.debug(f"[WordGenerator] Added {len(examples_list)} examples to LearningPathQueue for word {word.id}")
+
             # Crear estadísticas iniciales para ambos tipos de contenido
             for content_type in [ContentType.EXAMPLE, ContentType.BEST_OPTIONS]:
                 stats = WordStatistics(
@@ -370,6 +389,25 @@ def create_bulk_task(
                                     db.add(example_word)
 
                                 logger.debug(f"[BulkWordGenerator] Created {len(examples_list)} examples for word {word.id}")
+
+                                # ✅ Agregar ejemplos a LearningPathQueue para que estén disponibles inmediatamente
+                                from core.learning_path.models import LearningPathQueue
+                                from core.learning_path.enums import LearningPathQueueStatus
+                                for example in db.exec(
+                                    select(Example).where(Example.id.in_([ew.example_id for ew in db.exec(
+                                        select(ExampleWord).where(ExampleWord.word_id == word.id)
+                                    ).all()]))
+                                ).all():
+                                    queue_item = LearningPathQueue(
+                                        user_id=user_id,
+                                        type=ContentType.EXAMPLE,
+                                        content_id=example.id,
+                                        status=LearningPathQueueStatus.PENDING,
+                                        priority=0.5,
+                                    )
+                                    db.add(queue_item)
+                                db.commit()
+                                logger.debug(f"[BulkWordGenerator] Added {len(examples_list)} examples to LearningPathQueue for word {word.id}")
 
                             # Crear estadísticas iniciales
                             for content_type in [ContentType.EXAMPLE, ContentType.BEST_OPTIONS]:
