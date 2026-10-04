@@ -107,11 +107,17 @@ def explore_best_options(
     # Build best options response using BestOptionsResponseBuilder
     items = []
     if buffer_ids:
+        # Obtener objetos DeliveryBuffer usando los IDs
+        from core.delivery.repository import DeliveryRepository
+        from core.delivery.service import DeliveryService
+        delivery_service = DeliveryService(db)
+        delivery_items = delivery_service.get_delivery_items_by_ids(buffer_ids, current_user.id)
+
+        # Construir respuesta con los objetos
         response_builder = BestOptionsResponseBuilder(db)
-        items = response_builder.build_best_options_response(buffer_ids, current_user.id)
+        items = response_builder.build_best_options_response(delivery_items, current_user.id)
 
         # Marcar delivery items como DISPATCHED
-        from core.delivery.repository import DeliveryRepository
         delivery_repo = DeliveryRepository(db)
         dispatched_count = delivery_repo.mark_multiple_as_dispatched(buffer_ids)
         logger.debug(
@@ -130,6 +136,7 @@ def explore_best_options(
 
     return {
         "items": items,
+        "total": len(items),
         "buffer_delivery_ids": buffer_ids,
         "buffer_position": buffer_position,
         "status": status,

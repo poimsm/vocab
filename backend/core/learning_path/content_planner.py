@@ -1365,6 +1365,15 @@ class ContentPlanner:
         ):
             return
 
+        # ✅ Iniciar monitor de generación
+        from core.learning_path.repository import LearningPathRepository
+        learning_path_repo = LearningPathRepository(self.session)
+        learning_path_repo.start_generation_monitor(user_id, content_type)
+        self.session.commit()  # Asegurar que el monitor se persista
+        logger.info(
+            f"[ContentPlanner] Started generation monitor for user {user_id} ({content_type})"
+        )
+
         self.plan_generation(
             user_id=user_id,
             content_type=content_type,

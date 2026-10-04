@@ -153,6 +153,69 @@ def generate_best_options_task(user_id: int, word_ids: List[int]) -> None:
 
             db.commit()
 
+            # ✅ Agregar best_options a LearningPathQueue para que estén disponibles inmediatamente
+            from core.learning_path.models import LearningPathQueue
+            from core.learning_path.enums import LearningPathQueueStatus
+            from core.enums import ContentType, ContentSourceType
+
+            best_options_for_queue = db.exec(
+                select(BestOption).where(
+                    BestOption.sequence > max_sequence,
+                    BestOption.word_id.in_(word_ids)
+                )
+            ).all()
+
+            if best_options_for_queue:
+                queue_items = []
+                for best_option in best_options_for_queue:
+                    queue_item = LearningPathQueue(
+                        user_id=user_id,
+                        content_type=ContentType.BEST_OPTIONS,
+                        content_id=best_option.id,
+                        status=LearningPathQueueStatus.PENDING,
+                        priority=0.5,
+                    )
+                    db.add(queue_item)
+                    db.flush()  # Flush para obtener el ID generado
+                    queue_items.append(queue_item)
+                db.commit()
+                logger.debug(
+                    f"[BestOptionsGenerator] Added {len(best_options_for_queue)} best options to LearningPathQueue for user {user_id}"
+                )
+
+                # ✅ Transferir best_options a DeliveryBuffer para que estén disponibles inmediatamente
+                from core.delivery.repository import DeliveryRepository
+                delivery_repo = DeliveryRepository(db)
+
+                transferred_count = 0
+                for queue_item in queue_items:
+                    try:
+                        delivery_repo.push_to_buffer(
+                            user_id=user_id,
+                            content_id=queue_item.content_id,
+                            source_type=ContentSourceType.LEARNING_PATH,
+                            content_type=ContentType.BEST_OPTIONS,
+                            word_id=None,
+                            learning_path_queue_id=queue_item.id,
+                        )
+
+                        # ✅ Marcar el queue_item como TRANSFERRED después de transferir a DeliveryBuffer
+                        queue_item.status = LearningPathQueueStatus.TRANSFERRED
+                        db.add(queue_item)
+                        transferred_count += 1
+                    except Exception as e:
+                        logger.error(
+                            f"[BestOptionsGenerator] Error transferring best_option {queue_item.content_id} to DeliveryBuffer: {e}",
+                            exc_info=True,
+                        )
+                        continue
+
+                if transferred_count > 0:
+                    db.commit()
+                    logger.debug(
+                        f"[BestOptionsGenerator] Transferred {transferred_count} best options to DeliveryBuffer for user {user_id}"
+                    )
+
             # ✅ Contar best_options creados
             best_options_created = sequence_counter - max_sequence - 1
             if best_options_created > 0:
@@ -160,6 +223,15 @@ def generate_best_options_task(user_id: int, word_ids: List[int]) -> None:
                 logger.debug(
                     f"[BestOptionsGenerator] Counted {best_options_created} best options for user {user_id}"
                 )
+
+            # ✅ Marcar generación como completada en el monitor
+            from core.learning_path.repository import LearningPathRepository
+            from core.enums import ContentType
+            learning_path_repo = LearningPathRepository(db)
+            learning_path_repo.complete_generation_monitor(user_id, ContentType.BEST_OPTIONS)
+            logger.debug(
+                f"[BestOptionsGenerator] Marked generation as COMPLETED for user {user_id}"
+            )
 
             logger.info(
                 f"[BestOptionsGenerator] Successfully created best options for user {user_id}"
