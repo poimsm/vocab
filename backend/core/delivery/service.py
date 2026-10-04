@@ -4,7 +4,7 @@ from sqlmodel import Session
 from core.delivery.repository import DeliveryRepository
 from core.delivery.enums import DeliveryStatus
 from core.enums import ContentSourceType, ContentType
-from core.event_bus import publish_event_background
+from core.event_bus import publish_event_background, publish_event
 from logging_client import logger
 from core.boost.repository import BoostRepository
 from core.learning_path.services import LearningPathService
@@ -196,40 +196,76 @@ class DeliveryService:
                 ],
             }
 
-        # ========== PASO 3: No hay contenido boosteado, evaluar learning path ==========
+        # ========== PASO 3: No hay contenido boosteado, obtener contenido priorizando ==========
         logger.debug(
             f"[DeliveryService] No boosted content for user {user_id}. "
-            f"Checking learning path status..."
+            f"Getting prioritized learning path content..."
         )
 
-        # 3a. Intentar obtener contenido disponible (primero, antes de chequear estado de generación)
-        logger.debug(
-            f"[DeliveryService] Checking for learning path content for user {user_id}..."
-        )
-        items = self.repo.get_pending_content(
-            user_id, limit=limit, word_id=None, content_type=content_type_enum
+        # 3a. Obtener contenido priorizando usando priority engine
+        prioritized_items = learning_path_service.get_prioritized_content(
+            user_id=user_id,
+            content_type=content_type_enum,
+            limit=limit,
         )
 
-        if items:
-            # Hay contenido disponible (probablemente pre-generado transferido)
-            logger.info(
-                f"[DeliveryService] Found {len(items)} learning path content items for user {user_id}"
-            )
-            return {
-                "status": "ok",
-                "content": [
-                    {
-                        'id': item.id,
-                        'content_id': item.content_id,
-                        'queue_item_id': item.learning_path_queue_id,
-                        'word_id': item.word_id,
-                        'content_type': item.content_type.value,
-                        'source_type': item.source_type.value,
-                        'status': item.status.value,
-                    }
-                    for item in items
-                ],
-            }
+        if prioritized_items:
+            # 3a.1: Transferir items a DeliveryBuffer (bajo demanda)
+            from core.enums import ContentSourceType
+            from core.learning_path.enums import LearningPathQueueStatus
+            from core.learning_path.models import LearningPathQueue
+
+            delivery_items = []
+            for queue_item in prioritized_items:
+                try:
+                    delivery_item = self.repo.push_to_buffer(
+                        user_id=user_id,
+                        content_id=queue_item.content_id,
+                        source_type=ContentSourceType.LEARNING_PATH,
+                        content_type=queue_item.content_type,
+                        word_id=None,
+                        learning_path_queue_id=queue_item.id,
+                    )
+
+                    if delivery_item:
+                        delivery_items.append(delivery_item)
+
+                        # Mark queue item as TRANSFERRED to avoid re-transfer
+                        queue_item.status = LearningPathQueueStatus.TRANSFERRED
+                        self.session.add(queue_item)
+                        self.session.commit()
+
+                        logger.debug(
+                            f"[DeliveryService] Transferred queue_item {queue_item.id} to DeliveryBuffer "
+                            f"for user {user_id} (status now TRANSFERRED)"
+                        )
+                except Exception as e:
+                    logger.error(
+                        f"[DeliveryService] Error transferring queue_item {queue_item.id}: {e}",
+                        exc_info=True
+                    )
+                    continue
+
+            if delivery_items:
+                logger.info(
+                    f"[DeliveryService] Returning {len(delivery_items)} prioritized content items "
+                    f"for user {user_id}"
+                )
+                return {
+                    "status": "ok",
+                    "content": [
+                        {
+                            'id': item.id,
+                            'content_id': item.content_id,
+                            'queue_item_id': item.learning_path_queue_id,
+                            'word_id': item.word_id,
+                            'content_type': item.content_type.value,
+                            'source_type': item.source_type.value,
+                            'status': item.status.value,
+                        }
+                        for item in delivery_items
+                    ],
+                }
 
         # 3b. No hay contenido: chequear si hay generación en progreso
         if learning_path_service.is_content_generating(user_id, content_type_enum):

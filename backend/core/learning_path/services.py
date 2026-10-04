@@ -211,6 +211,228 @@ class LearningPathService:
 
         return items if items else []
 
+    def get_prioritized_content(
+        self,
+        user_id: int,
+        content_type: ContentType = None,
+        limit: int = 10,
+    ) -> list:
+        """
+        Obtiene contenido del LearningPathQueue priorizando según el priority engine.
+
+        Maneja correctamente diferentes tipos de contenido:
+        - EXAMPLE: content_id → Example.id → ExampleWord.word_id → Word
+        - BEST_OPTIONS: content_id → BestOption.id → BestOption.word_id → Word
+
+        Args:
+            user_id: ID del usuario
+            content_type: Tipo de contenido (si no se especifica, usa EXAMPLE)
+            limit: Cantidad máxima de items a retornar
+
+        Returns:
+            Lista de LearningPathQueue items priorizados
+        """
+        from features.words.models import Word, WordStatistics
+        from core.learning_path.enums import LearningState
+        from datetime import datetime, timezone
+
+        if content_type is None:
+            content_type = ContentType.EXAMPLE
+
+        logger.debug(
+            f"[get_prioritized_content] Getting {limit} prioritized items for user {user_id} "
+            f"(content_type={content_type})"
+        )
+
+        # 1. Obtener todos los items PENDING del usuario para este content_type
+        pending_items = self.db.exec(
+            select(LearningPathQueue).where(
+                LearningPathQueue.user_id == user_id,
+                LearningPathQueue.content_type == content_type,
+                LearningPathQueue.status.in_(["PENDING", "TRANSFERRED"]),
+            )
+        ).all()
+
+        if not pending_items:
+            logger.debug(
+                f"[get_prioritized_content] No pending items for user {user_id} (type={content_type})"
+            )
+            return []
+
+        # 2. Obtener word_id para cada item (varía según content_type)
+        item_word_map = {}  # queue_item_id → word_id
+        content_ids = [item.content_id for item in pending_items]
+
+        if content_type == ContentType.EXAMPLE:
+            # Para EXAMPLE: content_id → Example → ExampleWord → Word
+            from features.examples.models import Example
+            from features.words.models import ExampleWord
+
+            examples_with_words = self.db.exec(
+                select(Example.id, ExampleWord.word_id).join(
+                    ExampleWord, Example.id == ExampleWord.example_id
+                ).where(
+                    Example.id.in_(content_ids)
+                )
+            ).all()
+
+            for example_id, word_id in examples_with_words:
+                for item in pending_items:
+                    if item.content_id == example_id and item.id not in item_word_map:
+                        item_word_map[item.id] = word_id
+
+        elif content_type == ContentType.BEST_OPTIONS:
+            # Para BEST_OPTIONS: content_id → BestOption → word_id
+            from features.best_options.models import BestOption
+
+            best_options = self.db.exec(
+                select(BestOption.id, BestOption.word_id).where(
+                    BestOption.id.in_(content_ids)
+                )
+            ).all()
+
+            for best_option_id, word_id in best_options:
+                for item in pending_items:
+                    if item.content_id == best_option_id and item.id not in item_word_map:
+                        item_word_map[item.id] = word_id
+
+        if not item_word_map:
+            logger.warning(
+                f"[get_prioritized_content] Could not map any of {len(pending_items)} items to words (type={content_type}). "
+                f"Content IDs: {content_ids}"
+            )
+            return []
+
+        # 3. Obtener IDs de palabras únicas
+        word_ids = list(set(item_word_map.values()))
+
+        # 3a. Asegurar que todas las palabras tienen WordStatistics (crear si faltan)
+        from core.learning_path.enums import LearningState as LearningStateEnum
+        from datetime import datetime, timezone
+
+        existing_stats = self.db.exec(
+            select(WordStatistics.word_id).where(
+                WordStatistics.word_id.in_(word_ids),
+                WordStatistics.type == content_type,
+            )
+        ).all()
+
+        existing_word_ids = set(existing_stats)
+        missing_word_ids = [wid for wid in word_ids if wid not in existing_word_ids]
+
+        if missing_word_ids:
+            logger.debug(
+                f"[get_prioritized_content] Creating missing WordStatistics for {len(missing_word_ids)} words"
+            )
+            for word_id in missing_word_ids:
+                try:
+                    new_stats = WordStatistics(
+                        word_id=word_id,
+                        type=content_type,
+                        learning_state=LearningStateEnum.NEW,
+                        times_seen=0,
+                        current_cycle_seen=0,
+                        created_at=datetime.now(timezone.utc),
+                    )
+                    self.db.add(new_stats)
+                    self.db.flush()
+                except Exception as e:
+                    logger.error(f"[get_prioritized_content] Error creating stats for word {word_id}: {e}")
+            self.db.commit()
+
+        # 4. Obtener palabras y sus estadísticas
+        words = self.db.exec(
+            select(Word, WordStatistics).join(
+                WordStatistics,
+                (Word.id == WordStatistics.word_id) & (WordStatistics.type == content_type)
+            ).where(
+                Word.id.in_(word_ids),
+                Word.user_id == user_id,
+            )
+        ).all()
+
+        logger.debug(
+            f"[get_prioritized_content] Found {len(words)} word-stats pairs for {len(word_ids)} words (type={content_type})"
+        )
+
+        if not words:
+            logger.warning(
+                f"[get_prioritized_content] No WordStatistics found for {len(word_ids)} words (type={content_type}). "
+                f"Returning items without priority sorting (fallback). Word IDs: {word_ids}"
+            )
+            # Fallback: return items in their natural order if stats don't exist
+            # This ensures content is still available even if stats generation is delayed
+            result = pending_items[:limit]
+            logger.info(
+                f"[get_prioritized_content] Returning {len(result)} items without priority sorting for user {user_id}"
+            )
+            return result
+
+        # 5. Calcular prioridad para cada palabra
+        word_priorities = {}
+        now = datetime.now(timezone.utc)
+        spacing_words_count = sum(
+            1 for w_tuple in words
+            if len(w_tuple) >= 2 and w_tuple[1].learning_state == LearningState.SPACING
+        )
+
+        for word_tuple in words:
+            word = word_tuple[0] if isinstance(word_tuple, tuple) else word_tuple
+            stats = word_tuple[1] if isinstance(word_tuple, tuple) and len(word_tuple) > 1 else None
+
+            if stats is None:
+                continue
+
+            priority = self.priority_engine.calculate_priority(
+                word=word,
+                statistics=stats,
+                now=now,
+                expected_exposure=0.0,
+                spacing_words_count=spacing_words_count,
+            )
+
+            word_priorities[word.id] = priority
+
+        # 6. Agrupar items por palabra para distribución inteligente
+        items_by_word = {}
+        for item in pending_items:
+            word_id = item_word_map.get(item.id)
+            if word_id not in items_by_word:
+                items_by_word[word_id] = []
+            items_by_word[word_id].append(item)
+
+        # 7. Ordenar palabras por prioridad (highest first)
+        sorted_word_ids = sorted(
+            items_by_word.keys(),
+            key=lambda wid: word_priorities.get(wid, 0.0),
+            reverse=True,
+        )
+
+        # 8. Distribuir items en rotación entre palabras para mezclar contenido
+        result = []
+        word_queue_indices = {wid: 0 for wid in sorted_word_ids}
+
+        while len(result) < limit and any(
+            word_queue_indices[wid] < len(items_by_word[wid])
+            for wid in sorted_word_ids
+        ):
+            for word_id in sorted_word_ids:
+                if len(result) >= limit:
+                    break
+
+                idx = word_queue_indices[word_id]
+                if idx < len(items_by_word[word_id]):
+                    result.append(items_by_word[word_id][idx])
+                    word_queue_indices[word_id] += 1
+
+        logger.info(
+            f"[get_prioritized_content] Returning {len(result)} mixed items for user {user_id} "
+            f"(type={content_type}, word_order={sorted_word_ids}, "
+            f"priorities={[round(word_priorities.get(wid, 0.0), 2) for wid in sorted_word_ids]})"
+        )
+
+        return result
+
     # ==================== Queue Item Resolution ====================
 
     def resolve_queue_item(

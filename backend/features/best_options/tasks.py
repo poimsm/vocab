@@ -183,38 +183,14 @@ def generate_best_options_task(user_id: int, word_ids: List[int]) -> None:
                     f"[BestOptionsGenerator] Added {len(best_options_for_queue)} best options to LearningPathQueue for user {user_id}"
                 )
 
-                # ✅ Transferir best_options a DeliveryBuffer para que estén disponibles inmediatamente
-                from core.delivery.repository import DeliveryRepository
-                delivery_repo = DeliveryRepository(db)
-
-                transferred_count = 0
-                for queue_item in queue_items:
-                    try:
-                        delivery_repo.push_to_buffer(
-                            user_id=user_id,
-                            content_id=queue_item.content_id,
-                            source_type=ContentSourceType.LEARNING_PATH,
-                            content_type=ContentType.BEST_OPTIONS,
-                            word_id=None,
-                            learning_path_queue_id=queue_item.id,
-                        )
-
-                        # ✅ Marcar el queue_item como TRANSFERRED después de transferir a DeliveryBuffer
-                        queue_item.status = LearningPathQueueStatus.TRANSFERRED
-                        db.add(queue_item)
-                        transferred_count += 1
-                    except Exception as e:
-                        logger.error(
-                            f"[BestOptionsGenerator] Error transferring best_option {queue_item.content_id} to DeliveryBuffer: {e}",
-                            exc_info=True,
-                        )
-                        continue
-
-                if transferred_count > 0:
-                    db.commit()
-                    logger.debug(
-                        f"[BestOptionsGenerator] Transferred {transferred_count} best options to DeliveryBuffer for user {user_id}"
-                    )
+                # ✅ NO transferir a DeliveryBuffer inmediatamente
+                # El contenido permanece en PENDING status en LearningPathQueue
+                # Será transferido bajo demanda cuando el usuario solicite contenido
+                # El priority engine distribuirá el contenido de forma inteligente
+                logger.debug(
+                    f"[BestOptionsGenerator] Items left in PENDING status for user {user_id}. "
+                    f"They will be transferred on-demand by DeliveryService using priority engine."
+                )
 
             # ✅ Contar best_options creados
             best_options_created = sequence_counter - max_sequence - 1

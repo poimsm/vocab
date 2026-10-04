@@ -56,18 +56,12 @@ def generate_simple_examples_task(
 
     try:
         with Session(engine) as db:
-            # ✅ PASO 1: Buscar ejemplos pregenerados no consumidos en LearningPathQueue
-            transferred_count = _transfer_pregenerated_examples(
-                db=db,
-                user_id=user_id,
-                content_type=content_type,
+            # ✅ NOTA: Ejemplos pregenerados se transfieren bajo demanda por DeliveryService
+            # usando el priority engine para distribuir inteligentemente
+            logger.debug(
+                f"[ExampleGenerator] Pregenerated examples will be transferred on-demand "
+                f"by DeliveryService for user {user_id}"
             )
-
-            if transferred_count > 0:
-                logger.info(
-                    f"[ExampleGenerator] Transferred {transferred_count} pregenerated examples "
-                    f"to DeliveryBuffer for user {user_id}"
-                )
 
             # ✅ Validar cuota de ejemplos
             from config import QuotaValidator
