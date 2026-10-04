@@ -13,6 +13,10 @@ const { trackButtonClick } = useActivityTracking()
 const isComponentMounted = ref(false)
 const pollTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 
+// ─── Word Dropdown State ───
+const showWordDropdown = ref(false)
+const wordDropdownData = ref<any>(null)
+
 const BATCH_SIZE = 4
 const POLL_INTERVAL = 3000
 const MAX_CONSECUTIVE_GENERATING = 6
@@ -192,6 +196,40 @@ function resetState() {
   showResult.value = false
 }
 
+// ─── Word Dropdown Functions ───
+async function toggleWordDropdown() {
+  if (showWordDropdown.value) {
+    showWordDropdown.value = false
+    wordDropdownData.value = null
+    return
+  }
+
+  if (!bestOptionsStore.currentBestOption) return
+
+  const wordId = bestOptionsStore.currentBestOption.word.id
+  trackButtonClick('view_word_dropdown')
+
+  try {
+    const response = await api.get(`/words/words/${wordId}`)
+    const data = response.data
+
+    wordDropdownData.value = {
+      definition: data.meaning,
+      synonyms: data.synonyms || [],
+      level: data.level,
+      frequency: data.frequency
+    }
+    showWordDropdown.value = true
+  } catch (e: any) {
+    console.error('Failed to fetch word info:', e)
+  }
+}
+
+function closeWordDropdown() {
+  showWordDropdown.value = false
+  wordDropdownData.value = null
+}
+
 // ─── Mounted ───
 onMounted(async () => {
   isComponentMounted.value = true
@@ -256,7 +294,28 @@ onUnmounted(() => {
     </div>
 
     <div v-else class="quiz">
-      <button class="word">{{ bestOptionsStore.currentBestOption.word.main }}</button>
+      <div class="word-container">
+        <button class="word" @click="toggleWordDropdown">
+          {{ bestOptionsStore.currentBestOption.word.main }}
+          <Icon :icon="showWordDropdown ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'" width="16" />
+        </button>
+
+        <!-- Word Dropdown -->
+        <transition name="slideDown">
+          <div v-if="showWordDropdown && wordDropdownData" class="word-dropdown">
+            <p class="definition">{{ wordDropdownData.definition }}</p>
+            <div v-if="wordDropdownData.synonyms.length > 0" class="synonyms">
+              <span v-for="(syn, i) in wordDropdownData.synonyms.slice(0, 4)" :key="i" class="synonym-tag">
+                {{ syn }}
+              </span>
+            </div>
+            <div class="word-meta" style="display:none">
+              <span class="label">WORD</span>
+              <span class="level">LV.{{ wordDropdownData.level }}</span>
+            </div>
+          </div>
+        </transition>
+      </div>
 
       <p class="question">{{ bestOptionsStore.currentBestOption.question }}</p>
 
@@ -357,6 +416,14 @@ onUnmounted(() => {
   padding: 0 15px;
 }
 
+.word-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
 .word {
   display: inline-flex;
   align-items: center;
@@ -369,13 +436,72 @@ onUnmounted(() => {
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  /* transition: all 0.05s ease; */
   text-transform: capitalize;
 }
 
 .word:hover {
   background: rgba(124, 58, 237, 0.2);
   border-color: rgba(124, 58, 237, 0.4);
+}
+
+.word-dropdown {
+  width: 100%;
+  max-width: 320px;
+  padding: 14px;
+  background: rgba(45, 42, 65, 0.6);
+  border: 1px solid rgba(124, 58, 237, 0.15);
+  border-radius: 10px;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.05);
+}
+
+.definition {
+  margin: 0 0 10px 0;
+  color: #d4d2e0;
+  font-size: 16px;
+  line-height: 1.4;
+  font-weight: 400;
+}
+
+.synonyms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.synonym-tag {
+  display: inline-block;
+  padding: 5px 10px;
+  background: rgba(124, 58, 237, 0.08);
+  border: 1px solid rgba(124, 58, 237, 0.15);
+  border-radius: 16px;
+  color: #9c99ab;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.word-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.label {
+  color: #8b89a3;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.level {
+  margin-left: auto;
+  color: #9c99ab;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .question {
@@ -556,6 +682,23 @@ onUnmounted(() => {
   transform: translateY(4px);
 }
 
+.slideDown-enter-active,
+.slideDown-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.slideDown-enter-from {
+  opacity: 0;
+  transform: scaleY(0.8);
+  transform-origin: top;
+}
+
+.slideDown-leave-to {
+  opacity: 0;
+  transform: scaleY(0.8);
+  transform-origin: top;
+}
+
 @media (max-width: 768px) {
   .options {
     grid-template-columns: 1fr;
@@ -569,6 +712,14 @@ onUnmounted(() => {
     font-size: 17px;
     padding: 8px 18px;
     margin-top: 50px;
+  }
+
+  .definition {
+    font-size: 18px;
+  }
+
+  .synonym-tag {
+    font-size: 16px;
   }
 }
 </style>
