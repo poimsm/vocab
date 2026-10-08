@@ -117,7 +117,7 @@ class DeliveryService:
             )
 
             iteration_count = 0
-            max_iterations = 100
+            max_iterations = 15  # Allow more iterations to wait for background generation tasks to complete
             exhausted_words = set()  # Palabras sin contenido (evitar duplicar eventos)
             total_nodes = len(self.wheel_manager.get_wheel_for_user(user_id, content_type))
             exhausted_node_count = 0  # Contador de nodos EXHAUSTED
@@ -363,10 +363,10 @@ class DeliveryService:
                 # Si hay nodos GENERATING, hacer sleep para dar tiempo a la generación
                 if had_generating_node:
                     logger.debug(
-                        f"[DeliveryService] Found GENERATING node, sleeping 0.2s to allow content generation "
+                        f"[DeliveryService] Found GENERATING node, sleeping 0.5s to allow content generation "
                         f"for user {user_id}"
                     )
-                    time.sleep(0.2)
+                    time.sleep(0.5)
 
         # ========== PASO 3: Si hay contenido (boosted + learning), retornarlo ==========
         if items_collected:

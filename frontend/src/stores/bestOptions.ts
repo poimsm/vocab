@@ -38,7 +38,6 @@ interface BestOptionsState {
   generating: boolean
   error: string | null
   noWords: boolean
-  isPolling: boolean
 }
 
 export const useBestOptionsStore = defineStore('bestOptions', () => {
@@ -52,7 +51,6 @@ export const useBestOptionsStore = defineStore('bestOptions', () => {
     generating: false,
     error: null,
     noWords: false,
-    isPolling: false,
   })
 
   // ─── Getters ───
@@ -103,8 +101,10 @@ export const useBestOptionsStore = defineStore('bestOptions', () => {
       state.value.bufferPosition = bufferPosition
 
       if (wasEmpty || bufferChanged) {
-        state.value.currentIndex = 0
-        console.log('[loadBestOptions]', wasEmpty ? 'Was empty' : 'Buffer changed', ', currentIndex set to 0')
+        // Use bufferPosition if available, otherwise start at 0
+        const startIndex = Math.min(bufferPosition, safeBestOptions.length - 1)
+        state.value.currentIndex = startIndex
+        console.log('[loadBestOptions]', wasEmpty ? 'Was empty' : 'Buffer changed', ', currentIndex set to', startIndex, '(bufferPosition:', bufferPosition, ')')
       } else {
         state.value.currentIndex = Math.min(state.value.currentIndex, safeBestOptions.length - 1)
         console.log('[loadBestOptions] Same buffer, currentIndex clamped to:', state.value.currentIndex)
@@ -146,10 +146,6 @@ export const useBestOptionsStore = defineStore('bestOptions', () => {
     state.value.noWords = value
   }
 
-  function setIsPolling(value: boolean) {
-    state.value.isPolling = value
-  }
-
   function isQueueItemResolved(queueItemId: number): boolean {
     return state.value.resolvedQueueItemIds.has(queueItemId)
   }
@@ -169,58 +165,12 @@ export const useBestOptionsStore = defineStore('bestOptions', () => {
       generating: false,
       error: null,
       noWords: false,
-      isPolling: false,
     }
   }
 
   // ─── Actions ───
-  async function fetchBestOptions(limit: number = 4) {
-    if (state.value.generating && !state.value.isPolling) {
-      console.warn('[fetchBestOptions] Already generating, skipping')
-      return
-    }
-
-    state.value.generating = true
-    state.value.error = null
-    state.value.noWords = false
-
-    try {
-      const response = await api.post('/best-options/explore', {
-        actions: ['next'],
-        limit,
-        buffer_delivery_ids: state.value.bufferIds,
-        buffer_position: state.value.currentIndex,
-      })
-
-      console.log('[fetchBestOptions] Response:', response.data)
-      const data = response.data
-
-      if (data.status === 'generating') {
-        state.value.isPolling = true
-        console.log('[fetchBestOptions] Status is generating, polling enabled')
-        return
-      }
-
-      if (data.status === 'no_words') {
-        state.value.generating = false
-        state.value.noWords = true
-        return
-      }
-
-      state.value.generating = false
-      loadBestOptions(
-        data.items || [],
-        data.buffer_delivery_ids || [],
-        data.buffer_position ?? 0
-      )
-      state.value.resolvedQueueItemIds.clear()
-    } catch (e: any) {
-      state.value.generating = false
-      const errorMsg = e.response?.data?.message || e.message || 'Failed to load best options'
-      state.value.error = errorMsg
-      console.error('[fetchBestOptions] Error:', errorMsg, e)
-    }
-  }
+  // Note: All explore actions now handled via POST /explore endpoint
+  // with SSE listening for events. No polling-based methods needed anymore.
 
   async function navigateBestOption(queueItemId: number, isLastItem: boolean, limit: number = 4) {
     console.log('[navigateBestOption] Navigation: queueItemId=', queueItemId, 'isLastItem=', isLastItem, 'currentIndex=', state.value.currentIndex)
@@ -244,7 +194,7 @@ export const useBestOptionsStore = defineStore('bestOptions', () => {
     console.log('[navigateBestOption] Sending actions:', actions)
 
     try {
-      const response = await api.post('/best-options/explore', {
+      await api.post('/best-options/explore', {
         actions,
         resolve_queue_item_id: queueItemId,
         limit,
@@ -252,34 +202,13 @@ export const useBestOptionsStore = defineStore('bestOptions', () => {
         buffer_position: state.value.currentIndex,
       })
 
-      const data = response.data
-
       if (!alreadyResolved && actions.includes('resolve')) {
         markQueueItemAsResolved(queueItemId)
       }
 
-      if (actions.includes('next')) {
-        if (data.status === 'generating') {
-          state.value.isPolling = true
-          console.log('[navigateBestOption] Content generating, polling enabled')
-          return
-        }
-
-        if (data.status === 'no_words') {
-          state.value.generating = false
-          state.value.noWords = true
-          return
-        }
-
-        state.value.generating = false
-        loadBestOptions(
-          data.items || [],
-          data.buffer_delivery_ids || [],
-          data.buffer_position ?? 0
-        )
-        state.value.resolvedQueueItemIds.clear()
-        console.log('[navigateBestOption] New batch loaded')
-      }
+      // Note: If 'next' action was included, SSE will handle the response
+      // in the component via startSSE()
+      console.log('[navigateBestOption] Actions sent to backend, SSE will handle response if needed')
     } catch (e: any) {
       if (state.value.generating) {
         state.value.generating = false
@@ -312,7 +241,6 @@ export const useBestOptionsStore = defineStore('bestOptions', () => {
     generating: computed(() => state.value.generating),
     error: computed(() => state.value.error),
     noWords: computed(() => state.value.noWords),
-    isPolling: computed(() => state.value.isPolling),
 
     // Getters
     currentBestOption,
@@ -330,11 +258,9 @@ export const useBestOptionsStore = defineStore('bestOptions', () => {
     setGenerating,
     setError,
     setNoWords,
-    setIsPolling,
     clearState,
     isQueueItemResolved,
     markQueueItemAsResolved,
-    fetchBestOptions,
     navigateBestOption,
     syncPosition,
   }

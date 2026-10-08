@@ -400,19 +400,13 @@ def explore_examples_task(
 
     try:
         realtime_bus.publish(
-            channel=f"user:{user_id}:explore.processing",
+            channel=f"user:{user_id}:examples_explore.processing",
             data={
                 "request_id": request_id,
                 "message": "Processing explore actions...",
                 "timestamp": time.time(),
             }
         )
-
-        # ⚠️ TESTING: Simular latencia para acción 'next' (10 segundos)
-        # if 'next' in actions:
-        #     logger.info(f"[explore_examples_task] TESTING: Introduciendo latencia de 10 segundos para acción 'next'")
-        #     time.sleep(60*1)
-        #     logger.info(f"[explore_examples_task] TESTING: Latencia completada, continuando...")
 
         with Session(engine) as db:
             # Preparar repositorios y validadores
@@ -495,7 +489,7 @@ def explore_examples_task(
                 logger.debug(f"[explore_examples_task] Full event_data: {event_data}")
                 logger.debug(f"[explore_examples_task] Publishing explore.completed with {len(examples_data)} examples")
                 realtime_bus.publish(
-                    channel=f"user:{user_id}:explore.completed",
+                    channel=f"user:{user_id}:examples_explore.completed",
                     data=event_data
                 )
             except Exception as e:
@@ -515,7 +509,7 @@ def explore_examples_task(
                     f"buffer_ids={buffer_ids}, buffer_position={buffer_pos}, status={status}"
                 )
                 realtime_bus.publish(
-                    channel=f"user:{user_id}:explore.completed",
+                    channel=f"user:{user_id}:examples_explore.completed",
                     data=fallback_event_data
                 )
 
@@ -532,7 +526,7 @@ def explore_examples_task(
 
         # Publicar evento de error
         realtime_bus.publish(
-            channel=f"user:{user_id}:explore.failed",
+            channel=f"user:{user_id}:examples_explore.failed",
             data={
                 "request_id": request_id,
                 "error": str(e),

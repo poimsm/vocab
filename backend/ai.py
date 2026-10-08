@@ -325,8 +325,8 @@ Example:
         return None
 
 
-def generate_examples_from_words(words: list[Word]):
-    logger.info(f"generate_examples_from_words")
+def generate_examples_from_words(words: list[Word], examples_per_word: int = 5):
+    logger.info(f"generate_examples_from_words with examples_per_word={examples_per_word}")
     payload = [
         {
             "word_id": w.id,
@@ -343,25 +343,24 @@ def generate_examples_from_words(words: list[Word]):
         messages=[
             {
                 "role": "system",
-                "content": (
-                    "Generate natural English example sentences.\n\n"
+                "content": f"""Generate natural English example sentences.
 
-                    "Return ONLY a JSON array.\n\n"
+Return ONLY a JSON array.
 
-                    "Example:\n"
-                    '[{"words":[{"word_id":1,"text_form":"hustled"}],"text":"She hustled to catch the bus."}]\n\n'
+Example:
+[{{"words":[{{"word_id":1,"text_form":"hustled"}}],"text":"She hustled to catch the bus."}}]
 
-                    "Rules:\n"
-                    "- Each sentence must use 1 terms from the list\n"
-                    "- For every term used, include an object inside 'words'\n"
-                    "- 'word_id' must be the original id from the input\n"
-                    "- 'text_form' must be exactly as it appears in the generated sentence\n"
-                    "- Preserve capitalization and inflection actually used in the text\n"
-                    "- Max 10 words per sentence\n"
-                    "- Sound natural (spoken or written)\n"
-                    "- Cover as many different words as possible\n"
-                    "- Return ONLY valid JSON, no explanations, no markdown\n"
-                )
+Rules:
+- Each sentence must use 1 term from the list
+- For every term used, include an object inside 'words'
+- 'word_id' must be the original id from the input
+- 'text_form' must be exactly as it appears in the generated sentence
+- Preserve capitalization and inflection actually used in the text
+- Max 10 words per sentence
+- Sound natural (spoken or written)
+- Generate approximately {examples_per_word} examples per word (total: ~{len(words) * examples_per_word} sentences)
+- Return ONLY valid JSON, no explanations, no markdown
+"""
             },
             {
                 "role": "user",
@@ -447,8 +446,8 @@ Format:
     return response.choices[0].message.content
 
 
-def generate_best_options_from_words(words: list[Word]):
-    logger.info(f"generate_best_options_from_words")
+def generate_best_options_from_words(words: list[Word], questions_per_word: int = 5):
+    logger.info(f"generate_best_options_from_words with questions_per_word={questions_per_word}")
     payload = [
         {
             "word_id": w.id,
@@ -463,8 +462,7 @@ def generate_best_options_from_words(words: list[Word]):
         messages=[
             {
                 "role": "system",
-                "content": """
-Create vocabulary comprehension exercises for the following English words.
+                "content": f"""Create vocabulary comprehension exercises for the following English words.
 
 EXAMPLES:
 lurched: Which object is most likely to lurch?
@@ -491,16 +489,16 @@ IMPORTANT: The correct answer must be randomly distributed across all positions 
 
 REQUIREMENTS:
 - Everything must be in English.
-- Create 4 questions per word.
+- Create {questions_per_word} questions per word.
 - Do not copy the examples. Use them only as inspiration.
 - Vary the position of the correct answer across different questions.
 
 Return ONLY valid JSON in the following format:
 [
-  {
+  {{
     "word_id": 8,
     "questions": [
-      {
+      {{
         "question": "A porthole is...",
         "options": [
           "Option A",
@@ -508,9 +506,9 @@ Return ONLY valid JSON in the following format:
           "Option C"
         ],
         "correct_option": 1
-      }
+      }}
     ]
-  }
+  }}
 ]
 
 WORDS:

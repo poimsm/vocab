@@ -12,10 +12,10 @@ class BoostDemandStrategy:
         """
         Receta única de reposición: Lo que se solicita cuando se booste una palabra.
 
-        quantity = cantidad exacta de ejemplos a generar
+        quantity = cantidad exacta de ejercicios a generar
         (se calcula automáticamente cuántas tareas de IA se necesitan)
         """
         return [
             SkillDemand(skill_type="example", quantity=10, process_event='generation.content_requested'),
-            # SkillDemand(skill_type="best_options", quantity=2, process_event=''),
+            SkillDemand(skill_type="best_options", quantity=10, process_event='generation.content_requested'),
         ]

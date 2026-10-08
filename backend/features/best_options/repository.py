@@ -99,6 +99,37 @@ class BestOptionRepository:
         self.session.refresh(best_option)
         return best_option
 
+    def is_best_option_learned(self, best_option_id: int, user_id: int) -> bool:
+        """
+        Verifica si una best_option ha sido aprendida por un usuario.
+
+        Una best_option se considera aprendida si su palabra asociada está en estado LEARNED.
+        """
+        from features.words.models import WordStatistics
+
+        # Obtener la palabra asociada al best_option
+        best_option = self.session.exec(
+            select(BestOption).where(BestOption.id == best_option_id)
+        ).first()
+
+        if not best_option:
+            return False
+
+        # Verificar si la palabra está en estado LEARNED
+        word_stats = self.session.exec(
+            select(WordStatistics)
+            .where(
+                WordStatistics.word_id == best_option.word_id,
+                WordStatistics.type == ContentType.BEST_OPTIONS,
+                WordStatistics.user_id == user_id
+            )
+        ).first()
+
+        if word_stats and word_stats.learning_state == LearningState.LEARNED:
+            return True
+
+        return False
+
 
 def get_words(db: Session, best_option_id: int) -> List:
     """Obtiene la palabra asociada a un best option."""

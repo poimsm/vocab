@@ -104,55 +104,55 @@ function startSSE() {
       }
     })
 
-    // ─── Evento: explore.started ───
-    sseEventSource.addEventListener('explore.started', (event: MessageEvent) => {
+    // ─── Evento: examples_explore.started ───
+    sseEventSource.addEventListener('examples_explore.started', (event: MessageEvent) => {
       if (!sseActive.value) {
-        console.log('[SSE:explore.started] Stream disabled, ignoring event')
+        console.log('[SSE:examples_explore.started] Stream disabled, ignoring event')
         return
       }
 
       try {
         const data = JSON.parse(event.data)
-        console.log('[SSE:explore.started] Exploración iniciada:', data.request_id)
+        console.log('[SSE:examples_explore.started] Exploración iniciada:', data.request_id)
         examplesStore.setGenerating(true)
       } catch (e) {
-        console.error('[SSE:explore.started] Error parsing event:', e)
+        console.error('[SSE:examples_explore.started] Error parsing event:', e)
       }
     })
 
-    // ─── Evento: explore.processing ───
-    sseEventSource.addEventListener('explore.processing', (event: MessageEvent) => {
+    // ─── Evento: examples_explore.processing ───
+    sseEventSource.addEventListener('examples_explore.processing', (event: MessageEvent) => {
       if (!sseActive.value) {
-        console.log('[SSE:explore.processing] Stream disabled, ignoring event')
+        console.log('[SSE:examples_explore.processing] Stream disabled, ignoring event')
         return
       }
 
       try {
         const data = JSON.parse(event.data)
-        console.log('[SSE:explore.processing] Procesando acciones...', data.message)
+        console.log('[SSE:examples_explore.processing] Procesando acciones...', data.message)
         examplesStore.setGenerating(true)
       } catch (e) {
-        console.error('[SSE:explore.processing] Error parsing event:', e)
+        console.error('[SSE:examples_explore.processing] Error parsing event:', e)
       }
     })
 
-    // ─── Evento: explore.completed ───
-    sseEventSource.addEventListener('explore.completed', (event: MessageEvent) => {
+    // ─── Evento: examples_explore.completed ───
+    sseEventSource.addEventListener('examples_explore.completed', (event: MessageEvent) => {
       if (!sseActive.value) {
-        console.log('[SSE:explore.completed] Stream disabled, ignoring event')
+        console.log('[SSE:examples_explore.completed] Stream disabled, ignoring event')
         return
       }
 
       try {
         const data = JSON.parse(event.data)
-        console.log('[SSE:explore.completed] Exploración completada:', data)
+        console.log('[SSE:examples_explore.completed] Exploración completada:', data)
 
         // Actualizar store con datos recibidos
         examplesStore.setGenerating(false)
 
         // Si hay ejemplos, cargarlos
         if (data.examples && data.examples.length > 0) {
-          console.log('[SSE:explore.completed] Cargando', data.examples.length, 'ejemplos')
+          console.log('[SSE:examples_explore.completed] Cargando', data.examples.length, 'ejemplos')
           examplesStore.loadExamples(
             data.examples,
             data.buffer_delivery_ids,
@@ -160,40 +160,40 @@ function startSSE() {
           )
         } else if (data.examples_count > 0) {
           // Fallback: solo IDs, sin datos de ejemplos
-          console.log('[SSE:explore.completed] Actualizando buffer con IDs:', data.buffer_delivery_ids)
+          console.log('[SSE:examples_explore.completed] Actualizando buffer con IDs:', data.buffer_delivery_ids)
           examplesStore.setBufferData(data.buffer_delivery_ids, data.buffer_position)
         } else if (data.status === 'generating') {
-          console.log('[SSE:explore.completed] Contenido aún se está generando...')
+          console.log('[SSE:examples_explore.completed] Contenido aún se está generando...')
           examplesStore.setGenerating(true)
           return
         } else if (data.status === 'no_words') {
-          console.log('[SSE:explore.completed] No hay palabras disponibles')
+          console.log('[SSE:examples_explore.completed] No hay palabras disponibles')
           examplesStore.setNoWords(true)
         }
 
         sseActive.value = false
         sseEventSource?.close()
       } catch (e) {
-        console.error('[SSE:explore.completed] Error parsing event:', e)
+        console.error('[SSE:examples_explore.completed] Error parsing event:', e)
       }
     })
 
-    // ─── Evento: explore.failed ───
-    sseEventSource.addEventListener('explore.failed', (event: MessageEvent) => {
+    // ─── Evento: examples_explore.failed ───
+    sseEventSource.addEventListener('examples_explore.failed', (event: MessageEvent) => {
       if (!sseActive.value) {
-        console.log('[SSE:explore.failed] Stream disabled, ignoring event')
+        console.log('[SSE:examples_explore.failed] Stream disabled, ignoring event')
         return
       }
 
       try {
         const data = JSON.parse(event.data)
-        console.error('[SSE:explore.failed] Error en exploración:', data.error)
+        console.error('[SSE:examples_explore.failed] Error en exploración:', data.error)
         examplesStore.setGenerating(false)
         examplesStore.setError(data.error || 'Failed to process explore action')
         sseActive.value = false
         sseEventSource?.close()
       } catch (e) {
-        console.error('[SSE:explore.failed] Error parsing event:', e)
+        console.error('[SSE:examples_explore.failed] Error parsing event:', e)
       }
     })
 

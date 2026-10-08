@@ -104,24 +104,24 @@ async def explore_examples_stream(
 
     Clients pueden conectarse así:
         const eventSource = new EventSource('/api/examples/explore-stream');
-        eventSource.addEventListener('explore.started', (event) => {
+        eventSource.addEventListener('examples_explore.started', (event) => {
             const data = JSON.parse(event.data);
             console.log('Explore iniciado:', data);
         });
-        eventSource.addEventListener('explore.completed', (event) => {
+        eventSource.addEventListener('examples_explore.completed', (event) => {
             const data = JSON.parse(event.data);
             console.log('Explore completado:', data);
         });
-        eventSource.addEventListener('explore.failed', (event) => {
+        eventSource.addEventListener('examples_explore.failed', (event) => {
             const data = JSON.parse(event.data);
             console.log('Explore fallido:', data);
         });
 
     Eventos transmitidos:
-        - explore.started:   Exploración iniciada
-        - explore.processing: Procesando acciones
-        - explore.completed: Exploración completada (incluye buffer_ids, position, status)
-        - explore.failed:    Error durante exploración
+        - examples_explore.started:   Exploración iniciada
+        - examples_explore.processing: Procesando acciones
+        - examples_explore.completed: Exploración completada (incluye buffer_ids, position, status)
+        - examples_explore.failed:    Error durante exploración
     """
     import redis
     import os
@@ -142,7 +142,7 @@ async def explore_examples_stream(
             socket_timeout=2,
         )
         pubsub = r.pubsub()
-        pubsub.psubscribe(f"user:{current_user.id}:explore.*")
+        pubsub.psubscribe(f"user:{current_user.id}:examples_explore.*")
         logger.info(f"[explore_examples_stream] Suscrito a eventos de user {current_user.id}")
     except Exception as e:
         logger.error(f"[explore_examples_stream] Redis connection error: {e}")
@@ -264,7 +264,7 @@ def explore_examples(
     # Publicar evento inicial de inicio de exploración
     realtime_bus = get_realtime_bus()
     realtime_bus.publish(
-        channel=f"user:{current_user.id}:explore.started",
+        channel=f"user:{current_user.id}:examples_explore.started",
         data={
             "request_id": request_id,
             "actions": request.actions,

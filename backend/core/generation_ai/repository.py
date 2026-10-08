@@ -28,17 +28,18 @@ class GenerationAIRepository:
         )
 
         created_central_ids = []
-        # Cantidad de ejemplos que genera cada tarea de IA (constante del sistema)
-        EXAMPLES_PER_AI_TASK = 5
 
         for demand in demands:
+            # Obtener cantidad de items por tarea de la demanda (configurable, por defecto 5)
+            items_per_task = demand.items_per_task
+
             # Calcular cuántas tareas de IA se necesitan para generar demand.quantity ejemplos
             # quantity = ejemplos deseados, no tareas de IA
-            num_tasks = (demand.quantity + EXAMPLES_PER_AI_TASK - 1) // EXAMPLES_PER_AI_TASK
+            num_tasks = (demand.quantity + items_per_task - 1) // items_per_task
 
             logger.debug(
                 f"[GenerationAIRepository] Demand for {demand.quantity} {demand.skill_type}: "
-                f"enqueueing {num_tasks} AI task(s) ({EXAMPLES_PER_AI_TASK} examples per task)"
+                f"enqueueing {num_tasks} AI task(s) ({items_per_task} items per task)"
             )
 
             for _ in range(num_tasks):
@@ -51,6 +52,12 @@ class GenerationAIRepository:
                     "content_type": content_type_enum.value,  # skill_type → content_type
                     "content_source_type": source_type.value,  # source_type → content_source_type
                 }
+
+                # Agregar parámetro dinámico según tipo de contenido
+                if demand.skill_type == "example":
+                    payload_data["amount"] = items_per_task  # Ejemplos por palabra
+                elif demand.skill_type == "best_options":
+                    payload_data["questions_per_word"] = items_per_task  # Preguntas por palabra
 
                 # 1. Agregamos a la cola central y obtenemos el ID retornado
                 central_queue_id = self.central_repo.add_item(

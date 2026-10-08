@@ -70,3 +70,4 @@ backend/logs/
 logs/
 /backend/revisar_logs.txt
 /backend/revisar_test.txt
+/backend/revisar_console.txt

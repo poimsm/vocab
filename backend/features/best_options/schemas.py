@@ -43,3 +43,10 @@ class BestOptionResponse(BaseModel):
 class BestOptionResolutionResponse(BaseModel):
     """Schema de respuesta para resolver un best option"""
     status: str
+
+
+class ExploreAckResponse(BaseModel):
+    """Schema de respuesta para el endpoint POST /explore de best options"""
+    status: str
+    request_id: str
+    message: str
