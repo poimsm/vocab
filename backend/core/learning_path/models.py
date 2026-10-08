@@ -10,6 +10,7 @@ from core.learning_path.enums import (
     LearningPathQueueStatus,
     PathAnomalyType,
     LearningPathGenerationMonitorStatus,
+    LearningPathGenerationHistoryStatus,
 )
 
 from core.enums import ContentType
@@ -85,12 +86,15 @@ class LearningPathQueue(SQLModel, table=True):
     Contiene ejemplos y best_options listos para ser consumidos.
 
     Este modelo pertenece al módulo de learning_path.
+    Siempre debe incluir el word_id asociado al contenido.
     """
     __tablename__: str = "learning_path_queue"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     content_id: int = Field(index=True)
     content_type: ContentType = Field(index=True)
+    # Palabra asociada al contenido (obligatorio)
+    word_id: int = Field(foreign_key="words.id", index=True)
     status: LearningPathQueueStatus = Field(default=LearningPathQueueStatus.PENDING, index=True)
     user_id: int = Field(foreign_key="users.id", index=True)
     priority: float = Field(default=0.0, index=True)
@@ -160,9 +164,9 @@ class PathRepairLog(SQLModel, table=True):
 
 class LearningPathGenerationMonitor(SQLModel, table=True):
     """
-    Monitorea el estado de generación de contenido para el learning path del usuario.
-    Permite saber si actualmente el learning path está generando contenido en general
-    (independiente de una palabra específica).
+    Monitorea el estado actual de generación de contenido para el learning path.
+    Solo tiene 2 estados: IDLE (sin generar) o GENERATING (generando).
+    El historial de resultados (COMPLETED/FAILED) se guarda en LearningPathGenerationHistory.
     """
     __tablename__: str = "learning_path_generation_monitors"
 
@@ -176,7 +180,7 @@ class LearningPathGenerationMonitor(SQLModel, table=True):
 
     content_type: ContentType = Field(index=True, nullable=False)
 
-    # Estado de generación
+    # Estado de generación: IDLE | GENERATING
     status: LearningPathGenerationMonitorStatus = Field(
         default=LearningPathGenerationMonitorStatus.IDLE,
         index=True,
@@ -193,7 +197,41 @@ class LearningPathGenerationMonitor(SQLModel, table=True):
         index=True
     )
     started_at: Optional[datetime] = Field(default=None, index=True)
-    completed_at: Optional[datetime] = Field(default=None, index=True)
 
-    # Información de error (si aplica)
+
+class LearningPathGenerationHistory(SQLModel, table=True):
+    """
+    Historial de resultados de generación de contenido para el learning path.
+    Guarda los estados finales (COMPLETED/FAILED) y mensajes de error.
+    El monitor actual (LearningPathGenerationMonitor) solo trackea IDLE/GENERATING.
+    """
+    __tablename__: str = "learning_path_generation_history"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    user_id: int = Field(
+        foreign_key="users.id",
+        index=True,
+        nullable=False
+    )
+
+    content_type: ContentType = Field(index=True, nullable=False)
+
+    # Estado final: COMPLETED | FAILED
+    status: LearningPathGenerationHistoryStatus = Field(
+        index=True,
+        nullable=False
+    )
+
+    # Información de error (solo si status=FAILED)
     error_message: Optional[str] = Field(default=None)
+
+    # Auditoría temporal
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        index=True
+    )
+    completed_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        index=True
+    )

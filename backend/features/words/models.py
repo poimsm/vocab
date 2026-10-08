@@ -80,17 +80,5 @@ class Word(SQLModel, table=True):
     user: Optional[User] = Relationship()
 
     statistics: List["WordStatistics"] = Relationship(back_populates="word")
-    example_words: List["ExampleWord"] = Relationship(back_populates="word")
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-
-class ExampleWord(SQLModel, table=True):
-    __tablename__: str = "example_words"
-
-    example_id: int = Field(foreign_key="examples.id", primary_key=True)
-    word_id: int = Field(foreign_key="words.id", primary_key=True)
-    text_form: str = Field(max_length=255, nullable=False)
-
-    example: "Example" = Relationship(back_populates="example_words")
-    word: "Word" = Relationship(back_populates="example_words")

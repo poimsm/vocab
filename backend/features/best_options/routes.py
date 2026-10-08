@@ -118,11 +118,11 @@ def explore_best_options(
         items = response_builder.build_best_options_response(delivery_items, current_user.id)
 
         # Marcar delivery items como DISPATCHED
-        delivery_repo = DeliveryRepository(db)
-        dispatched_count = delivery_repo.mark_multiple_as_dispatched(buffer_ids)
-        logger.debug(
-            f"[explore_best_options] Marked {dispatched_count} delivery items as DISPATCHED"
-        )
+        # delivery_repo = DeliveryRepository(db)
+        # dispatched_count = delivery_repo.mark_multiple_as_dispatched(buffer_ids)
+        # logger.debug(
+        #     f"[explore_best_options] Marked {dispatched_count} delivery items as DISPATCHED"
+        # )
 
         # Actualizar sesión de exploración con los IDs y posición actual
         from core.explore.explore_repository import ExploreRepository

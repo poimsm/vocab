@@ -81,9 +81,15 @@ class ExploreActions:
         # Ejecutar acciones en orden
         for action in actions:
             if action == "resolve":
+                # Si no hay queue_item_id, es probablemente un item BOOST sin queue_item
+                # Simplemente skip esta acción sin error
                 if resolve_queue_item_id is None:
-                    raise ValueError("Action 'resolve' requires resolve_queue_item_id")
-                self.action_resolve(resolve_queue_item_id, current_user)
+                    logger.debug(
+                        f"[ExploreActions] Skipping resolve action: resolve_queue_item_id is None. "
+                        f"This is expected for BOOST items which don't have a learning_path_queue_id"
+                    )
+                else:
+                    self.action_resolve(resolve_queue_item_id, current_user)
 
             elif action == "sync":
                 buffer_ids, buffer_pos, status = self.action_sync(
@@ -242,7 +248,9 @@ class ExploreActions:
                 restored_position = 0
 
             if restored_ids:
-                logger.info(f"[action_resume] Restored {len(restored_ids)} items at position {restored_position}")
+                logger.info(
+                    f"[action_resume] Restored {len(restored_ids)} items at position {restored_position}"
+                )
                 buffer_delivery_ids = restored_ids
                 buffer_position = restored_position
                 was_session_restored = True
@@ -250,17 +258,12 @@ class ExploreActions:
                 logger.info(f"[action_resume] No saved session found")
                 return "ok", [], 0
 
-        # PASO 1.5: Si sesión fue restaurada, retornar items exactamente como estaban
-        # Sin validar ni remover items (eso debería hacerse cuando se navega/sync)
+        # PASO 1.5: Si sesión fue restaurada, retornarla directamente
         if was_session_restored:
             logger.info(
-                f"[action_resume] Returning restored session as-is: "
+                f"[action_resume] Returning restored session: "
                 f"{len(buffer_delivery_ids)} items at position {buffer_position}"
             )
-            # Reset generation monitor since we successfully recovered content
-            from core.learning_path.repository import LearningPathRepository
-            lp_repo = LearningPathRepository(self.db)
-            lp_repo.reset_generation_monitor(current_user.id, content_type)
             return "ok", buffer_delivery_ids, buffer_position
 
         # PASO 2-5: Lógica de validación solo si NO se restauró sesión guardada

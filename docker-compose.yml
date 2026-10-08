@@ -37,7 +37,22 @@ services:
       timeout: 5s
       retries: 5
 
-  # 3. BACKEND (FastAPI)
+  # 3. REDIS (Broker de eventos en tiempo real)
+  redis:
+    image: redis:7-alpine
+    container_name: redis_container
+    restart: always
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 4. BACKEND (FastAPI)
   backend:
     build:
       context: .
@@ -61,10 +76,12 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     working_dir: /app
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
-  # 4.A. WORKER EXCLUSIVO PARA IA (Secuencial y estricto)
+  # 5.A. WORKER EXCLUSIVO PARA IA (Secuencial y estricto)
   worker_ai:
     build:
       context: .
@@ -86,10 +103,12 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     working_dir: /app
     command: celery -A ${CELERY_APP_MODULE} worker -Q ai_queue -c 1 --loglevel=${CELERY_LOG_LEVEL}
 
-  # 4.B. WORKER PARA TAREAS GENERALES EN SEGUNDO PLANO
+  # 5.B. WORKER PARA TAREAS GENERALES EN SEGUNDO PLANO
   worker_background:
     build:
       context: .
@@ -111,10 +130,12 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     working_dir: /app
     command: celery -A ${CELERY_APP_MODULE} worker -Q background_queue -c 2 --loglevel=${CELERY_LOG_LEVEL}
 
-  # 5. FRONTEND (Vue + Nginx)
+  # 6. FRONTEND (Vue + Nginx)
   nginx:
     image: nginx:alpine
     container_name: nginx_frontend_container
@@ -127,7 +148,7 @@ services:
     depends_on:
       - backend
 
-  # 6. LOGGING SERVICE - Custom endpoint para recibir logs
+  # 7. LOGGING SERVICE - Custom endpoint para recibir logs
   logging_service:
     build:
       context: ./logging_service
@@ -144,3 +165,4 @@ services:
 volumes:
   postgres_data:
   rabbitmq_data:
+  redis_data:

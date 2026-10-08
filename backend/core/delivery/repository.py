@@ -5,6 +5,7 @@ from sqlmodel import Session, select, col
 from core.delivery.enums import DeliveryStatus
 from core.enums import ContentSourceType, ContentType
 from core.delivery.models import DeliveryBuffer
+from logging_client import logger
 
 
 class DeliveryRepository:
@@ -20,7 +21,12 @@ class DeliveryRepository:
         word_id: Optional[int] = None,
         learning_path_queue_id: Optional[int] = None,
     ) -> DeliveryBuffer:
-        """Agrega nuevo contenido generado al búfer en estado PENDING."""
+        """
+        Agrega nuevo contenido generado al búfer en estado PENDING.
+
+        IMPORTANTE: word_id debe siempre proporcionarse. En futuros cambios será obligatorio (no Optional).
+        Ahora es Optional solo mientras se actualiza la BD.
+        """
         item = DeliveryBuffer(
             user_id=user_id,
             content_id=content_id,
@@ -33,6 +39,12 @@ class DeliveryRepository:
         self.session.add(item)
         self.session.commit()
         self.session.refresh(item)
+
+        logger.debug(
+            f"[DeliveryRepository] Pushed to buffer: id={item.id}, user_id={user_id}, "
+            f"content_id={content_id}, word_id={word_id}, source_type={source_type.value}, "
+            f"status={item.status.value}"
+        )
         return item
 
     def get_pending_items(self, user_id: int, limit: int = 10) -> List[DeliveryBuffer]:
@@ -47,16 +59,6 @@ class DeliveryRepository:
             .limit(limit)
         )
         return list(self.session.exec(statement).all())
-
-    def mark_as_dispatched(self, buffer_id: int) -> Optional[DeliveryBuffer]:
-        """Marca un contenido como despachado al usuario (enviado al explore buffer)."""
-        item = self.session.get(DeliveryBuffer, buffer_id)
-        if item and item.status == DeliveryStatus.PENDING:
-            item.status = DeliveryStatus.DISPATCHED
-            self.session.add(item)
-            self.session.commit()
-            self.session.refresh(item)
-        return item
 
     def mark_multiple_as_dispatched(self, buffer_ids: list) -> int:
         """Marca múltiples contenidos como despachados."""
@@ -79,34 +81,13 @@ class DeliveryRepository:
         self.session.commit()
         return len(items)
 
-    def mark_as_served(self, buffer_id: int) -> Optional[DeliveryBuffer]:
-        """Marca un contenido como entregado/mostrado en la pantalla del usuario."""
-        item = self.session.get(DeliveryBuffer, buffer_id)
-        if item and item.status == DeliveryStatus.PENDING:
-            item.status = DeliveryStatus.DISPATCHED
-            self.session.add(item)
-            self.session.commit()
-            self.session.refresh(item)
-        return item
-
-    def mark_as_consumed(self, buffer_id: int) -> Optional[DeliveryBuffer]:
-        """Marca el contenido como completado/superado por el usuario."""
-        item = self.session.get(DeliveryBuffer, buffer_id)
-        if item and item.status == DeliveryStatus.DISPATCHED:
-            item.status = DeliveryStatus.DISPATCHED
-            item.consumed_at = datetime.now(timezone.utc)
-            self.session.add(item)
-            self.session.commit()
-            self.session.refresh(item)
-        return item
-
     def get_non_dispatched_items(self, user_id: int) -> List[DeliveryBuffer]:
-        """Obtiene todos los items no-despachados (PENDING, SERVED) para un usuario."""
+        """Obtiene todos los items no-despachados (PENDING, DISPATCHED) para un usuario."""
         statement = (
             select(DeliveryBuffer)
             .where(
                 DeliveryBuffer.user_id == user_id,
-                col(DeliveryBuffer.status).in_([DeliveryStatus.PENDING, DeliveryStatus.SERVED]),
+                col(DeliveryBuffer.status).in_([DeliveryStatus.PENDING, DeliveryStatus.DISPATCHED]),
             )
             .order_by(DeliveryBuffer.created_at.desc())
         )
@@ -118,12 +99,14 @@ class DeliveryRepository:
         limit: int = 10,
         word_id: Optional[int] = None,
         content_type: Optional[ContentType] = None,
+        source_type: Optional[ContentSourceType] = None,
     ) -> List[DeliveryBuffer]:
         """
         Obtiene contenido PENDING para un usuario.
-        Si word_id es None, obtiene contenido sin restricción.
+        Si word_id es None, obtiene contenido sin restricción, distribuyendo entre diferentes queue_items.
         Si word_id es especificado, obtiene solo contenido de esa palabra.
         Si content_type es especificado, filtra por tipo de contenido.
+        Si source_type es especificado, filtra por fuente (BOOST o LEARNING_PATH).
         Retorna en orden LIFO (último en llegar primero).
         """
         statement = (
@@ -140,9 +123,49 @@ class DeliveryRepository:
         if content_type is not None:
             statement = statement.where(DeliveryBuffer.content_type == content_type)
 
-        statement = statement.order_by(DeliveryBuffer.created_at.desc()).limit(limit)
+        if source_type is not None:
+            statement = statement.where(DeliveryBuffer.source_type == source_type)
 
-        return list(self.session.exec(statement).all())
+        # Get all pending items for distribution
+        statement = statement.order_by(DeliveryBuffer.created_at.desc())
+        all_items = list(self.session.exec(statement).all())
+
+        # If word_id is NOT specified (learning path), distribute across different queue_items for diversity
+        if word_id is None and all_items:
+            items_by_queue = {}
+            for item in all_items:
+                q_id = item.learning_path_queue_id or 0
+                if q_id not in items_by_queue:
+                    items_by_queue[q_id] = []
+                items_by_queue[q_id].append(item)
+
+            # Round-robin through queue items to get diverse content
+            result = []
+            queue_ids = list(items_by_queue.keys())
+            idx = {q_id: 0 for q_id in queue_ids}
+
+            while len(result) < limit and any(idx[q_id] < len(items_by_queue[q_id]) for q_id in queue_ids):
+                for q_id in queue_ids:
+                    if len(result) >= limit:
+                        break
+                    if idx[q_id] < len(items_by_queue[q_id]):
+                        result.append(items_by_queue[q_id][idx[q_id]])
+                        idx[q_id] += 1
+
+            logger.debug(
+                f"[DeliveryRepository] get_pending_content: user_id={user_id}, word_id={word_id}, "
+                f"content_type={content_type.value if content_type else None}, found {len(result)} items (distributed)"
+            )
+            return result[:limit]
+
+        results = all_items[:limit]
+
+        logger.debug(
+            f"[DeliveryRepository] get_pending_content: user_id={user_id}, word_id={word_id}, "
+            f"content_type={content_type.value if content_type else None}, found {len(results)} items"
+        )
+
+        return results
 
     def discard_boost_word_items(self, user_id: int, word_id: int) -> int:
         """Descarta todo el contenido no consumido de una palabra des-boosteada."""
@@ -152,7 +175,7 @@ class DeliveryRepository:
                 DeliveryBuffer.user_id == user_id,
                 DeliveryBuffer.word_id == word_id,
                 DeliveryBuffer.source_type == ContentSourceType.BOOST,
-                col(DeliveryBuffer.status).in_([DeliveryStatus.PENDING, DeliveryStatus.SERVED]),
+                col(DeliveryBuffer.status).in_([DeliveryStatus.PENDING, DeliveryStatus.DISPATCHED]),
             )
         )
         items = self.session.exec(statement).all()
@@ -162,3 +185,24 @@ class DeliveryRepository:
 
         self.session.commit()
         return len(items)
+
+    def get_pending_learning_path_content(
+        self,
+        user_id: int,
+        content_type: ContentType,
+    ) -> List[DeliveryBuffer]:
+        """
+        Obtiene contenido PENDING de learning path para un usuario.
+        Verifica si hay contenido disponible después de la generación.
+        """
+        statement = (
+            select(DeliveryBuffer)
+            .where(
+                DeliveryBuffer.user_id == user_id,
+                DeliveryBuffer.content_type == content_type,
+                DeliveryBuffer.source_type == ContentSourceType.LEARNING_PATH,
+                DeliveryBuffer.status == DeliveryStatus.PENDING,
+            )
+        )
+        return list(self.session.exec(statement).all())
+

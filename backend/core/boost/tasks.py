@@ -6,7 +6,7 @@ from core.boost.strategies import BoostDemandStrategy
 from core.generation_ai.repository import GenerationAIRepository
 from core.event_bus import subscribe_to_background
 from core.celery_queues import CeleryQueue
-from core.enums import ContentType
+from core.enums import ContentType, ContentSourceType
 from core.generation_ai.enums import GenerationAIStatus
 from logging_client import logger
 from typing import Optional
@@ -25,9 +25,9 @@ def deactivate_word_task(user_id: int, word_id: int) -> None:
         # Limpiar monitoreo de generación para esta palabra
         cleared = repository.clear_generation_monitor(user_id, word_id)
         if cleared > 0:
-            logger.info(f"[Boost] Limpiados {cleared} registros de monitoreo para word_id={word_id}")
+            logger.info(f"[BoostTask] Limpiados {cleared} registros de monitoreo para word_id={word_id}")
 
-        logger.info(f"[Boost] Boost desactivado exitosamente para word_id={word_id}.")
+        logger.info(f"[BoostTask] Boost desactivado exitosamente para word_id={word_id}.")
 
 
 @subscribe_to_background('boost.content.exhausted')
@@ -45,21 +45,35 @@ def refill_boost_content_task(
     Registra el inicio de generación en el monitor.
     """
     logger.info(
-        f"[Boost] Content exhausted for boosted word {word_id}: {content_type}. Enqueueing refill..."
+        f"[BoostTask] Content exhausted for boosted word {word_id}: {content_type}. Enqueueing refill..."
     )
 
     with Session(engine) as session:
         boost_repo = BoostRepository(session)
         generation_repo = GenerationAIRepository(session)
 
-        # Registrar el inicio de generación en el monitor
+        # Convertir content_type string a enum
         content_type_enum = ContentType(content_type)
-        monitor = boost_repo.start_generation_monitor(
+
+        # Verificar si ya hay generación en progreso para esta combinación
+        is_already_generating = generation_repo.is_generating(
             user_id=user_id,
             word_id=word_id,
+            source_type=ContentSourceType.BOOST,
             content_type=content_type_enum
         )
-        logger.info(f"[Boost] Generation monitor started for word_id={word_id}, content_type={content_type}")
+
+        if is_already_generating:
+            logger.info(
+                f"[BoostTask] Generation already in progress for word_id={word_id}, "
+                f"content_type={content_type}. Skipping refill request."
+            )
+            return
+
+        logger.info(
+            f"[BoostTask] No generation in progress for word_id={word_id}, "
+            f"content_type={content_type}. Enqueueing refill..."
+        )
 
         # Obtener el pack de reposición
         refill_demands = BoostDemandStrategy.get_refill_pack()
@@ -69,25 +83,24 @@ def refill_boost_content_task(
 
         if not filtered_demands:
             logger.warning(
-                f"[Boost] No refill demand found for content_type: {content_type}"
+                f"[BoostTask] No refill demand found for content_type: {content_type}"
             )
             return
 
         # Encolar la demanda de regeneración
-        for demand in filtered_demands:
+        if filtered_demands:
             logger.info(
-                f"[Boost] Enqueueing {demand.quantity} {demand.skill_type} for word {word_id}"
+                f"[BoostTask] Enqueueing {sum(d.quantity for d in filtered_demands)} items for word {word_id}"
             )
             generation_repo.enqueue_demand(
                 user_id=user_id,
                 word_id=word_id,
-                skill_type=demand.skill_type,
-                quantity=demand.quantity,
-                is_boost=True,
+                demands=filtered_demands,
+                source_type=ContentSourceType.BOOST,
             )
 
         logger.info(
-            f"[Boost] Refill demand enqueued successfully for word {word_id} ({content_type})"
+            f"[BoostTask] Refill demand enqueued successfully for word {word_id} ({content_type})"
         )
 
 
@@ -108,11 +121,12 @@ def on_content_generated(
     Si el contenido es del módulo boost, actualiza el estado del monitor de generación.
     """
     # Solo procesar si es del módulo boost y hay word_id
-    if content_source_type != "boost" or not word_id:
+    from core.enums import ContentSourceType
+    if content_source_type != ContentSourceType.BOOST.value or not word_id:
         return
 
     logger.info(
-        f"[Boost] Content generated event received for word_id={word_id}, "
+        f"[BoostTask] Content generated event received for word_id={word_id}, "
         f"content_type={content_type}, status={status}"
     )
 
@@ -124,7 +138,7 @@ def on_content_generated(
 
             if status == GenerationAIStatus.COMPLETED.value:
                 logger.info(
-                    f"[Boost] Marking generation monitor as COMPLETED for word_id={word_id}, "
+                    f"[BoostTask] Marking generation monitor as COMPLETED for word_id={word_id}, "
                     f"content_type={content_type}"
                 )
                 repository.complete_generation_monitor(
@@ -134,7 +148,7 @@ def on_content_generated(
                 )
             elif status == GenerationAIStatus.FAILED.value:
                 logger.info(
-                    f"[Boost] Marking generation monitor as FAILED for word_id={word_id}, "
+                    f"[BoostTask] Marking generation monitor as FAILED for word_id={word_id}, "
                     f"content_type={content_type}"
                 )
                 repository.fail_generation_monitor(
@@ -145,8 +159,8 @@ def on_content_generated(
                 )
             else:
                 logger.warning(
-                    f"[Boost] Unknown status '{status}' for generation monitor "
+                    f"[BoostTask] Unknown status '{status}' for generation monitor "
                     f"(word_id={word_id}, content_type={content_type})"
                 )
         except ValueError as e:
-            logger.error(f"[Boost] Invalid content_type '{content_type}': {e}")
+            logger.error(f"[BoostTask] Invalid content_type '{content_type}': {e}")

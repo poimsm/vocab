@@ -513,12 +513,15 @@ class ContentPlanner:
 
         Retorna True si hay al menos una palabra en estado diferente a LEARNED.
         Retorna False si todas las palabras están en estado LEARNED.
+
+        Excluye palabras boosteadas (que tienen su propia generación independiente).
         """
         # Word is already imported at the top of the file
 
 
         # Get all non-learned statistics for this user and content type
         # FILTER: Only active words (is_active=True)
+        # FILTER: Exclude boosted words (they have their own generation via boost)
         # Bug fix: Inactive words should never be counted as available
         stats = self.session.exec(
             select(WordStatistics)
@@ -526,6 +529,7 @@ class ContentPlanner:
             .where(
                 Word.user_id == user_id,
                 Word.is_active == True,
+                Word.is_boosted == False,  # Exclude boosted words
                 WordStatistics.type == content_type,
                 WordStatistics.learning_state != LearningState.LEARNED
             )
@@ -536,7 +540,7 @@ class ContentPlanner:
 
         logger.info(
             f"[ContentPlanner.has_non_learned_words] user_id={user_id}, content_type={content_type}, "
-            f"count={non_learned_count}, has_words={has_words}"
+            f"count={non_learned_count}, has_words={has_words} (filtered: excluding is_boosted=True words)"
         )
 
         if stats:
@@ -562,6 +566,8 @@ class ContentPlanner:
         cuando aumenta su necesidad por spaced repetition.
 
         La decisión final se realiza mediante PriorityEngine.
+
+        Excluye palabras boosteadas (tienen su propia generación independiente).
         """
         # Word is already imported at the top of the file
 
@@ -569,8 +575,14 @@ class ContentPlanner:
             select(Word).where(
                 Word.user_id == user_id,
                 Word.is_active == True,
+                Word.is_boosted == False,  # Exclude boosted words
             )
         ).all()
+
+        logger.debug(
+            f"[ContentPlanner.get_candidate_words] user_id={user_id}, "
+            f"found {len(words)} non-boosted words: {[w.main for w in words]}"
+        )
 
         return words
 
@@ -1088,6 +1100,7 @@ class ContentPlanner:
                     user_id=user_id,
                     content_type=content_type,
                     content_id=content_id,
+                    word_id=word_id,
                 )
                 pending_count += 1
 
@@ -1172,7 +1185,7 @@ class ContentPlanner:
 
                     # Encolar si no está ya encolado
                     if not self.content_queue.is_pending(user_id, content_type, content_id):
-                        self.content_queue.enqueue(user_id, content_type, content_id)
+                        self.content_queue.enqueue(user_id, content_type, content_id, word.id)
                         pending_count += 1
                         found_in_fallback += 1
                         enqueued_in_round += 1
@@ -1445,6 +1458,7 @@ class ContentPlanner:
                 .where(
                     Word.id.in_(path_word_ids),
                     Word.is_active == True,
+                    Word.is_boosted == False,  # Exclude boosted words
                     WordStatistics.type == content_type,
                     WordStatistics.learning_state != LearningState.LEARNED,
                 )
@@ -1460,6 +1474,7 @@ class ContentPlanner:
                 .where(
                     Word.user_id == user_id,
                     Word.is_active == True,
+                    Word.is_boosted == False,  # Exclude boosted words
                     WordStatistics.type == content_type,
                     WordStatistics.learning_state != LearningState.LEARNED,
                     Word.id.notin_(path_word_ids) if path_word_ids else True,

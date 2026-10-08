@@ -19,7 +19,7 @@ import traceback
 from datetime import datetime, timezone
 from sqlmodel import Session, select, delete
 from auth.models import User, UserConfiguration
-from features.words.models import Word, WordStatistics, ExampleWord
+from features.words.models import Word, WordStatistics
 from features.examples.models import Example
 from features.best_options.models import BestOption
 from features.quick_write.models import QuickWrite
@@ -67,14 +67,10 @@ def seed_clone_user(session: Session, source_user_id: int, target_user_id: int, 
             session.exec(delete(BestOption).where(BestOption.word_id.in_(
                 select(Word.id).where(Word.user_id == target_user_id)
             )))
-            # Eliminar ExampleWords de palabras del usuario
-            session.exec(delete(ExampleWord).where(ExampleWord.word_id.in_(
+            # Eliminar Examples de palabras del usuario
+            session.exec(delete(Example).where(Example.word_id.in_(
                 select(Word.id).where(Word.user_id == target_user_id)
             )))
-            # NOTA: NO eliminamos Examples huérfanos porque:
-            # - Un Example podría tener referencias de otros usuarios (shared records)
-            # - Los huérfanos no causan problemas (no se acceden sin ExampleWord)
-            # - Evitamos risgo de borrar datos de otros usuarios
             session.exec(delete(WordStatistics).where(
                 WordStatistics.word_id.in_(
                     select(Word.id).where(Word.user_id == target_user_id)
@@ -142,15 +138,11 @@ def seed_clone_user(session: Session, source_user_id: int, target_user_id: int, 
 
         logger.info(f"[seed_clone_user] ✓ {len(source_stats)} estadística(s) clonada(s)")
 
-        # 3. Clonar Examples y ExampleWords
+        # 3. Clonar Examples
         user_word_ids = {w.id for w in source_words}
         # Obtener ejemplos que están vinculados a palabras del usuario
-        source_example_words = session.exec(
-            select(ExampleWord).where(ExampleWord.word_id.in_(user_word_ids))
-        ).all()
-        source_example_ids = {ew.example_id for ew in source_example_words}
         source_examples = session.exec(
-            select(Example).where(Example.id.in_(source_example_ids))
+            select(Example).where(Example.word_id.in_(user_word_ids))
         ).all()
 
         examples_mapping = {}
@@ -160,6 +152,8 @@ def seed_clone_user(session: Session, source_user_id: int, target_user_id: int, 
             new_example = Example(
                 type=source_example.type,
                 text=source_example.text,
+                text_form=source_example.text_form,
+                word_id=words_mapping.get(source_example.word_id),
                 favorited_at=source_example.favorited_at,
                 normalized=source_example.normalized,
                 times_seen=source_example.times_seen,
@@ -174,18 +168,6 @@ def seed_clone_user(session: Session, source_user_id: int, target_user_id: int, 
             examples_mapping[source_example.id] = new_example.id
 
         logger.info(f"[seed_clone_user] ✓ {len(source_examples)} ejemplo(s) clonado(s)")
-
-        # Clonar ExampleWords (relación muchos-a-muchos)
-        logger.info(f"[seed_clone_user] Clonando {len(source_example_words)} example_word(s)...")
-        for source_ew in source_example_words:
-            new_ew = ExampleWord(
-                example_id=examples_mapping.get(source_ew.example_id),
-                word_id=words_mapping.get(source_ew.word_id),
-                text_form=source_ew.text_form,
-            )
-            session.add(new_ew)
-
-        logger.info(f"[seed_clone_user] ✓ {len(source_example_words)} example_word(s) clonado(s)")
 
         # 4. Clonar BestOptions (SOLO del usuario origen, usando SQL filter)
         source_best_options = session.exec(
@@ -267,6 +249,7 @@ def seed_clone_user(session: Session, source_user_id: int, target_user_id: int, 
             new_item = LearningPathQueue(
                 content_id=source_item.content_id,
                 content_type=source_item.content_type,
+                word_id=words_mapping.get(source_item.word_id) if source_item.word_id else None,
                 status=source_item.status,
                 user_id=target_user_id,
                 priority=source_item.priority,

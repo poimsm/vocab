@@ -96,11 +96,10 @@ const markAsLearned = async () => {
     word.value.is_learned = result.is_learned
     console.log('[WordDetailPage.markAsLearned] Success! New status:', word.value.is_learned)
 
-    // If marking as learned, sync buffer in store to remove this word's examples
-    // When user returns to ExamplesPage, onMounted will restore and fetch fresh examples
+    // If marking as learned, the buffer will be synced automatically
+    // when user returns to ExamplesPage (onMounted with 'resume' action)
     if (result.is_learned) {
-      console.log('[WordDetailPage.markAsLearned] Syncing buffer in store...')
-      await examplesStore.syncBuffer(4)
+      console.log('[WordDetailPage.markAsLearned] Buffer will be synced on next ExamplesPage visit')
     }
   } catch (err) {
     console.error('[WordDetailPage.markAsLearned] Error:', err)

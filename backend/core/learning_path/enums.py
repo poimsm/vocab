@@ -5,6 +5,10 @@ class LearningPathGenerationMonitorStatus(str, enum.Enum):
     """Estados del monitor de generación de contenido del learning path."""
     IDLE = "idle"                # Sin generar
     GENERATING = "generating"    # Generando
+
+
+class LearningPathGenerationHistoryStatus(str, enum.Enum):
+    """Estados del historial de generación de contenido."""
     COMPLETED = "completed"      # Completado exitosamente
     FAILED = "failed"            # Error durante la generación
 

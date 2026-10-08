@@ -38,18 +38,15 @@ class LearningTracker:
 
         Para un Example:
 
-            Example
+            Example (word_id)
               ↓
-            ExampleWord
-              ↓
-            Word A
-            Word B
+            Word
 
         Para BestOption:
 
-            BestOption
+            BestOption (word_id)
               ↓
-            Word asociada
+            Word
 
         Cada palabra recibe una exposición real.
 

@@ -1,12 +1,20 @@
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 from typing import Optional, List
 from pydantic import BaseModel
+import json
+import uuid
+import queue
+import time
+import asyncio
+import jwt
+from jwt import PyJWTError
 
 from db import get_db
 from logging_client import logger
-from auth.repository import get_current_user
+from auth.repository import get_current_user, SECRET_KEY, ALGORITHM
 from auth.models import User
 from features.examples.models import Example
 from decorators import log_endpoint
@@ -17,6 +25,10 @@ from features.examples.explore_response_builder import ExploreResponseBuilder
 from features.examples.repository import ExampleRepository
 from core.delivery.service import DeliveryService
 from activity.user_activity_service import UserActivityService
+from core.realtime_event_bus import get_realtime_bus
+from celery_app import celery_app
+from core.celery_queues import CeleryQueue
+from features.examples.tasks import explore_examples_task
 
 
 class ExploreRequest(BaseModel):
@@ -28,12 +40,170 @@ class ExploreRequest(BaseModel):
     buffer_position: int = 0  # Posición actual en el buffer
 
 
+async def get_current_user_sse(
+    db: Session = Depends(get_db),
+    token: Optional[str] = Query(None),  # Token como query parameter (para SSE)
+) -> User:
+    """
+    Autenticación para SSE endpoint.
+    Intenta obtener el usuario del token en query param (para SSE que no soporta headers)
+    o usa la autenticación estándar.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="No se pudieron validar las credenciales",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    # Si hay token en query param, usarlo
+    if token:
+        logger.debug(f"[SSE Auth] Attempting to authenticate via query token")
+        try:
+            payload = jwt.decode(
+                token,
+                SECRET_KEY,
+                algorithms=[ALGORITHM]
+            )
+            email: str = payload.get("sub")
+            if email is None:
+                logger.warning("[SSE Auth] Token validation failed: no email in payload")
+                raise credentials_exception
+
+            user = db.exec(
+                select(User).where(User.email == email)
+            ).first()
+
+            if user is None:
+                logger.warning(f"[SSE Auth] User not found for email: {email}")
+                raise credentials_exception
+
+            logger.debug(f"[SSE Auth] User authenticated via query token: {user.id} ({email})")
+            return user
+
+        except PyJWTError as e:
+            logger.warning(f"[SSE Auth] JWT validation error: {str(e)}")
+            raise credentials_exception
+        except Exception as e:
+            logger.error(f"[SSE Auth] Unexpected error: {str(e)}", exc_info=True)
+            raise credentials_exception
+
+    # Si no hay token en query param, usar autenticación estándar (header)
+    logger.debug("[SSE Auth] No query token, falling back to standard auth")
+    return get_current_user(token=None, db=db)
+
+
 router = APIRouter()
 
 
+@router.get("/explore-stream")
+async def explore_examples_stream(
+    current_user: User = Depends(get_current_user_sse),
+):
+    """
+    SSE endpoint que transmite eventos de exploración en tiempo real.
+
+    Clients pueden conectarse así:
+        const eventSource = new EventSource('/api/examples/explore-stream');
+        eventSource.addEventListener('explore.started', (event) => {
+            const data = JSON.parse(event.data);
+            console.log('Explore iniciado:', data);
+        });
+        eventSource.addEventListener('explore.completed', (event) => {
+            const data = JSON.parse(event.data);
+            console.log('Explore completado:', data);
+        });
+        eventSource.addEventListener('explore.failed', (event) => {
+            const data = JSON.parse(event.data);
+            console.log('Explore fallido:', data);
+        });
+
+    Eventos transmitidos:
+        - explore.started:   Exploración iniciada
+        - explore.processing: Procesando acciones
+        - explore.completed: Exploración completada (incluye buffer_ids, position, status)
+        - explore.failed:    Error durante exploración
+    """
+    import redis
+    import os
+    import time
+
+    redis_host = os.getenv("REDIS_HOST", "redis")
+    redis_port = int(os.getenv("REDIS_PORT", 6379))
+
+    logger.info(f"[explore_examples_stream] Iniciando SSE para user {current_user.id}")
+
+    # Conexión Redis para escuchar eventos
+    try:
+        r = redis.Redis(
+            host=redis_host,
+            port=redis_port,
+            db=0,
+            decode_responses=True,
+            socket_timeout=2,
+        )
+        pubsub = r.pubsub()
+        pubsub.psubscribe(f"user:{current_user.id}:explore.*")
+        logger.info(f"[explore_examples_stream] Suscrito a eventos de user {current_user.id}")
+    except Exception as e:
+        logger.error(f"[explore_examples_stream] Redis connection error: {e}")
+        return StreamingResponse(
+            iter([f"event: error\ndata: {json.dumps({'error': 'Redis connection failed'})}\n\n"]),
+            media_type="text/event-stream",
+            status_code=500
+        )
+
+    async def event_generator():
+        """Genera eventos SSE usando Redis pubsub"""
+        try:
+            logger.debug(f"[explore_examples_stream] Event generator iniciado")
+            last_keep_alive = time.time()
+
+            while True:
+                try:
+                    # Usar get_message() no-bloqueante con timeout muy corto
+                    message = pubsub.get_message()
+
+                    if message and message.get("type") in ("message", "pmessage"):
+                        channel = message.get("channel")
+                        raw_data = message.get("data")
+
+                        if channel and raw_data:
+                            try:
+                                data = json.loads(raw_data)
+                                event_type = channel.split(":")[-1]
+                                yield f"event: {event_type}\n"
+                                yield f"data: {json.dumps(data)}\n\n"
+                                logger.debug(f"[explore_examples_stream] Evento enviado: {event_type}")
+                                last_keep_alive = time.time()
+                            except json.JSONDecodeError:
+                                logger.error(f"Invalid JSON: {raw_data}")
+                    else:
+                        # Keep-alive cada 30 segundos sin eventos
+                        now = time.time()
+                        if now - last_keep_alive > 30:
+                            yield ": keep-alive\n\n"
+                            last_keep_alive = now
+                        else:
+                            # Pequeña pausa para no consumir CPU
+                            await asyncio.sleep(0.2)
+
+                except Exception as e:
+                    logger.error(f"[explore_examples_stream] Error en generador: {e}")
+                    yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+                    break
+
+        except GeneratorExit:
+            logger.debug(f"[explore_examples_stream] Cliente desconectado")
+        finally:
+            try:
+                pubsub.close()
+            except:
+                pass
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
-@router.post("/explore", response_model=ExploreResponse)
+@router.post("/explore")
 @log_endpoint
 def explore_examples(
     request: ExploreRequest,
@@ -41,10 +211,10 @@ def explore_examples(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Endpoint unificado con acciones encadenables y buffer management.
+    Endpoint que encola acciones de explore para procesamiento asincrónico.
 
-    Delega la lógica a ExploreActions de core/explore/explore_actions.py.
-    Usa LearningPathService para validar contenido disponible y triggear generación.
+    Responde inmediatamente con confirmación. Los resultados se transmiten
+    a través del SSE endpoint `/explore-stream` usando el RealtimeEventBus.
 
     Acciones disponibles:
     - "resolve": Resuelve un item (registra exposición) - requiere resolve_queue_item_id
@@ -52,10 +222,29 @@ def explore_examples(
     - "sync-buffer": Valida y refill el buffer (para llenar después de marcar palabra como learned)
     - "resume": Resume sesión - carga nuevo buffer si todos fueron visitados, sino continúa
     - "next": Descarta buffer completamente, limpia visitados, carga nuevos items y posición=0
+
+    Flow:
+    1. Frontend → POST /explore con acciones
+    2. Este endpoint → Responde inmediatamente con request_id
+    3. Este endpoint → Encola task de background que ejecuta acciones
+    4. Background task → Publica eventos a RealtimeEventBus
+    5. Frontend → GET /explore-stream (SSE) → Recibe eventos en tiempo real
     """
+    request_id = str(uuid.uuid4())
+
     logger.info(
-        f"[explore_examples] User {current_user.id}: actions={request.actions}, "
-        f"limit={request.limit}, buffer_size={len(request.buffer_delivery_ids)}"
+        f"[explore_examples] User {current_user.id}: request_id={request_id}, "
+        f"actions={request.actions}, limit={request.limit}, buffer_size={len(request.buffer_delivery_ids)}"
+    )
+
+    # Log detallado del request para debugging
+    logger.info(
+        f"[explore_examples] DETAILED REQUEST: "
+        f"resolve_queue_item_id={request.resolve_queue_item_id} "
+        f"(type={type(request.resolve_queue_item_id).__name__}), "
+        f"actions={request.actions}, "
+        f"buffer_delivery_ids={request.buffer_delivery_ids}, "
+        f"buffer_position={request.buffer_position}"
     )
 
     # Log de actividad
@@ -67,94 +256,41 @@ def explore_examples(
         details={
             "actions": request.actions,
             "limit": request.limit,
-            "buffer_size": len(request.buffer_delivery_ids)
+            "buffer_size": len(request.buffer_delivery_ids),
+            "request_id": request_id
         }
     )
 
-    try:
-        from features.content_repository import UnifiedContentRepository
-        content_repo = UnifiedContentRepository(db)
+    # Publicar evento inicial de inicio de exploración
+    realtime_bus = get_realtime_bus()
+    realtime_bus.publish(
+        channel=f"user:{current_user.id}:explore.started",
+        data={
+            "request_id": request_id,
+            "actions": request.actions,
+            "timestamp": time.time(),
+        }
+    )
 
-        # Crear validador agnóstico usando ExampleRepository
-        class ExampleContentValidator:
-            def __init__(self, example_repo):
-                self.example_repo = example_repo
-
-            def is_content_learned(self, content_id: int, user_id: int) -> bool:
-                return self.example_repo.is_example_learned(content_id, user_id)
-
-        content_validator = ExampleContentValidator(ExampleRepository(db))
-
-        explore_actions = ExploreActions(
-            db,
-            content_repo=content_repo,
-            content_validator=content_validator
-        )
-        status, buffer_ids, buffer_position = explore_actions.execute_actions(
-            user_id=current_user.id,
-            actions=request.actions,
-            content_type=ContentType.EXAMPLE,
-            resolve_queue_item_id=request.resolve_queue_item_id,
-            limit=request.limit,
-            buffer_delivery_ids=request.buffer_delivery_ids,
-            buffer_position=request.buffer_position,
-        )
-    except ValueError as e:
-        logger.error(f"[explore_examples] Validation error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-    # Build examples response using ExploreResponseBuilder
-    examples = []
-    if buffer_ids:
-        delivery_service = DeliveryService(db)
-        delivery_items = delivery_service.get_delivery_items_by_ids(buffer_ids, current_user.id)
-        delivery_item_map = {item.id: item for item in delivery_items}
-
-        response_builder = ExploreResponseBuilder(db)
-        examples = response_builder.build_examples_response(buffer_ids, delivery_item_map, current_user.id)
-
-        # Marcar delivery items como DISPATCHED
-        from core.delivery.repository import DeliveryRepository
-        delivery_repo = DeliveryRepository(db)
-        dispatched_count = delivery_repo.mark_multiple_as_dispatched(buffer_ids)
-        logger.debug(
-            f"[explore_examples] Marked {dispatched_count} delivery items as DISPATCHED"
-        )
-
-        # Actualizar sesión de exploración con los IDs y posición actual
-        # Esto asegura que al refrescar, se restauren exactamente los mismos items
-        from core.explore.explore_repository import ExploreRepository
-        explore_repo = ExploreRepository(db)
-        explore_repo.update_session(current_user.id, buffer_ids, buffer_position)
-        logger.debug(
-            f"[explore_examples] Updated explore session: {len(buffer_ids)} items at position {buffer_position}"
-        )
-
-        # Publicar evento de despacho para cada item siendo entregado al usuario
-        # Esto dispara la tarea que marca la queue_item como CONSUMED
-        from core.event_bus import publish_event_background
-        for delivery_item in delivery_items:
-            publish_event_background(
-                'delivery.item_dispatched',
-                user_id=current_user.id,
-                learning_path_queue_item_id=delivery_item.learning_path_queue_id,
-            )
-            logger.debug(
-                f"[explore_examples] Published delivery.item_dispatched for queue_item {delivery_item.learning_path_queue_id}"
-            )
-
-    logger.info(
-        f"[explore_examples] Completed with status={status}, returned {len(examples)} examples, "
-        f"buffer_size={len(buffer_ids)}, position={buffer_position}"
+    # Encolar tarea de background para ejecutar acciones
+    explore_examples_task.apply_async(
+        args=[current_user.id],
+        kwargs={
+            "request_id": request_id,
+            "actions": request.actions,
+            "resolve_queue_item_id": request.resolve_queue_item_id,
+            "limit": request.limit,
+            "buffer_delivery_ids": request.buffer_delivery_ids,
+            "buffer_position": request.buffer_position,
+        },
+        queue=CeleryQueue.BACKGROUND,
     )
 
     return {
-        "examples": examples,
-        "buffer_delivery_ids": buffer_ids,
-        "buffer_position": buffer_position,
-        "status": status,
+        "status": "ok",
+        "request_id": request_id,
+        "message": "Explore request enqueued. Results will be streamed via /explore-stream"
     }
-
 
 
 @router.patch("/{example_id}/toggle-favorite")

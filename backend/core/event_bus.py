@@ -97,25 +97,19 @@ def get_event_queues() -> List[Queue]:
     return result
 
 
-def publish_event(event_name: str, **kwargs) -> None:
+def _publish_event_internal(routing_key: str, **kwargs) -> None:
     """
-    Publica un evento a todos los suscriptores.
-
-    Args:
-        event_name: Nombre del evento (ej: 'event.word.unboosted')
-        **kwargs: Parámetros a pasar a las tareas suscriptoras
-
-    Example:
-        publish_event('event.word.unboosted', user_id=1, word_id=5)
+    Función interna para publicar eventos a través del routing_key.
+    Usada por publish_event_ai() y publish_event_background().
     """
     from celery_app import celery_app
 
-    if event_name not in _subscribers:
-        logger.warning(f"[EventBus] Evento '{event_name}' publicado pero no tiene suscriptores")
+    if routing_key not in _subscribers:
+        logger.warning(f"[EventBus] Evento '{routing_key}' publicado pero no tiene suscriptores")
         return
 
-    subscribers = _subscribers[event_name]
-    logger.info(f"[EventBus] Publicando evento '{event_name}' a {len(subscribers)} suscriptor(es)")
+    subscribers = _subscribers[routing_key]
+    logger.info(f"[EventBus] Publicando evento '{routing_key}' a {len(subscribers)} suscriptor(es)")
 
     # Publicar a todos los suscriptores
     for subscriber in subscribers:
@@ -127,9 +121,9 @@ def publish_event(event_name: str, **kwargs) -> None:
             kwargs=kwargs,
             queue=queue_name,
             exchange='app_events',
-            routing_key=event_name,
+            routing_key=routing_key,
         )
-        logger.info(f"[EventBus] Evento '{event_name}' enviado a tarea '{task_name}'")
+        logger.info(f"[EventBus] Evento '{routing_key}' enviado a tarea '{task_name}'")
 
 
 def get_subscribers_for_event(event_name: str) -> List[str]:
@@ -168,7 +162,7 @@ def publish_event_ai(event_name: str, **kwargs) -> None:
         publish_event_ai('generation.content_requested', user_id=1, word_ids=[1,2,3])
     """
     routing_key = f"ai.{event_name}"
-    publish_event(routing_key, **kwargs)
+    _publish_event_internal(routing_key, **kwargs)
 
 
 # ============== MÉTODOS ESPECIALIZADOS PARA BACKGROUND ==============
@@ -197,4 +191,4 @@ def publish_event_background(event_name: str, **kwargs) -> None:
         publish_event_background('content.exhausted', user_id=1, content_type='example')
     """
     routing_key = f"background.{event_name}"
-    publish_event(routing_key, **kwargs)
+    _publish_event_internal(routing_key, **kwargs)

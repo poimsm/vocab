@@ -32,12 +32,20 @@ class ContentQueue:
         user_id: int,
         content_type: ContentType,
         content_id: int,
+        word_id: int,
         priority: float = 0.0,
     ) -> LearningPathQueue:
         """
         Agrega un contenido a la cola.
 
         Si el mismo contenido ya está PENDING, no lo duplica.
+
+        Args:
+            user_id: ID del usuario
+            content_type: Tipo de contenido (EXAMPLE, BEST_OPTIONS, etc.)
+            content_id: ID del contenido específico
+            word_id: ID de la palabra asociada al contenido (obligatorio)
+            priority: Prioridad inicial (default 0.0)
         """
 
         existing = self.session.exec(
@@ -58,6 +66,7 @@ class ContentQueue:
             user_id=user_id,
             content_type=content_type,
             content_id=content_id,
+            word_id=word_id,
             priority=priority,
             status=LearningPathQueueStatus.PENDING,
             created_at=now,
@@ -75,13 +84,21 @@ class ContentQueue:
         user_id: int,
         content_type: ContentType,
         content_ids: List[int],
+        word_id: int,
         priority: float = 0.0,
     ) -> List[LearningPathQueue]:
         """
-        Agrega múltiples contenidos.
+        Agrega múltiples contenidos para la misma palabra.
 
-        Útil cuando la AI genera varios examples
-        en una sola operación.
+        Útil cuando la AI genera varios examples/best_options
+        en una sola operación para una palabra específica.
+
+        Args:
+            user_id: ID del usuario
+            content_type: Tipo de contenido (EXAMPLE, BEST_OPTIONS, etc.)
+            content_ids: Lista de IDs de contenido a encolar
+            word_id: ID de la palabra asociada a todos estos contenidos (obligatorio)
+            priority: Prioridad inicial para todos los items (default 0.0)
         """
 
         result = []
@@ -91,6 +108,7 @@ class ContentQueue:
                 user_id=user_id,
                 content_type=content_type,
                 content_id=content_id,
+                word_id=word_id,
                 priority=priority,
             )
 
@@ -155,7 +173,7 @@ class ContentQueue:
                 LearningPathQueue.content_type == content_type,
                 LearningPathQueue.status == LearningPathQueueStatus.PENDING,
             )
-            .limit(amount * 3)  # Obtener más para compensar filtrados
+            # .limit(amount + 10)  # Obtener más para compensar filtrados
         )
 
         all_items = self.session.exec(statement).all()

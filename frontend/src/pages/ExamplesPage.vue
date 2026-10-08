@@ -5,6 +5,7 @@ import { Icon } from '@iconify/vue'
 import api from '@/utils/api'
 import { wordApi } from '@/services/wordApi'
 import { useExamplesStore } from '@/stores/examples'
+import { useAuthStore } from '@/stores/auth'
 import { useActivityTracking } from '@/composables/useActivityTracking'
 import LoadingCard from '@/components/LoadingCard.vue'
 import FavoritesView from '@/components/FavoritesView.vue'
@@ -14,7 +15,11 @@ import ExtractedWordsModal from '@/components/ExtractedWordsModal.vue'
 
 const router = useRouter()
 const examplesStore = useExamplesStore()
+const authStore = useAuthStore()
 const { trackButtonClick } = useActivityTracking()
+
+// API base URL from environment
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost/api'
 
 interface TargetWord {
   id: number
@@ -46,126 +51,170 @@ const showExtractedWordsModal = ref(false)
 const showFavoritesModal = ref(false)
 const showCopiedToast = ref(false)
 const comingFromFavorites = ref(false)
-const pollTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 const isComponentMounted = ref(false)  // Track if component is mounted
 
 const BATCH_SIZE = 4
-const POLL_INTERVAL = 3000
 const SPEECH_RATES = [0.9, 0.7]
 const currentSpeechRateIndex = ref(0)
-let pollAbortController: AbortController | null = null
-let pollActive = ref(false)  // Track if polling should continue
-let consecutiveGeneratingCount = ref(0)  // Track consecutive "generating" responses
-const MAX_CONSECUTIVE_GENERATING = 6  // Stop polling after 6 consecutive generating responses
+let sseEventSource: EventSource | null = null
+let sseActive = ref(false)
 
-// ─── Polling ───
-function startPolling() {
-  console.log('[startPolling] Starting poll loop, current state - pollActive:', pollActive.value, 'hasController:', !!pollAbortController)
+// ─── SSE (Server-Sent Events) - RealtimeEventBus ───
+function startSSE() {
+  console.log('[startSSE] Starting SSE stream')
+  console.log('[startSSE] API_BASE:', API_BASE)
+  console.log('[startSSE] authStore.token exists:', !!authStore.token)
 
-  // Clean up any previous polling state
-  if (pollAbortController) {
-    console.log('[startPolling] Cleaning up previous AbortController')
-    pollAbortController.abort()
+  // Clean up any previous SSE connection
+  if (sseEventSource) {
+    console.log('[startSSE] Cleaning up previous EventSource')
+    sseEventSource.close()
+    sseEventSource = null
   }
 
-  // Reset consecutive generating counter
-  consecutiveGeneratingCount.value = 0
+  sseActive.value = true
 
-  pollActive.value = true
-  pollAbortController = new AbortController()
+  // Construir URL del SSE con token en query param
+  // EventSource no soporta headers Authorization, así que pasamos el token como parámetro
+  const sseUrl = new URL(`${API_BASE}/examples/explore-stream`)
+  if (authStore.token) {
+    sseUrl.searchParams.append('token', authStore.token)
+  }
 
-  const poll = () => {
-    // Stop immediately if polling was disabled
-    if (!pollActive.value) {
-      console.log('[poll] Polling disabled, stopping')
-      return
-    }
+  const fullUrl = sseUrl.toString()
+  console.log('[startSSE] Conectando a:', fullUrl)
 
-    console.log('[poll] Scheduling next poll in', POLL_INTERVAL, 'ms')
-    pollTimer.value = setTimeout(async () => {
-      // Double-check before making request
-      if (!pollActive.value) {
-        console.log('[poll] Polling disabled before timeout, aborting')
+  try {
+    sseEventSource = new EventSource(fullUrl)
+
+    // ─── Evento: open (conexión establecida) ───
+    sseEventSource.addEventListener('open', () => {
+      console.log('[SSE:open] ✅ Conexión establecida con servidor')
+      examplesStore.setGenerating(true)
+    })
+
+    // ─── Evento: error ───
+    sseEventSource.addEventListener('error', (event: Event) => {
+      console.error('[SSE:error] Error en conexión:', event)
+      if (sseEventSource?.readyState === EventSource.CLOSED) {
+        console.log('[SSE:error] Conexión cerrada por servidor')
+      } else {
+        console.error('[SSE:error] Error inesperado en SSE')
+        examplesStore.setError('SSE Connection Error')
+      }
+    })
+
+    // ─── Evento: explore.started ───
+    sseEventSource.addEventListener('explore.started', (event: MessageEvent) => {
+      if (!sseActive.value) {
+        console.log('[SSE:explore.started] Stream disabled, ignoring event')
         return
       }
 
       try {
-        console.log('[poll] Making request with buffer:', examplesStore.bufferIds)
-        const response = await api.post('/examples/explore', {
-          actions: ['next'],
-          limit: BATCH_SIZE,
-          buffer_queue_item_ids: examplesStore.bufferIds,
-          buffer_position: examplesStore.currentIndex,
-        }, {
-          signal: pollAbortController?.signal
-        })
-
-        // Check again after response arrives
-        if (!pollActive.value) {
-          console.log('[poll] Polling disabled after response, ignoring')
-          return
-        }
-
-        console.log('[poll] Response status:', response.data.status)
-
-        if (response.data.status === 'generating') {
-          consecutiveGeneratingCount.value++
-          console.log(`[poll] Still generating (${consecutiveGeneratingCount.value}/${MAX_CONSECUTIVE_GENERATING}), scheduling next poll`)
-
-          // Safety check: stop polling after too many consecutive "generating" responses
-          if (consecutiveGeneratingCount.value >= MAX_CONSECUTIVE_GENERATING) {
-            console.error(`[poll] Reached maximum consecutive generating responses (${MAX_CONSECUTIVE_GENERATING}), stopping polling`)
-            examplesStore.setIsPolling(false)
-            examplesStore.setGenerating(false)
-            examplesStore.setError('Content generation timeout - please try again')
-            pollActive.value = false
-            return
-          }
-
-          // Only schedule next poll if still active
-          if (pollActive.value) {
-            poll()
-          }
-          return
-        }
-
-        // Reset counter when we get a non-generating response
-        consecutiveGeneratingCount.value = 0
-
-        if (response.data.status === 'no_words') {
-          console.log('[poll] No words available')
-          examplesStore.setIsPolling(false)
-          examplesStore.setGenerating(false)
-          examplesStore.setNoWords(true)
-          pollActive.value = false
-          return
-        }
-
-        console.log('[poll] Content ready, loading examples')
-        examplesStore.setIsPolling(false)
-        examplesStore.setGenerating(false)
-        examplesStore.loadExamples(
-          response.data.examples || [],
-          response.data.buffer_queue_item_ids || [],
-          response.data.buffer_position ?? 0
-        )
-        pollActive.value = false
-      } catch (e: any) {
-        // Ignore abort errors (expected when component unmounts)
-        if (e.name === 'AbortError') {
-          console.log('[poll] Request aborted')
-          pollActive.value = false
-          return
-        }
-        console.error('[poll] Error:', e)
-        examplesStore.setIsPolling(false)
-        examplesStore.setGenerating(false)
-        examplesStore.setError(e.response?.data?.message || e.message || 'Failed to load examples')
-        pollActive.value = false
+        const data = JSON.parse(event.data)
+        console.log('[SSE:explore.started] Exploración iniciada:', data.request_id)
+        examplesStore.setGenerating(true)
+      } catch (e) {
+        console.error('[SSE:explore.started] Error parsing event:', e)
       }
-    }, POLL_INTERVAL)
+    })
+
+    // ─── Evento: explore.processing ───
+    sseEventSource.addEventListener('explore.processing', (event: MessageEvent) => {
+      if (!sseActive.value) {
+        console.log('[SSE:explore.processing] Stream disabled, ignoring event')
+        return
+      }
+
+      try {
+        const data = JSON.parse(event.data)
+        console.log('[SSE:explore.processing] Procesando acciones...', data.message)
+        examplesStore.setGenerating(true)
+      } catch (e) {
+        console.error('[SSE:explore.processing] Error parsing event:', e)
+      }
+    })
+
+    // ─── Evento: explore.completed ───
+    sseEventSource.addEventListener('explore.completed', (event: MessageEvent) => {
+      if (!sseActive.value) {
+        console.log('[SSE:explore.completed] Stream disabled, ignoring event')
+        return
+      }
+
+      try {
+        const data = JSON.parse(event.data)
+        console.log('[SSE:explore.completed] Exploración completada:', data)
+
+        // Actualizar store con datos recibidos
+        examplesStore.setGenerating(false)
+
+        // Si hay ejemplos, cargarlos
+        if (data.examples && data.examples.length > 0) {
+          console.log('[SSE:explore.completed] Cargando', data.examples.length, 'ejemplos')
+          examplesStore.loadExamples(
+            data.examples,
+            data.buffer_delivery_ids,
+            data.buffer_position
+          )
+        } else if (data.examples_count > 0) {
+          // Fallback: solo IDs, sin datos de ejemplos
+          console.log('[SSE:explore.completed] Actualizando buffer con IDs:', data.buffer_delivery_ids)
+          examplesStore.setBufferData(data.buffer_delivery_ids, data.buffer_position)
+        } else if (data.status === 'generating') {
+          console.log('[SSE:explore.completed] Contenido aún se está generando...')
+          examplesStore.setGenerating(true)
+          return
+        } else if (data.status === 'no_words') {
+          console.log('[SSE:explore.completed] No hay palabras disponibles')
+          examplesStore.setNoWords(true)
+        }
+
+        sseActive.value = false
+        sseEventSource?.close()
+      } catch (e) {
+        console.error('[SSE:explore.completed] Error parsing event:', e)
+      }
+    })
+
+    // ─── Evento: explore.failed ───
+    sseEventSource.addEventListener('explore.failed', (event: MessageEvent) => {
+      if (!sseActive.value) {
+        console.log('[SSE:explore.failed] Stream disabled, ignoring event')
+        return
+      }
+
+      try {
+        const data = JSON.parse(event.data)
+        console.error('[SSE:explore.failed] Error en exploración:', data.error)
+        examplesStore.setGenerating(false)
+        examplesStore.setError(data.error || 'Failed to process explore action')
+        sseActive.value = false
+        sseEventSource?.close()
+      } catch (e) {
+        console.error('[SSE:explore.failed] Error parsing event:', e)
+      }
+    })
+
+    sseEventSource.addEventListener('error', (event: Event) => {
+      console.error('[SSE] Connection error:', event)
+      if (sseEventSource?.readyState === EventSource.CLOSED) {
+        console.log('[SSE] Connection closed')
+        sseActive.value = false
+      } else {
+        console.error('[SSE] Unexpected error')
+        examplesStore.setGenerating(false)
+        examplesStore.setError('Connection error - please try again')
+        sseActive.value = false
+        sseEventSource?.close()
+      }
+    })
+  } catch (e) {
+    console.error('[startSSE] Error creating EventSource:', e)
+    examplesStore.setGenerating(false)
+    examplesStore.setError('Failed to connect to stream')
   }
-  poll()
 }
 
 // ─── Text-to-Speech ───
@@ -209,51 +258,42 @@ function speakExample() {
   }
 }
 
-function stopPolling() {
-  console.log('[stopPolling] Stopping poll loop IMMEDIATELY')
-  // Disable polling flag FIRST - this will stop all poll() calls
-  pollActive.value = false
+function stopSSE() {
+  console.log('[stopSSE] Stopping SSE stream')
+  sseActive.value = false
 
-  // Cancel any in-flight requests
-  if (pollAbortController) {
-    console.log('[stopPolling] Aborting HTTP requests')
-    pollAbortController.abort()
-    pollAbortController = null
+  if (sseEventSource) {
+    console.log('[stopSSE] Closing EventSource')
+    sseEventSource.close()
+    sseEventSource = null
   }
 
-  // Clear pending timeout
-  if (pollTimer.value) {
-    console.log('[stopPolling] Clearing pending timeout:', pollTimer.value)
-    clearTimeout(pollTimer.value)
-    pollTimer.value = null
-  }
-
-  // Reset consecutive generating counter
-  consecutiveGeneratingCount.value = 0
-
-  examplesStore.setIsPolling(false)
-  console.log('[stopPolling] Poll loop stopped')
+  console.log('[stopSSE] SSE stream stopped')
 }
 
 async function fetchExamples() {
-  console.log('[fetchExamples] Called. generating:', examplesStore.generating, 'isPolling:', examplesStore.isPolling)
+  console.log('[fetchExamples] Loading new batch of examples')
 
-  if (examplesStore.generating && !examplesStore.isPolling) {
+  if (examplesStore.generating) {
     console.warn('[fetchExamples] Already generating, returning')
     return
   }
 
   try {
-    console.log('[fetchExamples] Awaiting store.fetchExamples...')
-    await examplesStore.fetchExamples(BATCH_SIZE)
+    console.log('[fetchExamples] Enviando POST /explore con acción "next"')
 
-    console.log('[fetchExamples] Store returned. isPolling:', examplesStore.isPolling)
+    // Enviar POST /explore para notificar al backend
+    await api.post('/examples/explore', {
+      actions: ['next'],
+      limit: BATCH_SIZE,
+      buffer_delivery_ids: examplesStore.bufferIds,
+      buffer_position: examplesStore.currentIndex,
+    })
 
-    // Start polling if content is generating
-    if (examplesStore.isPolling || examplesStore.generating) {
-      console.log('[fetchExamples] Content generating, starting polling')
-      startPolling()
-    }
+    console.log('[fetchExamples] Request enqueued, starting SSE stream')
+
+    // Iniciar SSE para escuchar eventos de progreso
+    startSSE()
   } catch (e: any) {
     console.error('[fetchExamples] Error:', e)
     examplesStore.setGenerating(false)
@@ -351,16 +391,25 @@ async function handleToggleKnown() {
   console.log('[handleToggleKnown] Toggling learned status for word:', selectedWord.value.id)
 
   try {
+    // 1. Marcar palabra como aprendida
     await wordApi.toggleLearned(selectedWord.value.id, true)
-    console.log('[handleToggleKnown] Word marked as learned, syncing buffer and fetching examples...')
-    closeMobileDetail()
-    // Sync buffer (remove learned words) and fetch examples in one atomic call
-    await examplesStore.syncAndFetchNext(BATCH_SIZE)
+    console.log('[handleToggleKnown] Word marked as learned')
 
-    // Start polling if content is generating
-    if (examplesStore.isPolling || examplesStore.generating) {
-      console.log('[handleToggleKnown] Content generating, starting polling')
-      startPolling()
+    closeMobileDetail()
+
+    // 2. Notificar al backend: sync-buffer (revalidar buffer) + next (cargar nuevos)
+    console.log('[handleToggleKnown] Syncing buffer and fetching next batch...')
+    await api.post('/examples/explore', {
+      actions: ['sync-buffer', 'next'],
+      limit: BATCH_SIZE,
+      buffer_delivery_ids: examplesStore.bufferIds,
+      buffer_position: examplesStore.currentIndex,
+    })
+
+    // 3. Iniciar SSE para escuchar generación
+    if (!sseActive.value) {
+      console.log('[handleToggleKnown] Starting SSE for generation progress')
+      startSSE()
     }
   } catch (e: any) {
     console.error('[handleToggleKnown] Error:', e)
@@ -394,29 +443,50 @@ async function refreshExample() {
 
   const isLastItem = examplesStore.currentIndex >= examplesStore.examples.length - 1
 
-  if (examplesStore.canGoNext) {
-    console.log('[refreshExample] Can go next, navigating with sync+resolve')
-    examplesStore.nextExample()  // Update position FIRST
-    await examplesStore.navigateExample(currentEx.queue_item_id, false, BATCH_SIZE)  // Unified navigation
+  try {
+    if (examplesStore.canGoNext) {
+      console.log('[refreshExample] Can go next, resolving and syncing position')
+      examplesStore.nextExample()  // Update position FIRST
+
+      // Notificar al backend: resolve + sync
+      await api.post('/examples/explore', {
+        actions: ['resolve', 'sync'],
+        resolve_queue_item_id: currentEx.queue_item_id,
+        limit: BATCH_SIZE,
+        buffer_delivery_ids: examplesStore.bufferIds,
+        buffer_position: examplesStore.currentIndex,
+      })
+
+      selectedWord.value = null
+      isMobileDetailOpen.value = false
+      currentSpeechRateIndex.value = 0
+      return
+    }
+
+    // At end of buffer, resolve + next to load new content
+    console.log('[refreshExample] At end of buffer, resolving and loading next batch')
+
+    await api.post('/examples/explore', {
+      actions: ['resolve', 'next'],
+      resolve_queue_item_id: currentEx.queue_item_id,
+      limit: BATCH_SIZE,
+      buffer_delivery_ids: examplesStore.bufferIds,
+      buffer_position: examplesStore.currentIndex,
+    })
+
+    // Iniciar SSE para escuchar eventos de generación
+    if (!sseActive.value) {
+      console.log('[refreshExample] Content generating, starting SSE stream')
+      startSSE()
+    }
+
     selectedWord.value = null
     isMobileDetailOpen.value = false
     currentSpeechRateIndex.value = 0
-    return
+  } catch (e: any) {
+    console.error('[refreshExample] Error:', e)
+    examplesStore.setError(e.response?.data?.detail || e.message || 'Failed to process action')
   }
-
-  // At end of buffer, use navigateExample with isLastItem=true (includes next)
-  console.log('[refreshExample] At end of buffer, navigating with sync+resolve+next')
-  await examplesStore.navigateExample(currentEx.queue_item_id, true, BATCH_SIZE)
-
-  // Always start polling if content is generating
-  if (examplesStore.isPolling || examplesStore.generating) {
-    console.log('[refreshExample] Content generating/polling, starting poll loop')
-    startPolling()
-  }
-
-  selectedWord.value = null
-  isMobileDetailOpen.value = false
-  currentSpeechRateIndex.value = 0
 }
 
 async function prevExample() {
@@ -426,7 +496,17 @@ async function prevExample() {
     examplesStore.prevExample()
     console.log('[prevExample] Moved to index:', examplesStore.currentIndex)
 
-    await examplesStore.syncPosition()  // Sync position with backend
+    try {
+      // Notificar al backend: sync posición actual
+      await api.post('/examples/explore', {
+        actions: ['sync'],
+        limit: BATCH_SIZE,
+        buffer_delivery_ids: examplesStore.bufferIds,
+        buffer_position: examplesStore.currentIndex,
+      })
+    } catch (e: any) {
+      console.error('[prevExample] Error syncing position:', e)
+    }
 
     selectedWord.value = null
     isMobileDetailOpen.value = false
@@ -437,21 +517,34 @@ async function prevExample() {
 async function nextExample() {
   trackButtonClick('next_example')
   console.log('[nextExample] Attempting next, canGoNext:', examplesStore.canGoNext, 'index:', examplesStore.currentIndex)
-  if (examplesStore.canGoNext) {
-    const currentEx = examplesStore.currentExample
 
-    examplesStore.nextExample()  // Update position FIRST
-    console.log('[nextExample] Moved to index:', examplesStore.currentIndex)
+  try {
+    if (examplesStore.canGoNext) {
+      const currentEx = examplesStore.currentExample
 
-    if (currentEx) {
-      await examplesStore.navigateExample(currentEx.queue_item_id, false, BATCH_SIZE)  // Unified navigation with sync+resolve
+      examplesStore.nextExample()  // Update position FIRST
+      console.log('[nextExample] Moved to index:', examplesStore.currentIndex)
+
+      if (currentEx) {
+        // Notificar al backend: resolve + sync
+        await api.post('/examples/explore', {
+          actions: ['resolve', 'sync'],
+          resolve_queue_item_id: currentEx.queue_item_id,
+          limit: BATCH_SIZE,
+          buffer_delivery_ids: examplesStore.bufferIds,
+          buffer_position: examplesStore.currentIndex,
+        })
+      }
+
+      selectedWord.value = null
+      isMobileDetailOpen.value = false
+      currentSpeechRateIndex.value = 0
+    } else {
+      await refreshExample()
     }
-
-    selectedWord.value = null
-    isMobileDetailOpen.value = false
-    currentSpeechRateIndex.value = 0
-  } else {
-    await refreshExample()
+  } catch (e: any) {
+    console.error('[nextExample] Error:', e)
+    examplesStore.setError(e.response?.data?.detail || e.message || 'Failed to process action')
   }
 }
 
@@ -594,48 +687,48 @@ onMounted(async () => {
   isComponentMounted.value = true
 
   try {
-    // Load the unmarked favorites count
+    console.log('[ExamplesPage.onMounted] Starting...')
+
+    // Cargar el contador de favoritos sin marcar
+    console.log('[ExamplesPage.onMounted] Fetching favorites count')
     await examplesStore.fetchUnmarkedFavoritesCount()
 
-    // Restaurar sesión guardada y cargar ejemplos en UNA sola llamada atómica
-    // Backend intenta restaurar buffer de sesión guardada si no se proporciona
-    // Acción: "resume" (chequea visitados + carga nuevo buffer si todos fueron visitados + obtiene ejemplos)
-    console.log('[ExamplesPage] Resuming session and loading examples via explore endpoint')
+    // Restaurar sesión guardada usando el nuevo flujo event-driven
+    // Acción: "resume" (restaura buffer, chequea visitados, carga nuevo si necesario)
+    console.log('[ExamplesPage.onMounted] Resuming session via explore endpoint with SSE')
+    console.log('[ExamplesPage.onMounted] authStore.token:', !!authStore.token)
 
+    // 1. Enviar POST /explore con acción "resume"
+    // Respuesta inmediata con request_id, procesamiento en background
+    console.log('[ExamplesPage.onMounted] Sending POST /explore with resume action')
     const exploreResponse = await api.post('/examples/explore', {
       actions: ['resume'],
       limit: BATCH_SIZE,
-      buffer_queue_item_ids: [],  // Empty - backend will restore from saved session
+      buffer_delivery_ids: [],  // Empty - backend will restore from saved session
       buffer_position: 0,
     })
+    console.log('[ExamplesPage.onMounted] POST /explore response:', exploreResponse.data)
 
-    // Check if component is still mounted before processing response
+    // Check if component is still mounted before starting SSE
     if (!isComponentMounted.value) {
-      console.log('[ExamplesPage] Component unmounted, ignoring response')
+      console.log('[ExamplesPage.onMounted] Component unmounted, ignoring SSE start')
       return
     }
 
-    const { examples, buffer_queue_item_ids: bufferIds, buffer_position: bufferPos, status: exploreStatus } = exploreResponse.data
+    console.log('[ExamplesPage.onMounted] POST /explore enqueued, starting SSE listener')
 
-    // Actualizar store con buffer restaurado
-    examplesStore.setBufferData(bufferIds, bufferPos)
+    // 2. Iniciar SSE para escuchar eventos de progreso en tiempo real
+    // Los eventos nos dirán cuando esté listo el contenido
+    startSSE()
 
-    // Procesar respuesta según estado
-    if (examples.length > 0) {
-      examplesStore.loadExamples(examples, bufferIds, bufferPos)
-      // Establecer currentIndex DESPUÉS de loadExamples para que no sea sobrescrito
-      examplesStore.setCurrentIndex(bufferPos)
-    } else if (exploreStatus === 'generating') {
-      examplesStore.setGenerating(true)
-      startPolling()
-    } else if (exploreStatus === 'no_words') {
-      examplesStore.setNoWords(true)
-    }
-  } catch (e) {
-    console.error('[ExamplesPage] Error:', e)
+  } catch (e: any) {
+    console.error('[ExamplesPage.onMounted] Error:', e)
+    console.error('[ExamplesPage.onMounted] Error details:', e.response?.data || e.message)
+
     // Only reset if component is still mounted
     if (isComponentMounted.value) {
       examplesStore.resetBuffer()
+      console.log('[ExamplesPage.onMounted] Fallback: calling fetchExamples()')
       await fetchExamples()
     }
   }
@@ -644,9 +737,9 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  console.log('[ExamplesPage] Unmounting - setting isComponentMounted to false')
+  console.log('[ExamplesPage] Unmounting - cleaning up SSE')
   isComponentMounted.value = false
-  stopPolling()
+  stopSSE()
 })
 </script>
 

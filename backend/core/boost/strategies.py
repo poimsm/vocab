@@ -8,23 +8,14 @@ class BoostDemandStrategy:
     """
 
     @staticmethod
-    def get_initial_boost_pack() -> List[SkillDemand]:
-        """
-        Receta inicial: Lo que se envía a generar en el instante
-        en que el usuario presiona 'Boostear' por primera vez.
-        """
-        return [
-            SkillDemand(skill_type="examples", quantity=7, process_event='event.generation.content_requested'),
-            # SkillDemand(skill_type="best_options", quantity=2, process_event=''),
-        ]
-
-    @staticmethod
     def get_refill_pack() -> List[SkillDemand]:
         """
-        Receta de reposición: Lo que se solicita para mantener la generación 
-        infinita a medida que el usuario va consumiendo ejercicios en el buffer.
+        Receta única de reposición: Lo que se solicita cuando se booste una palabra.
+
+        quantity = cantidad exacta de ejemplos a generar
+        (se calcula automáticamente cuántas tareas de IA se necesitan)
         """
         return [
-            SkillDemand(skill_type="examples", quantity=5, process_event='event.generation.content_requested'),
-            # SkillDemand(skill_type="best_options", quantity=1, process_event=''),
+            SkillDemand(skill_type="example", quantity=10, process_event='generation.content_requested'),
+            # SkillDemand(skill_type="best_options", quantity=2, process_event=''),
         ]

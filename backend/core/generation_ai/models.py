@@ -2,6 +2,7 @@ from sqlmodel import SQLModel, Field
 from typing import Optional
 from datetime import datetime, timezone
 from core.generation_ai.enums import GenerationAIStatus
+from core.enums import ContentSourceType, ContentType
 
 
 class GenerationAIRegistry(SQLModel, table=True):
@@ -18,4 +19,7 @@ class GenerationAIRegistry(SQLModel, table=True):
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc))
     word_id: int = Field(index=True, nullable=False)
-    source_type: str = Field(index=True, nullable=False)
+    source_type: ContentSourceType = Field(
+        default=ContentSourceType.LEARNING_PATH, index=True, nullable=False)
+    content_type: ContentType = Field(
+        default=ContentType.EXAMPLE, index=True, nullable=False)

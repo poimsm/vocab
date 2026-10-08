@@ -4,6 +4,7 @@ from sqlmodel import Session
 from logging_client import logger
 
 from core.generation_ai.repository import GenerationAIRepository
+from core.enums import ContentSourceType, ContentType
 
 
 class ExampleGenerator:
@@ -18,7 +19,7 @@ class ExampleGenerator:
         amount: int = 1,
         pre_generated_examples: dict = None,
         session: Optional[Session] = None,
-        content_source_type: str = "learning_path",
+        content_source_type: str = ContentSourceType.LEARNING_PATH.value,
     ):
         """
         Solicita la generación de ejemplos simples agregando la tarea a GeneratorQueue
@@ -35,6 +36,9 @@ class ExampleGenerator:
             close_session = True
 
         try:
+            # Convertir content_source_type string a enum
+            source_type_enum = ContentSourceType(content_source_type)
+
             payload = {
                 "user_id": user_id,
                 "word_ids": word_ids,
@@ -44,19 +48,24 @@ class ExampleGenerator:
             }
 
             logger.info(
-                f"[ExampleGenerator] Queueing generation for {len(word_ids)} words (user={user_id})"
+                f"[ExampleGenerator] Queueing generation for {len(word_ids)} words (user={user_id}), "
+                f"source_type={source_type_enum.value}"
             )
 
             # Instanciar repositorio y delegar la creación
             gen_repo = GenerationAIRepository(session)
-            queue_item = gen_repo.create_queue_item(
+            queue_item_id = gen_repo.create_queue_item(
+                user_id=user_id,
+                word_id=word_ids[0],  # Usar el primer word_id para el registro
+                source_type=source_type_enum,
+                content_type=ContentType.EXAMPLE,
                 payload=payload,
                 process_event="event.generation.content_requested",
                 callback_event="event.generation.examples_completed",
             )
 
             logger.info(
-                f"[ExampleGenerator] Generation queued successfully (queue_id={queue_item.id})"
+                f"[ExampleGenerator] Generation queued successfully (queue_id={queue_item_id})"
             )
 
         except Exception as e:

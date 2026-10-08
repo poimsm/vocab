@@ -31,17 +31,26 @@ def _shuffle_options_with_correct_index(options: list, correct_option_idx: int) 
 
 
 @celery_app.task(name="tasks.best_options.generate", queue=CeleryQueue.AI)
-def generate_best_options_task(user_id: int, word_ids: List[int]) -> None:
+def generate_best_options_task(user_id: int, word_ids: List[int], **kwargs) -> None:
     """
     Genera ejercicios best_option para una lista de palabras usando IA.
 
     Args:
         user_id: ID del usuario (para logging)
         word_ids: Lista de IDs de palabras para las que generar ejercicios
+        **kwargs: Argumentos adicionales (para compatibilidad defensiva)
     """
     from db import engine
     from features.words.models import Word
     from features.best_options.models import BestOption
+
+    logger.debug(
+        f"[BestOptionsGenerator] Task started: user_id={user_id}, word_ids={word_ids}"
+    )
+
+    # Log de kwargs inesperados (para debugging)
+    if kwargs:
+        logger.debug(f"[BestOptionsGenerator] Extra kwargs received: {kwargs}")
 
     if not word_ids:
         logger.warning(f"[BestOptionsGenerator] No words provided for user {user_id}")

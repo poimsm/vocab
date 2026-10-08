@@ -100,10 +100,12 @@ def create_single_task(
             # Crear ejemplos pre-generados directamente en BD (10 ejemplos)
             if enriched.get("examples"):
                 from features.examples.models import Example, ExampleType
-                from features.words.models import ExampleWord
+                from core.learning_path.models import LearningPathQueue
+                from core.learning_path.enums import LearningPathQueueStatus
 
                 examples_list = enriched["examples"]
                 sequence_counter = 1
+                created_examples = []
 
                 for idx, example_text in enumerate(examples_list):
                     normalized = example_text.lower().strip()
@@ -111,44 +113,34 @@ def create_single_task(
                     # Primeros 3 son INITIAL, resto EXPLORE
                     example_type = ExampleType.INITIAL if idx < 3 else ExampleType.EXPLORE
 
-                    # Crear el Example
+                    text_form = approximate_text_form(example_text, main_word)
+                    if not text_form:
+                        text_form = main_word
+
+                    # Crear el Example con word_id y text_form
                     example = Example(
                         type=example_type,
                         text=example_text,
+                        text_form=text_form,
+                        word_id=word.id,
                         normalized=normalized,
                         sequence=sequence_counter,
                         enqueued=False,
                     )
                     db.add(example)
                     db.flush()
+                    created_examples.append(example.id)
                     sequence_counter += 1
-
-                    text_form = approximate_text_form(example_text, main_word)
-                    if not text_form:
-                        text_form = main_word
-
-                    # Crear la relación con la palabra
-                    example_word = ExampleWord(
-                        example_id=example.id,
-                        word_id=word.id,
-                        text_form=text_form,
-                    )
-                    db.add(example_word)
 
                 logger.debug(f"[WordGenerator] Created {len(examples_list)} examples for word {word.id}")
 
                 # ✅ Agregar ejemplos a LearningPathQueue para que estén disponibles inmediatamente
-                from core.learning_path.models import LearningPathQueue
-                from core.learning_path.enums import LearningPathQueueStatus
-                for example in db.exec(
-                    select(Example).where(Example.id.in_([ew.example_id for ew in db.exec(
-                        select(ExampleWord).where(ExampleWord.word_id == word.id)
-                    ).all()]))
-                ).all():
+                for example_id in created_examples:
                     queue_item = LearningPathQueue(
                         user_id=user_id,
                         content_type=ContentType.EXAMPLE,
-                        content_id=example.id,
+                        content_id=example_id,
+                        word_id=word.id,
                         status=LearningPathQueueStatus.PENDING,
                         priority=0.5,
                     )
@@ -353,10 +345,12 @@ def create_bulk_task(
 
                                 # Crear los ejemplos directamente en BD (no pasar por Celery)
                                 from features.examples.models import Example, ExampleType
-                                from features.words.models import ExampleWord  # noqa: F401
+                                from core.learning_path.models import LearningPathQueue
+                                from core.learning_path.enums import LearningPathQueueStatus
 
                                 examples_list = enriched["examples"]
                                 sequence_counter = 1
+                                created_examples = []
 
                                 for idx, example_text in enumerate(examples_list):
                                     normalized = example_text.lower().strip()
@@ -364,44 +358,34 @@ def create_bulk_task(
                                     # Primeros 3 son INITIAL, resto EXPLORE
                                     example_type = ExampleType.INITIAL if idx < 3 else ExampleType.EXPLORE
 
-                                    # Crear el Example
+                                    text_form = approximate_text_form(example_text, main_word)
+                                    if not text_form:
+                                        text_form = main_word
+
+                                    # Crear el Example con word_id y text_form
                                     example = Example(
                                         type=example_type,
                                         text=example_text,
+                                        text_form=text_form,
+                                        word_id=word.id,
                                         normalized=normalized,
                                         sequence=sequence_counter,
                                         enqueued=False,
                                     )
                                     db.add(example)
                                     db.flush()
+                                    created_examples.append(example.id)
                                     sequence_counter += 1
-
-                                    text_form = approximate_text_form(example_text, main_word)
-                                    if not text_form:
-                                        text_form = main_word
-
-                                    # Crear la relación con la palabra
-                                    example_word = ExampleWord(
-                                        example_id=example.id,
-                                        word_id=word.id,
-                                        text_form=text_form,
-                                    )
-                                    db.add(example_word)
 
                                 logger.debug(f"[BulkWordGenerator] Created {len(examples_list)} examples for word {word.id}")
 
                                 # ✅ Agregar ejemplos a LearningPathQueue para que estén disponibles inmediatamente
-                                from core.learning_path.models import LearningPathQueue
-                                from core.learning_path.enums import LearningPathQueueStatus
-                                for example in db.exec(
-                                    select(Example).where(Example.id.in_([ew.example_id for ew in db.exec(
-                                        select(ExampleWord).where(ExampleWord.word_id == word.id)
-                                    ).all()]))
-                                ).all():
+                                for example_id in created_examples:
                                     queue_item = LearningPathQueue(
                                         user_id=user_id,
-                                        type=ContentType.EXAMPLE,
-                                        content_id=example.id,
+                                        content_type=ContentType.EXAMPLE,
+                                        content_id=example_id,
+                                        word_id=word.id,
                                         status=LearningPathQueueStatus.PENDING,
                                         priority=0.5,
                                     )
@@ -574,6 +558,7 @@ def generate_boost_examples(
                         user_id=user_id,
                         content_type=ContentType.EXAMPLE,
                         content_id=new_example.id,
+                        word_id=word_id,
                         priority=boost_priority,  # Usar prioridad calculada
                     )
 

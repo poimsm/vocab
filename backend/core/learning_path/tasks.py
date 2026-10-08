@@ -25,7 +25,7 @@ def on_content_exhausted(
     Encola la generación de contenido y actualiza el monitor de generación.
     """
     logger.info(
-        f"[LearningPath] Content exhausted for learning path: {content_type}. Enqueueing generation..."
+        f"[LearningPathTask] Content exhausted for learning path: {content_type}. Enqueueing generation..."
     )
 
     with Session(engine) as session:
@@ -39,7 +39,7 @@ def on_content_exhausted(
                 content_type=content_type_enum
             )
             logger.info(
-                f"[LearningPath] Generation monitor started for user {user_id}, content_type={content_type}"
+                f"[LearningPathTask] Generation monitor started for user {user_id}, content_type={content_type}"
             )
 
             # Obtener palabras disponibles para generar
@@ -61,7 +61,7 @@ def on_content_exhausted(
 
             if not word_ids:
                 logger.warning(
-                    f"[LearningPath] No available words for user {user_id} to generate {content_type}"
+                    f"[LearningPathTask] No available words for user {user_id} to generate {content_type}"
                 )
                 return
 
@@ -69,7 +69,7 @@ def on_content_exhausted(
             word_ids = word_ids[:10]
 
             logger.info(
-                f"[LearningPath] Enqueueing generation for {len(word_ids)} words "
+                f"[LearningPathTask] Enqueueing generation for {len(word_ids)} words "
                 f"(user_id={user_id}, content_type={content_type})"
             )
 
@@ -85,12 +85,12 @@ def on_content_exhausted(
             )
 
             logger.info(
-                f"[LearningPath] Generation enqueued successfully for user {user_id} ({content_type})"
+                f"[LearningPathTask] Generation enqueued successfully for user {user_id} ({content_type})"
             )
 
         except Exception as e:
             logger.error(
-                f"[LearningPath] Error processing content_exhausted event for user {user_id}: {e}",
+                f"[LearningPathTask] Error processing content_exhausted event for user {user_id}: {e}",
                 exc_info=True
             )
 
@@ -112,11 +112,12 @@ def on_content_generated(
     Si el contenido es del módulo learning_path (no boost), actualiza el estado del monitor.
     """
     # Solo procesar si NO es del módulo boost
-    if content_source_type == "boost":
+    from core.enums import ContentSourceType
+    if content_source_type == ContentSourceType.BOOST.value:
         return
 
     logger.info(
-        f"[LearningPath] Content generated event received for "
+        f"[LearningPathTask] Content generated event received for "
         f"content_type={content_type}, status={status}"
     )
 
@@ -128,7 +129,7 @@ def on_content_generated(
 
             if status == GenerationAIStatus.COMPLETED.value:
                 logger.info(
-                    f"[LearningPath] Marking generation monitor as COMPLETED for "
+                    f"[LearningPathTask] Marking generation monitor as COMPLETED for "
                     f"content_type={content_type}"
                 )
                 repository.complete_generation_monitor(
@@ -137,7 +138,7 @@ def on_content_generated(
                 )
             elif status == GenerationAIStatus.FAILED.value:
                 logger.info(
-                    f"[LearningPath] Marking generation monitor as FAILED for "
+                    f"[LearningPathTask] Marking generation monitor as FAILED for "
                     f"content_type={content_type}"
                 )
                 repository.fail_generation_monitor(
@@ -147,11 +148,11 @@ def on_content_generated(
                 )
             else:
                 logger.warning(
-                    f"[LearningPath] Unknown status '{status}' for generation monitor "
+                    f"[LearningPathTask] Unknown status '{status}' for generation monitor "
                     f"(content_type={content_type})"
                 )
         except ValueError as e:
-            logger.error(f"[LearningPath] Invalid content_type '{content_type}': {e}")
+            logger.error(f"[LearningPathTask] Invalid content_type '{content_type}': {e}")
 
 
 @subscribe_to_background('delivery.item_dispatched')
@@ -172,11 +173,11 @@ def on_delivery_item_dispatched(
         learning_path_queue_item_id: ID del item en LearningPathQueue (puede ser None para boost items)
     """
     if not learning_path_queue_item_id:
-        logger.debug("[LearningPath] Skipping: item_dispatched has no learning_path_queue_item_id (boost item)")
+        logger.debug("[LearningPathTask] Skipping: item_dispatched has no learning_path_queue_item_id (boost item)")
         return
 
     logger.info(
-        f"[LearningPath] Marking learning_path_queue_item {learning_path_queue_item_id} as CONSUMED "
+        f"[LearningPathTask] Marking learning_path_queue_item {learning_path_queue_item_id} as CONSUMED "
         f"(user {user_id})"
     )
 
@@ -187,13 +188,13 @@ def on_delivery_item_dispatched(
 
             if not queue_item:
                 logger.warning(
-                    f"[LearningPath] LearningPathQueue item {learning_path_queue_item_id} not found"
+                    f"[LearningPathTask] LearningPathQueue item {learning_path_queue_item_id} not found"
                 )
                 return
 
             if queue_item.user_id != user_id:
                 logger.warning(
-                    f"[LearningPath] User {user_id} does not own queue_item {learning_path_queue_item_id}"
+                    f"[LearningPathTask] User {user_id} does not own queue_item {learning_path_queue_item_id}"
                 )
                 return
 
@@ -203,11 +204,11 @@ def on_delivery_item_dispatched(
             session.commit()
 
             logger.info(
-                f"[LearningPath] Successfully marked learning_path_queue_item {learning_path_queue_item_id} as CONSUMED"
+                f"[LearningPathTask] Successfully marked learning_path_queue_item {learning_path_queue_item_id} as CONSUMED"
             )
 
     except Exception as e:
         logger.error(
-            f"[LearningPath] Error marking queue_item {learning_path_queue_item_id} as CONSUMED: {e}",
+            f"[LearningPathTask] Error marking queue_item {learning_path_queue_item_id} as CONSUMED: {e}",
             exc_info=True
         )

@@ -1,8 +1,8 @@
 """initial
 
-Revision ID: 952bb3a8a569
+Revision ID: e9b979867c02
 Revises: 
-Create Date: 2026-10-04 11:04:29.242076
+Create Date: 2026-10-08 03:38:47.566637
 
 """
 from typing import Sequence, Union
@@ -13,7 +13,7 @@ import sqlmodel
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '952bb3a8a569'
+revision: str = 'e9b979867c02'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -33,7 +33,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('queue_type', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('payload', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('status', sa.Enum('PENDING', 'DISPATCHED', 'DISCARDED', 'FAILED', name='centralqueuestatus'), nullable=False),
+    sa.Column('status', sa.Enum('PENDING', 'DISPATCHED', 'COMPLETED', 'DISCARDED', 'FAILED', name='centralqueuestatus'), nullable=False),
     sa.Column('process_event', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('side_event', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.Column('callback_event', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
@@ -46,46 +46,6 @@ def upgrade() -> None:
     op.create_index(op.f('ix_central_queue_order_position'), 'central_queue', ['order_position'], unique=False)
     op.create_index(op.f('ix_central_queue_queue_type'), 'central_queue', ['queue_type'], unique=False)
     op.create_index(op.f('ix_central_queue_status'), 'central_queue', ['status'], unique=False)
-    op.create_table('delivery_buffer',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('content_id', sa.Integer(), nullable=False),
-    sa.Column('content_type', sa.Enum('EXAMPLE', 'BEST_OPTIONS', name='contenttype'), nullable=False),
-    sa.Column('source_type', sa.Enum('LEARNING_PATH', 'BOOST', 'CUSTOM', name='contentsourcetype'), nullable=False),
-    sa.Column('word_id', sa.Integer(), nullable=True),
-    sa.Column('learning_path_queue_id', sa.Integer(), nullable=True),
-    sa.Column('status', sa.Enum('PENDING', 'DISPATCHED', 'DISCARDED', name='deliverystatus'), nullable=False),
-    sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
-    sa.Column('consumed_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_delivery_buffer_content_id'), 'delivery_buffer', ['content_id'], unique=False)
-    op.create_index(op.f('ix_delivery_buffer_content_type'), 'delivery_buffer', ['content_type'], unique=False)
-    op.create_index(op.f('ix_delivery_buffer_learning_path_queue_id'), 'delivery_buffer', ['learning_path_queue_id'], unique=False)
-    op.create_index(op.f('ix_delivery_buffer_source_type'), 'delivery_buffer', ['source_type'], unique=False)
-    op.create_index(op.f('ix_delivery_buffer_status'), 'delivery_buffer', ['status'], unique=False)
-    op.create_index(op.f('ix_delivery_buffer_user_id'), 'delivery_buffer', ['user_id'], unique=False)
-    op.create_index(op.f('ix_delivery_buffer_word_id'), 'delivery_buffer', ['word_id'], unique=False)
-    op.create_table('examples',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('type', sa.Enum('INITIAL', 'EXPLORE', name='exampletype'), nullable=False),
-    sa.Column('text', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
-    sa.Column('favorited_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=True),
-    sa.Column('normalized', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
-    sa.Column('times_seen', sa.Integer(), nullable=False),
-    sa.Column('sequence', sa.Integer(), nullable=False),
-    sa.Column('enqueued', sa.Boolean(), nullable=False),
-    sa.Column('is_favorite', sa.Boolean(), nullable=False),
-    sa.Column('is_marked', sa.Boolean(), nullable=False),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_examples_enqueued'), 'examples', ['enqueued'], unique=False)
-    op.create_index(op.f('ix_examples_favorited_at'), 'examples', ['favorited_at'], unique=False)
-    op.create_index(op.f('ix_examples_is_marked'), 'examples', ['is_marked'], unique=False)
-    op.create_index(op.f('ix_examples_normalized'), 'examples', ['normalized'], unique=False)
-    op.create_index(op.f('ix_examples_sequence'), 'examples', ['sequence'], unique=False)
-    op.create_index(op.f('ix_examples_type'), 'examples', ['type'], unique=False)
     op.create_table('explore_configurations',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('max_examples', sa.Integer(), nullable=False),
@@ -105,6 +65,36 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_global_configurations_key'), 'global_configurations', ['key'], unique=True)
+    op.create_table('round_robin_needle',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('content_type', sa.Enum('EXAMPLE', 'BEST_OPTIONS', name='contenttype'), nullable=False),
+    sa.Column('current_wheel_id', sa.Integer(), nullable=False),
+    sa.Column('updated_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_round_robin_needle_content_type'), 'round_robin_needle', ['content_type'], unique=False)
+    op.create_index(op.f('ix_round_robin_needle_current_wheel_id'), 'round_robin_needle', ['current_wheel_id'], unique=False)
+    op.create_index(op.f('ix_round_robin_needle_user_id'), 'round_robin_needle', ['user_id'], unique=False)
+    op.create_table('round_robin_wheel',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('content_type', sa.Enum('EXAMPLE', 'BEST_OPTIONS', name='contenttype'), nullable=False),
+    sa.Column('word_id', sa.Integer(), nullable=True),
+    sa.Column('is_learning_slot', sa.Boolean(), nullable=False),
+    sa.Column('next_wheel_id', sa.Integer(), nullable=True),
+    sa.Column('order', sa.Integer(), nullable=False),
+    sa.Column('status', sa.Enum('INITIAL', 'GENERATING', 'READY', 'EXHAUSTED', name='roundrobinwheelnodestatus'), nullable=False),
+    sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
+    sa.Column('updated_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_round_robin_wheel_content_type'), 'round_robin_wheel', ['content_type'], unique=False)
+    op.create_index(op.f('ix_round_robin_wheel_is_learning_slot'), 'round_robin_wheel', ['is_learning_slot'], unique=False)
+    op.create_index(op.f('ix_round_robin_wheel_status'), 'round_robin_wheel', ['status'], unique=False)
+    op.create_index(op.f('ix_round_robin_wheel_updated_at'), 'round_robin_wheel', ['updated_at'], unique=False)
+    op.create_index(op.f('ix_round_robin_wheel_user_id'), 'round_robin_wheel', ['user_id'], unique=False)
+    op.create_index(op.f('ix_round_robin_wheel_word_id'), 'round_robin_wheel', ['word_id'], unique=False)
     op.create_table('users',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('email', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
@@ -138,11 +128,13 @@ def upgrade() -> None:
     sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
     sa.Column('updated_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
     sa.Column('word_id', sa.Integer(), nullable=False),
-    sa.Column('source_type', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('source_type', sa.Enum('LEARNING_PATH', 'BOOST', 'CUSTOM', name='contentsourcetype'), nullable=False),
+    sa.Column('content_type', sa.Enum('EXAMPLE', 'BEST_OPTIONS', name='contenttype'), nullable=False),
     sa.ForeignKeyConstraint(['central_queue_id'], ['central_queue.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_generation_ai_registry_content_type'), 'generation_ai_registry', ['content_type'], unique=False)
     op.create_index(op.f('ix_generation_ai_registry_source_type'), 'generation_ai_registry', ['source_type'], unique=False)
     op.create_index(op.f('ix_generation_ai_registry_status'), 'generation_ai_registry', ['status'], unique=False)
     op.create_index(op.f('ix_generation_ai_registry_user_id'), 'generation_ai_registry', ['user_id'], unique=False)
@@ -184,44 +176,39 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_learning_path_cursor_type'), 'learning_path_cursor', ['type'], unique=False)
     op.create_index(op.f('ix_learning_path_cursor_user_id'), 'learning_path_cursor', ['user_id'], unique=False)
+    op.create_table('learning_path_generation_history',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('content_type', sa.Enum('EXAMPLE', 'BEST_OPTIONS', name='contenttype'), nullable=False),
+    sa.Column('status', sa.Enum('COMPLETED', 'FAILED', name='learningpathgenerationhistorystatus'), nullable=False),
+    sa.Column('error_message', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
+    sa.Column('completed_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_learning_path_generation_history_completed_at'), 'learning_path_generation_history', ['completed_at'], unique=False)
+    op.create_index(op.f('ix_learning_path_generation_history_content_type'), 'learning_path_generation_history', ['content_type'], unique=False)
+    op.create_index(op.f('ix_learning_path_generation_history_created_at'), 'learning_path_generation_history', ['created_at'], unique=False)
+    op.create_index(op.f('ix_learning_path_generation_history_status'), 'learning_path_generation_history', ['status'], unique=False)
+    op.create_index(op.f('ix_learning_path_generation_history_user_id'), 'learning_path_generation_history', ['user_id'], unique=False)
     op.create_table('learning_path_generation_monitors',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('content_type', sa.Enum('EXAMPLE', 'BEST_OPTIONS', name='contenttype'), nullable=False),
-    sa.Column('status', sa.Enum('IDLE', 'GENERATING', 'COMPLETED', 'FAILED', name='learningpathgenerationmonitorstatus'), nullable=False),
+    sa.Column('status', sa.Enum('IDLE', 'GENERATING', name='learningpathgenerationmonitorstatus'), nullable=False),
     sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
     sa.Column('updated_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
     sa.Column('started_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=True),
-    sa.Column('completed_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=True),
-    sa.Column('error_message', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_learning_path_generation_monitors_completed_at'), 'learning_path_generation_monitors', ['completed_at'], unique=False)
     op.create_index(op.f('ix_learning_path_generation_monitors_content_type'), 'learning_path_generation_monitors', ['content_type'], unique=False)
     op.create_index(op.f('ix_learning_path_generation_monitors_created_at'), 'learning_path_generation_monitors', ['created_at'], unique=False)
     op.create_index(op.f('ix_learning_path_generation_monitors_started_at'), 'learning_path_generation_monitors', ['started_at'], unique=False)
     op.create_index(op.f('ix_learning_path_generation_monitors_status'), 'learning_path_generation_monitors', ['status'], unique=False)
     op.create_index(op.f('ix_learning_path_generation_monitors_updated_at'), 'learning_path_generation_monitors', ['updated_at'], unique=False)
     op.create_index(op.f('ix_learning_path_generation_monitors_user_id'), 'learning_path_generation_monitors', ['user_id'], unique=False)
-    op.create_table('learning_path_queue',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('content_id', sa.Integer(), nullable=False),
-    sa.Column('content_type', sa.Enum('EXAMPLE', 'BEST_OPTIONS', name='contenttype'), nullable=False),
-    sa.Column('status', sa.Enum('PENDING', 'TRANSFERRED', 'CONSUMED', name='learningpathqueuestatus'), nullable=False),
-    sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('priority', sa.Float(), nullable=False),
-    sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
-    sa.Column('updated_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
-    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_learning_path_queue_content_id'), 'learning_path_queue', ['content_id'], unique=False)
-    op.create_index(op.f('ix_learning_path_queue_content_type'), 'learning_path_queue', ['content_type'], unique=False)
-    op.create_index(op.f('ix_learning_path_queue_priority'), 'learning_path_queue', ['priority'], unique=False)
-    op.create_index(op.f('ix_learning_path_queue_status'), 'learning_path_queue', ['status'], unique=False)
-    op.create_index(op.f('ix_learning_path_queue_updated_at'), 'learning_path_queue', ['updated_at'], unique=False)
-    op.create_index(op.f('ix_learning_path_queue_user_id'), 'learning_path_queue', ['user_id'], unique=False)
     op.create_table('path_repair_logs',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
@@ -401,14 +388,51 @@ def upgrade() -> None:
     op.create_index(op.f('ix_collocations_is_marked'), 'collocations', ['is_marked'], unique=False)
     op.create_index(op.f('ix_collocations_user_id'), 'collocations', ['user_id'], unique=False)
     op.create_index(op.f('ix_collocations_word_id'), 'collocations', ['word_id'], unique=False)
-    op.create_table('example_words',
-    sa.Column('example_id', sa.Integer(), nullable=False),
+    op.create_table('delivery_buffer',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('content_id', sa.Integer(), nullable=False),
+    sa.Column('content_type', sa.Enum('EXAMPLE', 'BEST_OPTIONS', name='contenttype'), nullable=False),
+    sa.Column('source_type', sa.Enum('LEARNING_PATH', 'BOOST', 'CUSTOM', name='contentsourcetype'), nullable=False),
+    sa.Column('word_id', sa.Integer(), nullable=False),
+    sa.Column('learning_path_queue_id', sa.Integer(), nullable=True),
+    sa.Column('status', sa.Enum('PENDING', 'DISPATCHED', 'DISCARDED', name='deliverystatus'), nullable=False),
+    sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
+    sa.Column('consumed_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['word_id'], ['words.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_delivery_buffer_content_id'), 'delivery_buffer', ['content_id'], unique=False)
+    op.create_index(op.f('ix_delivery_buffer_content_type'), 'delivery_buffer', ['content_type'], unique=False)
+    op.create_index(op.f('ix_delivery_buffer_learning_path_queue_id'), 'delivery_buffer', ['learning_path_queue_id'], unique=False)
+    op.create_index(op.f('ix_delivery_buffer_source_type'), 'delivery_buffer', ['source_type'], unique=False)
+    op.create_index(op.f('ix_delivery_buffer_status'), 'delivery_buffer', ['status'], unique=False)
+    op.create_index(op.f('ix_delivery_buffer_user_id'), 'delivery_buffer', ['user_id'], unique=False)
+    op.create_index(op.f('ix_delivery_buffer_word_id'), 'delivery_buffer', ['word_id'], unique=False)
+    op.create_table('examples',
+    sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('word_id', sa.Integer(), nullable=False),
     sa.Column('text_form', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False),
-    sa.ForeignKeyConstraint(['example_id'], ['examples.id'], ),
+    sa.Column('type', sa.Enum('INITIAL', 'EXPLORE', name='exampletype'), nullable=False),
+    sa.Column('text', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
+    sa.Column('favorited_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=True),
+    sa.Column('normalized', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
+    sa.Column('times_seen', sa.Integer(), nullable=False),
+    sa.Column('sequence', sa.Integer(), nullable=False),
+    sa.Column('enqueued', sa.Boolean(), nullable=False),
+    sa.Column('is_favorite', sa.Boolean(), nullable=False),
+    sa.Column('is_marked', sa.Boolean(), nullable=False),
     sa.ForeignKeyConstraint(['word_id'], ['words.id'], ),
-    sa.PrimaryKeyConstraint('example_id', 'word_id')
+    sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_examples_enqueued'), 'examples', ['enqueued'], unique=False)
+    op.create_index(op.f('ix_examples_favorited_at'), 'examples', ['favorited_at'], unique=False)
+    op.create_index(op.f('ix_examples_is_marked'), 'examples', ['is_marked'], unique=False)
+    op.create_index(op.f('ix_examples_normalized'), 'examples', ['normalized'], unique=False)
+    op.create_index(op.f('ix_examples_sequence'), 'examples', ['sequence'], unique=False)
+    op.create_index(op.f('ix_examples_type'), 'examples', ['type'], unique=False)
+    op.create_index(op.f('ix_examples_word_id'), 'examples', ['word_id'], unique=False)
     op.create_table('learning_path',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('type', sa.Enum('EXAMPLE', 'BEST_OPTIONS', name='contenttype'), nullable=False),
@@ -441,6 +465,27 @@ def upgrade() -> None:
     op.create_index(op.f('ix_learning_path_history_type'), 'learning_path_history', ['type'], unique=False)
     op.create_index(op.f('ix_learning_path_history_user_id'), 'learning_path_history', ['user_id'], unique=False)
     op.create_index(op.f('ix_learning_path_history_word_id'), 'learning_path_history', ['word_id'], unique=False)
+    op.create_table('learning_path_queue',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('content_id', sa.Integer(), nullable=False),
+    sa.Column('content_type', sa.Enum('EXAMPLE', 'BEST_OPTIONS', name='contenttype'), nullable=False),
+    sa.Column('word_id', sa.Integer(), nullable=False),
+    sa.Column('status', sa.Enum('PENDING', 'TRANSFERRED', 'CONSUMED', name='learningpathqueuestatus'), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('priority', sa.Float(), nullable=False),
+    sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
+    sa.Column('updated_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['word_id'], ['words.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_learning_path_queue_content_id'), 'learning_path_queue', ['content_id'], unique=False)
+    op.create_index(op.f('ix_learning_path_queue_content_type'), 'learning_path_queue', ['content_type'], unique=False)
+    op.create_index(op.f('ix_learning_path_queue_priority'), 'learning_path_queue', ['priority'], unique=False)
+    op.create_index(op.f('ix_learning_path_queue_status'), 'learning_path_queue', ['status'], unique=False)
+    op.create_index(op.f('ix_learning_path_queue_updated_at'), 'learning_path_queue', ['updated_at'], unique=False)
+    op.create_index(op.f('ix_learning_path_queue_user_id'), 'learning_path_queue', ['user_id'], unique=False)
+    op.create_index(op.f('ix_learning_path_queue_word_id'), 'learning_path_queue', ['word_id'], unique=False)
     op.create_table('word_statistics',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('word_id', sa.Integer(), nullable=False),
@@ -458,25 +503,16 @@ def upgrade() -> None:
     op.create_index(op.f('ix_word_statistics_learning_state'), 'word_statistics', ['learning_state'], unique=False)
     op.create_index(op.f('ix_word_statistics_type'), 'word_statistics', ['type'], unique=False)
     op.create_index(op.f('ix_word_statistics_word_id'), 'word_statistics', ['word_id'], unique=False)
-    op.drop_index(op.f('ix_celery_taskmeta_date_done'), table_name='celery_taskmeta')
-    op.drop_table('celery_taskmeta')
     op.drop_index(op.f('ix_celery_tasksetmeta_date_done'), table_name='celery_tasksetmeta')
     op.drop_table('celery_tasksetmeta')
+    op.drop_index(op.f('ix_celery_taskmeta_date_done'), table_name='celery_taskmeta')
+    op.drop_table('celery_taskmeta')
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
-    op.create_table('celery_tasksetmeta',
-    sa.Column('id', sa.INTEGER(), autoincrement=False, nullable=False),
-    sa.Column('taskset_id', sa.VARCHAR(length=155), autoincrement=False, nullable=True),
-    sa.Column('result', postgresql.BYTEA(), autoincrement=False, nullable=True),
-    sa.Column('date_done', postgresql.TIMESTAMP(), autoincrement=False, nullable=True),
-    sa.PrimaryKeyConstraint('id', name=op.f('celery_tasksetmeta_pkey')),
-    sa.UniqueConstraint('taskset_id', name=op.f('celery_tasksetmeta_taskset_id_key'))
-    )
-    op.create_index(op.f('ix_celery_tasksetmeta_date_done'), 'celery_tasksetmeta', ['date_done'], unique=False)
     op.create_table('celery_taskmeta',
     sa.Column('id', sa.INTEGER(), autoincrement=False, nullable=False),
     sa.Column('task_id', sa.VARCHAR(length=155), autoincrement=False, nullable=True),
@@ -494,11 +530,28 @@ def downgrade() -> None:
     sa.UniqueConstraint('task_id', name=op.f('celery_taskmeta_task_id_key'))
     )
     op.create_index(op.f('ix_celery_taskmeta_date_done'), 'celery_taskmeta', ['date_done'], unique=False)
+    op.create_table('celery_tasksetmeta',
+    sa.Column('id', sa.INTEGER(), autoincrement=False, nullable=False),
+    sa.Column('taskset_id', sa.VARCHAR(length=155), autoincrement=False, nullable=True),
+    sa.Column('result', postgresql.BYTEA(), autoincrement=False, nullable=True),
+    sa.Column('date_done', postgresql.TIMESTAMP(), autoincrement=False, nullable=True),
+    sa.PrimaryKeyConstraint('id', name=op.f('celery_tasksetmeta_pkey')),
+    sa.UniqueConstraint('taskset_id', name=op.f('celery_tasksetmeta_taskset_id_key'))
+    )
+    op.create_index(op.f('ix_celery_tasksetmeta_date_done'), 'celery_tasksetmeta', ['date_done'], unique=False)
     op.drop_index(op.f('ix_word_statistics_word_id'), table_name='word_statistics')
     op.drop_index(op.f('ix_word_statistics_type'), table_name='word_statistics')
     op.drop_index(op.f('ix_word_statistics_learning_state'), table_name='word_statistics')
     op.drop_index(op.f('ix_word_statistics_learned_at'), table_name='word_statistics')
     op.drop_table('word_statistics')
+    op.drop_index(op.f('ix_learning_path_queue_word_id'), table_name='learning_path_queue')
+    op.drop_index(op.f('ix_learning_path_queue_user_id'), table_name='learning_path_queue')
+    op.drop_index(op.f('ix_learning_path_queue_updated_at'), table_name='learning_path_queue')
+    op.drop_index(op.f('ix_learning_path_queue_status'), table_name='learning_path_queue')
+    op.drop_index(op.f('ix_learning_path_queue_priority'), table_name='learning_path_queue')
+    op.drop_index(op.f('ix_learning_path_queue_content_type'), table_name='learning_path_queue')
+    op.drop_index(op.f('ix_learning_path_queue_content_id'), table_name='learning_path_queue')
+    op.drop_table('learning_path_queue')
     op.drop_index(op.f('ix_learning_path_history_word_id'), table_name='learning_path_history')
     op.drop_index(op.f('ix_learning_path_history_user_id'), table_name='learning_path_history')
     op.drop_index(op.f('ix_learning_path_history_type'), table_name='learning_path_history')
@@ -509,7 +562,22 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_learning_path_type'), table_name='learning_path')
     op.drop_index(op.f('ix_learning_path_segment'), table_name='learning_path')
     op.drop_table('learning_path')
-    op.drop_table('example_words')
+    op.drop_index(op.f('ix_examples_word_id'), table_name='examples')
+    op.drop_index(op.f('ix_examples_type'), table_name='examples')
+    op.drop_index(op.f('ix_examples_sequence'), table_name='examples')
+    op.drop_index(op.f('ix_examples_normalized'), table_name='examples')
+    op.drop_index(op.f('ix_examples_is_marked'), table_name='examples')
+    op.drop_index(op.f('ix_examples_favorited_at'), table_name='examples')
+    op.drop_index(op.f('ix_examples_enqueued'), table_name='examples')
+    op.drop_table('examples')
+    op.drop_index(op.f('ix_delivery_buffer_word_id'), table_name='delivery_buffer')
+    op.drop_index(op.f('ix_delivery_buffer_user_id'), table_name='delivery_buffer')
+    op.drop_index(op.f('ix_delivery_buffer_status'), table_name='delivery_buffer')
+    op.drop_index(op.f('ix_delivery_buffer_source_type'), table_name='delivery_buffer')
+    op.drop_index(op.f('ix_delivery_buffer_learning_path_queue_id'), table_name='delivery_buffer')
+    op.drop_index(op.f('ix_delivery_buffer_content_type'), table_name='delivery_buffer')
+    op.drop_index(op.f('ix_delivery_buffer_content_id'), table_name='delivery_buffer')
+    op.drop_table('delivery_buffer')
     op.drop_index(op.f('ix_collocations_word_id'), table_name='collocations')
     op.drop_index(op.f('ix_collocations_user_id'), table_name='collocations')
     op.drop_index(op.f('ix_collocations_is_marked'), table_name='collocations')
@@ -557,21 +625,19 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_path_repair_logs_success'), table_name='path_repair_logs')
     op.drop_index(op.f('ix_path_repair_logs_created_at'), table_name='path_repair_logs')
     op.drop_table('path_repair_logs')
-    op.drop_index(op.f('ix_learning_path_queue_user_id'), table_name='learning_path_queue')
-    op.drop_index(op.f('ix_learning_path_queue_updated_at'), table_name='learning_path_queue')
-    op.drop_index(op.f('ix_learning_path_queue_status'), table_name='learning_path_queue')
-    op.drop_index(op.f('ix_learning_path_queue_priority'), table_name='learning_path_queue')
-    op.drop_index(op.f('ix_learning_path_queue_content_type'), table_name='learning_path_queue')
-    op.drop_index(op.f('ix_learning_path_queue_content_id'), table_name='learning_path_queue')
-    op.drop_table('learning_path_queue')
     op.drop_index(op.f('ix_learning_path_generation_monitors_user_id'), table_name='learning_path_generation_monitors')
     op.drop_index(op.f('ix_learning_path_generation_monitors_updated_at'), table_name='learning_path_generation_monitors')
     op.drop_index(op.f('ix_learning_path_generation_monitors_status'), table_name='learning_path_generation_monitors')
     op.drop_index(op.f('ix_learning_path_generation_monitors_started_at'), table_name='learning_path_generation_monitors')
     op.drop_index(op.f('ix_learning_path_generation_monitors_created_at'), table_name='learning_path_generation_monitors')
     op.drop_index(op.f('ix_learning_path_generation_monitors_content_type'), table_name='learning_path_generation_monitors')
-    op.drop_index(op.f('ix_learning_path_generation_monitors_completed_at'), table_name='learning_path_generation_monitors')
     op.drop_table('learning_path_generation_monitors')
+    op.drop_index(op.f('ix_learning_path_generation_history_user_id'), table_name='learning_path_generation_history')
+    op.drop_index(op.f('ix_learning_path_generation_history_status'), table_name='learning_path_generation_history')
+    op.drop_index(op.f('ix_learning_path_generation_history_created_at'), table_name='learning_path_generation_history')
+    op.drop_index(op.f('ix_learning_path_generation_history_content_type'), table_name='learning_path_generation_history')
+    op.drop_index(op.f('ix_learning_path_generation_history_completed_at'), table_name='learning_path_generation_history')
+    op.drop_table('learning_path_generation_history')
     op.drop_index(op.f('ix_learning_path_cursor_user_id'), table_name='learning_path_cursor')
     op.drop_index(op.f('ix_learning_path_cursor_type'), table_name='learning_path_cursor')
     op.drop_table('learning_path_cursor')
@@ -587,6 +653,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_generation_ai_registry_user_id'), table_name='generation_ai_registry')
     op.drop_index(op.f('ix_generation_ai_registry_status'), table_name='generation_ai_registry')
     op.drop_index(op.f('ix_generation_ai_registry_source_type'), table_name='generation_ai_registry')
+    op.drop_index(op.f('ix_generation_ai_registry_content_type'), table_name='generation_ai_registry')
     op.drop_table('generation_ai_registry')
     op.drop_index(op.f('ix_explore_sessions_user_id'), table_name='explore_sessions')
     op.drop_index(op.f('ix_explore_sessions_created_at'), table_name='explore_sessions')
@@ -594,25 +661,21 @@ def downgrade() -> None:
     op.drop_table('explore_sessions')
     op.drop_index(op.f('ix_users_email'), table_name='users')
     op.drop_table('users')
+    op.drop_index(op.f('ix_round_robin_wheel_word_id'), table_name='round_robin_wheel')
+    op.drop_index(op.f('ix_round_robin_wheel_user_id'), table_name='round_robin_wheel')
+    op.drop_index(op.f('ix_round_robin_wheel_updated_at'), table_name='round_robin_wheel')
+    op.drop_index(op.f('ix_round_robin_wheel_status'), table_name='round_robin_wheel')
+    op.drop_index(op.f('ix_round_robin_wheel_is_learning_slot'), table_name='round_robin_wheel')
+    op.drop_index(op.f('ix_round_robin_wheel_content_type'), table_name='round_robin_wheel')
+    op.drop_table('round_robin_wheel')
+    op.drop_index(op.f('ix_round_robin_needle_user_id'), table_name='round_robin_needle')
+    op.drop_index(op.f('ix_round_robin_needle_current_wheel_id'), table_name='round_robin_needle')
+    op.drop_index(op.f('ix_round_robin_needle_content_type'), table_name='round_robin_needle')
+    op.drop_table('round_robin_needle')
     op.drop_index(op.f('ix_global_configurations_key'), table_name='global_configurations')
     op.drop_table('global_configurations')
     op.drop_index(op.f('ix_explore_configurations_max_examples'), table_name='explore_configurations')
     op.drop_table('explore_configurations')
-    op.drop_index(op.f('ix_examples_type'), table_name='examples')
-    op.drop_index(op.f('ix_examples_sequence'), table_name='examples')
-    op.drop_index(op.f('ix_examples_normalized'), table_name='examples')
-    op.drop_index(op.f('ix_examples_is_marked'), table_name='examples')
-    op.drop_index(op.f('ix_examples_favorited_at'), table_name='examples')
-    op.drop_index(op.f('ix_examples_enqueued'), table_name='examples')
-    op.drop_table('examples')
-    op.drop_index(op.f('ix_delivery_buffer_word_id'), table_name='delivery_buffer')
-    op.drop_index(op.f('ix_delivery_buffer_user_id'), table_name='delivery_buffer')
-    op.drop_index(op.f('ix_delivery_buffer_status'), table_name='delivery_buffer')
-    op.drop_index(op.f('ix_delivery_buffer_source_type'), table_name='delivery_buffer')
-    op.drop_index(op.f('ix_delivery_buffer_learning_path_queue_id'), table_name='delivery_buffer')
-    op.drop_index(op.f('ix_delivery_buffer_content_type'), table_name='delivery_buffer')
-    op.drop_index(op.f('ix_delivery_buffer_content_id'), table_name='delivery_buffer')
-    op.drop_table('delivery_buffer')
     op.drop_index(op.f('ix_central_queue_status'), table_name='central_queue')
     op.drop_index(op.f('ix_central_queue_queue_type'), table_name='central_queue')
     op.drop_index(op.f('ix_central_queue_order_position'), table_name='central_queue')

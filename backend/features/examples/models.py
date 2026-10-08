@@ -13,6 +13,10 @@ class Example(SQLModel, table=True):
     __tablename__: str = "examples"
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    # Palabra que este ejemplo enseña (obligatorio - uno a uno)
+    word_id: int = Field(foreign_key="words.id", index=True)
+    # Forma de la palabra en el texto del ejemplo (ej: "rained" para palabra "rain")
+    text_form: str = Field(max_length=255, nullable=False)
     type: ExampleType = Field(index=True)
     text: str = Field(nullable=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -23,8 +27,6 @@ class Example(SQLModel, table=True):
     enqueued: bool = Field(default=False, index=True)
     is_favorite: bool = Field(default=False)
     is_marked: bool = Field(default=False, index=True)
-
-    example_words: List["ExampleWord"] = Relationship(back_populates="example")
 
 
 class ExploreConfiguration(SQLModel, table=True):

@@ -6,7 +6,8 @@ from core.boost.policies import BoostLearningPolicy
 from core.boost.strategies import BoostDemandStrategy
 from core.generation_ai.repository import GenerationAIRepository
 from core.delivery.repository import DeliveryRepository
-from celery_app import celery_app
+from core.event_bus import publish_event_background
+from logging_client import logger
 
 
 class BoostService:
@@ -37,16 +38,23 @@ class BoostService:
             # Persistir activación en la tabla de boosts
             self.repo.activate(user_id, word_id)
 
-            # Encolar la demanda inicial de generación
-            demands = BoostDemandStrategy.get_initial_boost_pack()
-            for demand in demands:
-                self.generation_repo.enqueue_demand(
-                    user_id=user_id,
-                    word_id=word_id,
-                    skill_type=demand.skill_type,
-                    quantity=demand.quantity,
-                    is_boost=True
-                )
+            # Publicar evento word.boosted para que la rueda se actualice
+            publish_event_background(
+                'word.boosted',
+                user_id=user_id,
+                word_id=word_id,
+            )
+            logger.info(f"[BoostService] Published word.boosted event for user {user_id}, word {word_id}")
+
+            # Encolar la demanda de generación (usando refill pack como pack único)
+            from core.enums import ContentSourceType
+            demands = BoostDemandStrategy.get_refill_pack()
+            self.generation_repo.enqueue_demand(
+                user_id=user_id,
+                word_id=word_id,
+                demands=demands,
+                source_type=ContentSourceType.BOOST
+            )
 
             return {"status": "activated", "word_id": word_id}
 
@@ -59,15 +67,13 @@ class BoostService:
 
             validate_toggle_cooldown(current_boost.boosted_at)
 
-            celery_app.send_task(
-                'boost.on_word_unboosted',
-                kwargs={
-                    "user_id": user_id,
-                    "word_id": word_id
-                },
-                exchange="app_events",
-                routing_key="event.word.unboosted"
+            # Publicar evento word.unboosted para que la rueda se actualice
+            publish_event_background(
+                'word.unboosted',
+                user_id=user_id,
+                word_id=word_id,
             )
+            logger.info(f"[BoostService] Published word.unboosted event for user {user_id}, word {word_id}")
 
             return {
                 "status": "deactivated",

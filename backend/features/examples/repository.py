@@ -6,7 +6,7 @@ from sqlmodel import Session, func, or_, select
 from logging_client import logger
 import random
 from features.examples.models import Example, ExampleType
-from features.words.models import ExampleWord, WordStatistics, Word
+from features.words.models import WordStatistics, Word
 from core.enums import ContentType
 from core.learning_path.enums import LearningState
 
@@ -24,50 +24,35 @@ class ExampleRepository:
         Cuenta cuántos ejemplos disponibles hay para una palabra.
 
         Un example está disponible si:
-        - Contiene la palabra (a través de ExampleWord)
+        - Enseña la palabra (word_id coincide)
         - Es de tipo EXPLORE
         - No ha sido encolado aún (enqueued=False)
-        - No contiene SOLO palabras en estado LEARNED
-
-        UNA SOLA QUERY: GROUP BY para contar palabras LEARNED vs total en cada ejemplo.
+        - Su palabra no está en estado LEARNED
         """
         from features.words.models import WordStatistics
         from core.learning_path.models import LearningState
 
-        # Subquery: para cada ejemplo, contar palabras LEARNED y total
-        example_stats = (
-            select(
-                Example.id,
-                func.count(distinct(ExampleWord.word_id)).label("total_words"),
-                func.count(
-                    case(
-                        (WordStatistics.learning_state == LearningState.LEARNED, 1),
-                        else_=None
-                    )
-                ).label("learned_words")
-            )
-            .join(ExampleWord, Example.id == ExampleWord.example_id)
-            .outerjoin(
-                WordStatistics,
-                and_(
-                    WordStatistics.word_id == ExampleWord.word_id,
-                    WordStatistics.type == ContentType.EXAMPLE
-                )
-            )
+        # Obtener stats de la palabra con tipo EXAMPLE
+        word_stats = self.session.exec(
+            select(WordStatistics)
             .where(
-                ExampleWord.word_id == word_id,
+                WordStatistics.word_id == word_id,
+                WordStatistics.type == ContentType.EXAMPLE
+            )
+        ).first()
+
+        # Si la palabra ya está LEARNED, no hay ejemplos disponibles
+        if word_stats and word_stats.learning_state == LearningState.LEARNED:
+            return 0
+
+        # Contar EXPLORE examples para esta palabra que no estén encolados
+        count = self.session.exec(
+            select(func.count(Example.id))
+            .where(
+                Example.word_id == word_id,
                 Example.type == ExampleType.EXPLORE,
                 Example.enqueued == False
             )
-            .group_by(Example.id)
-            .subquery()
-        )
-
-        # Contar ejemplos donde learned_words < total_words
-        count = self.session.exec(
-            select(func.count())
-            .select_from(example_stats)
-            .where(example_stats.c.learned_words < example_stats.c.total_words)
         ).first() or 0
 
         return count
@@ -77,55 +62,42 @@ class ExampleRepository:
         Obtiene el próximo example disponible para una palabra específica.
 
         Un example está disponible si:
-        - Contiene la palabra (a través de ExampleWord)
+        - Enseña la palabra (word_id coincide)
         - Es de tipo EXPLORE
         - No ha sido encolado aún (enqueued=False)
-        - NUNCA fue consumido antes (excluye examples con CONSUMED items)
-        - No contiene SOLO palabras en estado LEARNED
+        - Su palabra no está en estado LEARNED
 
         Retorna el example con la secuencia más baja (el más antiguo).
-
-        UNA SOLA QUERY: GROUP BY para filtrar ejemplos válidos de una vez.
         """
         from logging_client import logger
         from features.words.models import WordStatistics
         from core.learning_path.models import LearningState
 
-        # Subquery: para cada ejemplo, contar palabras LEARNED y total
-        example_stats = (
-            select(
-                Example.id,
-                Example.sequence,
-                func.count(distinct(ExampleWord.word_id)).label("total_words"),
-                func.count(
-                    case(
-                        (WordStatistics.learning_state == LearningState.LEARNED, 1),
-                        else_=None
-                    )
-                ).label("learned_words")
-            )
-            .join(ExampleWord, Example.id == ExampleWord.example_id)
-            .outerjoin(
-                WordStatistics,
-                and_(
-                    WordStatistics.word_id == ExampleWord.word_id,
-                    WordStatistics.type == ContentType.EXAMPLE
-                )
-            )
+        # Verificar si la palabra ya está LEARNED
+        word_stats = self.session.exec(
+            select(WordStatistics)
             .where(
-                ExampleWord.word_id == word_id,
+                WordStatistics.word_id == word_id,
+                WordStatistics.type == ContentType.EXAMPLE
+            )
+        ).first()
+
+        if word_stats and word_stats.learning_state == LearningState.LEARNED:
+            logger.debug(
+                f"[ExampleRepository] No valid EXPLORE examples found for word {word_id} "
+                f"(word is already LEARNED)"
+            )
+            return None
+
+        # Obtener el primer EXPLORE example para esta palabra
+        result = self.session.exec(
+            select(Example.id)
+            .where(
+                Example.word_id == word_id,
                 Example.type == ExampleType.EXPLORE,
                 Example.enqueued == False
             )
-            .group_by(Example.id, Example.sequence)
-            .subquery()
-        )
-
-        # Obtener el primer ejemplo válido (donde learned_words < total_words)
-        result = self.session.exec(
-            select(example_stats.c.id)
-            .where(example_stats.c.learned_words < example_stats.c.total_words)
-            .order_by(example_stats.c.sequence.asc())
+            .order_by(Example.sequence.asc())
             .limit(1)
         ).first()
 
@@ -136,30 +108,23 @@ class ExampleRepository:
             return result
 
         logger.debug(
-            f"[ExampleRepository] No valid EXPLORE examples found for word {word_id} "
-            f"(all candidates have only LEARNED words)"
+            f"[ExampleRepository] No valid EXPLORE examples found for word {word_id}"
         )
         return None
 
     def get_word_ids(self, example_id: int) -> List[int]:
         """
         Obtiene los IDs de las palabras asociadas a un example.
+        Retorna una lista con un solo ID (cada ejemplo solo enseña una palabra).
         """
-        word_ids = self.session.exec(
-            select(ExampleWord.word_id)
-            .where(ExampleWord.example_id == example_id)
-        ).all()
-
-        return word_ids
+        example = self.session.get(Example, example_id)
+        if not example or not example.word_id:
+            return []
+        return [example.word_id]
 
     def is_example_learned(self, example_id: int, user_id: int) -> bool:
         """
-        Chequea si un example está aprendido (su palabra principal está en estado LEARNED).
-
-        Lógica:
-        - Obtiene la primera palabra asociada al example (normalmente solo hay una)
-        - Verifica su estado en WordStatistics con tipo EXAMPLE
-        - Retorna True si está LEARNED, False de lo contrario
+        Chequea si un example está aprendido (su palabra está en estado LEARNED).
 
         Args:
             example_id: ID del example a chequear
@@ -169,26 +134,21 @@ class ExampleRepository:
             True si el example debe ser descartado (palabra LEARNED)
             False si el example es válido
         """
-        # Obtener la primera palabra asociada al example
-        first_word_id = self.session.exec(
-            select(ExampleWord.word_id)
-            .join(Word, ExampleWord.word_id == Word.id)
-            .where(
-                ExampleWord.example_id == example_id,
-                Word.user_id == user_id,
-            )
-            .limit(1)
-        ).first()
+        # Obtener el ejemplo con su word_id
+        example = self.session.get(Example, example_id)
+        if not example or not example.word_id:
+            return False
 
-        if not first_word_id:
-            # Si no hay palabra asociada, no está aprendido
+        # Verificar que la palabra pertenece al usuario
+        word = self.session.get(Word, example.word_id)
+        if not word or word.user_id != user_id:
             return False
 
         # Verificar el estado de la palabra en WordStatistics
         word_stats = self.session.exec(
             select(WordStatistics)
             .where(
-                WordStatistics.word_id == first_word_id,
+                WordStatistics.word_id == example.word_id,
                 WordStatistics.type == ContentType.EXAMPLE,
             )
         ).first()
@@ -216,17 +176,11 @@ class ExampleRepository:
         Retorna una lista de diccionarios con:
         - text: str
         - is_highlighted: bool
-        - target_word: Optional[Dict] con id, main, type, meaning, level, is_boosted, batch_id
+        - target_word: Optional[Dict] con id, main, type, meaning, level, is_boosted
         """
-        # Obtener las palabras asociadas al ejemplo
-        example_words = self.session.exec(
-            select(ExampleWord, Word)
-            .join(Word, ExampleWord.word_id == Word.id)
-            .where(ExampleWord.example_id == example.id)
-        ).all()
-
-        if not example_words:
-            # Si no hay palabras, retornar el texto completo sin resaltar
+        # Obtener la palabra asociada al ejemplo
+        if not example.word_id:
+            # Si no hay palabra, retornar el texto completo sin resaltar
             return [
                 {
                     "text": example.text,
@@ -235,11 +189,21 @@ class ExampleRepository:
                 }
             ]
 
-        # Crear un mapa de texto_form -> Word para búsqueda rápida
-        word_map = {}
-        for example_word, word in example_words:
-            text_form = example_word.text_form
-            word_map[text_form.lower()] = {
+        word = self.session.get(Word, example.word_id)
+        if not word:
+            # Si la palabra no existe, retornar el texto completo sin resaltar
+            return [
+                {
+                    "text": example.text,
+                    "is_highlighted": False,
+                    "target_word": None,
+                }
+            ]
+
+        # Crear un mapa de text_form -> Word (solo una palabra por ejemplo)
+        text_form = example.text_form
+        word_map = {
+            text_form.lower(): {
                 "id": word.id,
                 "main": word.main,
                 "type": "word",
@@ -248,6 +212,7 @@ class ExampleRepository:
                 "is_boosted": word.is_boosted,
                 "text_form": text_form,  # Guardar text_form original para referencia
             }
+        }
 
         # Buscar todas las ocurrencias de palabras en el texto
         text = example.text
@@ -373,27 +338,16 @@ class ExampleRepository:
 
         Retorna el nuevo estado de is_favorite (False si el usuario no es propietario).
         """
-        # Verificar que el ejemplo pertenece al usuario
-        example_owner = self.session.exec(
-            select(Word.user_id)
-            .join(ExampleWord, Word.id == ExampleWord.word_id)
-            .join(Example, ExampleWord.example_id == Example.id)
-            .where(Example.id == example_id)
-            .limit(1)
-        ).first()
-
-        if not example_owner:
-            logger.warning(f"[ExampleRepository] Example {example_id} not found for any user")
-            return False
-
-        if example_owner != user_id:
-            logger.warning(f"[ExampleRepository] User {user_id} attempted to modify example {example_id} of user {example_owner} (SECURITY: Blocked)")
-            return False
-
         example = self.session.get(Example, example_id)
 
-        if not example:
+        if not example or not example.word_id:
             logger.warning(f"[ExampleRepository] Example {example_id} not found")
+            return False
+
+        # Verificar que el ejemplo pertenece al usuario
+        word = self.session.get(Word, example.word_id)
+        if not word or word.user_id != user_id:
+            logger.warning(f"[ExampleRepository] User {user_id} attempted to modify example {example_id} of user {word.user_id if word else None} (SECURITY: Blocked)")
             return False
 
         example.is_favorite = not example.is_favorite
@@ -423,27 +377,16 @@ class ExampleRepository:
 
         Retorna el nuevo estado de is_marked (False si el usuario no es propietario).
         """
-        # Verificar que el ejemplo pertenece al usuario
-        example_owner = self.session.exec(
-            select(Word.user_id)
-            .join(ExampleWord, Word.id == ExampleWord.word_id)
-            .join(Example, ExampleWord.example_id == Example.id)
-            .where(Example.id == example_id)
-            .limit(1)
-        ).first()
-
-        if not example_owner:
-            logger.warning(f"[ExampleRepository] Example {example_id} not found for any user")
-            return False
-
-        if example_owner != user_id:
-            logger.warning(f"[ExampleRepository] User {user_id} attempted to modify example {example_id} of user {example_owner} (SECURITY: Blocked)")
-            return False
-
         example = self.session.get(Example, example_id)
 
-        if not example:
+        if not example or not example.word_id:
             logger.warning(f"[ExampleRepository] Example {example_id} not found")
+            return False
+
+        # Verificar que el ejemplo pertenece al usuario
+        word = self.session.get(Word, example.word_id)
+        if not word or word.user_id != user_id:
+            logger.warning(f"[ExampleRepository] User {user_id} attempted to modify example {example_id} of user {word.user_id if word else None} (SECURITY: Blocked)")
             return False
 
         example.is_marked = not example.is_marked
@@ -475,10 +418,9 @@ class ExampleRepository:
         - limit: Items por página
         - pages: Total de páginas
         """
-        # Construir condiciones de filtro - INCLUIR FILTRO POR USUARIO
+        # Construir condiciones de filtro
         filters = [
             Example.is_favorite == True,
-            Word.user_id == user_id,  # ← NUEVO: Filtrar solo ejemplos del usuario
         ]
 
         # Si se usa sort_by='done', filtrar solo marcados
@@ -494,9 +436,11 @@ class ExampleRepository:
         # Contar total de ejemplos favoritos del usuario
         total = self.session.exec(
             select(func.count(Example.id))
-            .join(ExampleWord, Example.id == ExampleWord.example_id)  # ← NUEVO: JOIN para acceder a user_id
-            .join(Word, ExampleWord.word_id == Word.id)              # ← NUEVO: JOIN para acceder a user_id
-            .where(*filters)
+            .join(Word, Example.word_id == Word.id)
+            .where(
+                Word.user_id == user_id,
+                *filters
+            )
         ).first() or 0
 
         # Calcular paginación
@@ -506,10 +450,11 @@ class ExampleRepository:
         # Construir query base
         query = (
             select(Example)
-            .join(ExampleWord, Example.id == ExampleWord.example_id)  # ← NUEVO: JOIN para filtrar
-            .join(Word, ExampleWord.word_id == Word.id)              # ← NUEVO: JOIN para filtrar
-            .where(*filters)
-            .distinct()  # Evitar duplicados si un ejemplo tiene múltiples palabras
+            .join(Word, Example.word_id == Word.id)
+            .where(
+                Word.user_id == user_id,
+                *filters
+            )
         )
 
         # Aplicar ordenamiento según sort_by
@@ -553,10 +498,9 @@ class ExampleRepository:
         """
         count = self.session.exec(
             select(func.count(Example.id))
-            .join(ExampleWord, Example.id == ExampleWord.example_id)  # ← NUEVO: JOIN para acceder a user_id
-            .join(Word, ExampleWord.word_id == Word.id)              # ← NUEVO: JOIN para acceder a user_id
+            .join(Word, Example.word_id == Word.id)
             .where(
-                Word.user_id == user_id,  # ← NUEVO: Filtrar solo del usuario
+                Word.user_id == user_id,
                 Example.is_favorite == True,
                 Example.is_marked == False
             )

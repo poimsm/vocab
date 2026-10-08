@@ -7,7 +7,7 @@ from sqlmodel import Session, func, select
 from logging_client import logger
 from features.examples.models import Example
 from features.best_options.models import BestOption
-from features.words.models import WordStatistics, ExampleWord, Word
+from features.words.models import WordStatistics, Word
 from core.enums import ContentType
 from core.learning_path.models import LearningState
 from features.examples.repository import ExampleRepository
@@ -28,17 +28,22 @@ class UnifiedContentRepository:
     def count_available_for_word(self, word_id: int, content_type: ContentType) -> int:
         """Cuenta contenido disponible para una palabra según el tipo"""
         if content_type == ContentType.EXAMPLE:
-            # Examples disponibles con la palabra
+            # Chequear si la palabra ya está LEARNED
+            word_stats = self.db.exec(
+                select(WordStatistics)
+                .where(
+                    WordStatistics.word_id == word_id,
+                    WordStatistics.type == ContentType.EXAMPLE
+                )
+            ).first()
+
+            if word_stats and word_stats.learning_state == LearningState.LEARNED:
+                return 0
+
+            # Contar ejemplos que enseñan esta palabra
             count = self.db.exec(
                 select(func.count(Example.id))
-                .join(
-                    WordStatistics,
-                    (WordStatistics.word_id == word_id)
-                    & (WordStatistics.type == ContentType.EXAMPLE),
-                )
-                .where(
-                    WordStatistics.learning_state != LearningState.LEARNED,
-                )
+                .where(Example.word_id == word_id)
             ).first() or 0
             return count
 
@@ -53,17 +58,22 @@ class UnifiedContentRepository:
     ) -> Optional[int]:
         """Obtiene el próximo contenido disponible para una palabra según el tipo"""
         if content_type == ContentType.EXAMPLE:
-            # Buscar example que contenga la palabra
+            # Chequear si la palabra ya está LEARNED
+            word_stats = self.db.exec(
+                select(WordStatistics)
+                .where(
+                    WordStatistics.word_id == word_id,
+                    WordStatistics.type == ContentType.EXAMPLE
+                )
+            ).first()
+
+            if word_stats and word_stats.learning_state == LearningState.LEARNED:
+                return None
+
+            # Buscar example que enseñe la palabra
             example_id = self.db.exec(
                 select(Example.id)
-                .join(
-                    WordStatistics,
-                    (WordStatistics.word_id == word_id)
-                    & (WordStatistics.type == ContentType.EXAMPLE),
-                )
-                .where(
-                    WordStatistics.learning_state != LearningState.LEARNED,
-                )
+                .where(Example.word_id == word_id)
                 .order_by(Example.created_at.asc())
                 .limit(1)
             ).first()
@@ -78,8 +88,11 @@ class UnifiedContentRepository:
     def get_word_id(self, content_id: int, content_type: ContentType) -> Optional[int]:
         """Obtiene el word_id de un contenido según el tipo"""
         if content_type == ContentType.EXAMPLE:
-            # Obtener primera palabra target del example
-            return self.example_repo.get_first_target_word_id(content_id)
+            # Obtener palabra target del example
+            example = self.db.get(Example, content_id)
+            if example:
+                return example.word_id
+            return None
 
         elif content_type == ContentType.BEST_OPTIONS:
             # Delegar a BestOptionRepository
@@ -89,21 +102,18 @@ class UnifiedContentRepository:
 
     def get_target_word_ids(self, content_id: int, content_type: ContentType) -> list:
         """Obtiene todas las palabras target de un contenido"""
-        from features.words.models import ExampleWord
         from features.best_options.models import BestOption
 
         if content_type == ContentType.EXAMPLE:
-            # Obtener todas las palabras del example
-            example_words = self.db.exec(
-                select(ExampleWord).where(ExampleWord.example_id == content_id)
-            ).all()
-            return [ew.word_id for ew in example_words]
+            # Obtener la palabra del example (solo una)
+            example = self.db.get(Example, content_id)
+            if example and example.word_id:
+                return [example.word_id]
+            return []
 
         elif content_type == ContentType.BEST_OPTIONS:
             # Para best_option, solo la palabra asociada
-            best_option = self.db.exec(
-                select(BestOption).where(BestOption.id == content_id)
-            ).first()
+            best_option = self.db.get(BestOption, content_id)
             return [best_option.word_id] if best_option else []
 
         return []

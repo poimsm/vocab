@@ -9,5 +9,6 @@ class CentralStateEnum(str, Enum):
 class CentralQueueStatus(str, Enum):
     PENDING = "PENDING"
     DISPATCHED = "DISPATCHED"
+    COMPLETED = "COMPLETED"
     DISCARDED = "DISCARDED"
     FAILED = "FAILED"

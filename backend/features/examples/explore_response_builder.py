@@ -31,7 +31,12 @@ class ExploreResponseBuilder:
         Returns:
             Lista de ejemplos formateados con segmentación de texto
         """
+        logger.debug(f"[ExploreResponseBuilder] Building examples response for user {user_id}")
+        logger.debug(f"[ExploreResponseBuilder] buffer_delivery_ids: {buffer_delivery_ids}")
+        logger.debug(f"[ExploreResponseBuilder] delivery_items_map keys: {delivery_items_map.keys()}")
+
         if not buffer_delivery_ids:
+            logger.debug(f"[ExploreResponseBuilder] No buffer_delivery_ids provided, returning empty list")
             return []
 
         # Obtener ejemplos
@@ -40,9 +45,13 @@ class ExploreResponseBuilder:
             for did in buffer_delivery_ids
             if did in delivery_items_map
         ]
+        logger.debug(f"[ExploreResponseBuilder] example_ids extracted: {example_ids}")
+
         examples = self.db.exec(
             select(Example).where(Example.id.in_(example_ids))
         ).all()
+
+        logger.debug(f"[ExploreResponseBuilder] Retrieved {len(examples) if examples else 0} examples from database")
 
         examples_response = []
 
@@ -74,18 +83,32 @@ class ExploreResponseBuilder:
             )
             extracted_words = [w for w in extracted_words if w not in target_word_strings]
 
-            examples_response.append(
-                {
-                    "delivery_id": delivery_id,
-                    "queue_item_id": delivery_item.learning_path_queue_id,
-                    "example_id": ex.id,
-                    "text": text_segments,
-                    "extracted_words": extracted_words,
-                    "is_favorite": ex.is_favorite,
-                    "is_marked": ex.is_marked,
-                }
+            example_response = {
+                "delivery_id": delivery_id,
+                "queue_item_id": delivery_item.learning_path_queue_id,
+                "example_id": ex.id,
+                "text": text_segments,
+                "extracted_words": extracted_words,
+                "is_favorite": ex.is_favorite,
+                "is_marked": ex.is_marked,
+                "source_type": delivery_item.source_type.value,
+                "word_id": delivery_item.word_id,
+            }
+
+            logger.info(
+                f"[ExploreResponseBuilder] Built example for delivery_id={delivery_id}: "
+                f"source_type={delivery_item.source_type.value}, "
+                f"queue_item_id={delivery_item.learning_path_queue_id}, "
+                f"word_id={delivery_item.word_id}, "
+                f"content_id={delivery_item.content_id}"
             )
 
+            examples_response.append(example_response)
+
+        logger.info(
+            f"[ExploreResponseBuilder] Built {len(examples_response)} examples for response. "
+            f"Queue IDs: {[ex.get('queue_item_id') for ex in examples_response]}"
+        )
         return examples_response
 
     def _load_common_words(self):

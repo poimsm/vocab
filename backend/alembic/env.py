@@ -8,7 +8,7 @@ import os
 
 # Import all models to register them with SQLAlchemy/SQLModel
 from auth.models import User, UserProfile
-from features.words.models import Word, WordLevel, WordStatistics, ExampleWord
+from features.words.models import Word, WordLevel, WordStatistics
 from features.examples.models import Example, ExampleType, ExploreConfiguration
 from features.best_options.models import BestOption
 from features.quick_write.models import QuickWrite

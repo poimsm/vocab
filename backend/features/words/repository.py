@@ -12,7 +12,7 @@ from utils.paginator import paginate_query
 
 from core.enums import ContentType
 from features.examples.models import ExampleType, Example
-from features.words.models import Word, WordStatistics, ExampleWord, WordLevel
+from features.words.models import Word, WordStatistics, WordLevel
 from core.learning_path.models import LearningState
 
 
@@ -202,28 +202,24 @@ class WordRepository:
     def get_explore_examples_count(self, word_id: int) -> int:
         """Cuenta ejemplos EXPLORE para una palabra"""
         return self.session.exec(
-            select(func.count(ExampleWord.example_id))
-            .select_from(ExampleWord)
-            .join(Example, ExampleWord.example_id == Example.id)
+            select(func.count(Example.id))
             .where(
-                (ExampleWord.word_id == word_id)
-                & (Example.type == ExampleType.EXPLORE)
+                Example.word_id == word_id,
+                Example.type == ExampleType.EXPLORE
             )
         ).first() or 0
 
     def get_initial_examples(self, word_id: int) -> List[str]:
         """Obtiene textos de ejemplos INITIAL para una palabra"""
-        example_words = self.session.exec(
-            select(ExampleWord)
-            .where(ExampleWord.word_id == word_id)
-            .options(joinedload(ExampleWord.example))
+        examples = self.session.exec(
+            select(Example)
+            .where(
+                Example.word_id == word_id,
+                Example.type == ExampleType.INITIAL
+            )
         ).all()
 
-        return [
-            ew.example.text
-            for ew in example_words
-            if ew.example.type == ExampleType.INITIAL
-        ]
+        return [example.text for example in examples]
 
     def is_learned(self, word_id: int, content_type: ContentType) -> bool:
         """Verifica si una palabra está aprendida para un tipo de contenido"""

@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlmodel import Session, select
 from db import get_db
 from auth.models import User
-from features.words.models import Word, WordStatistics, ExampleWord
+from features.words.models import Word, WordStatistics
 from features.examples.models import Example, ExampleType
 from core.learning_path.models import LearningState
 from core.enums import ContentType
@@ -80,21 +80,16 @@ def assign_default_words(user_id: int, db: Session):
                 # First 3 are INITIAL, rest are EXPLORE
                 example_type = ExampleType.INITIAL if idx < 3 else ExampleType.EXPLORE
 
+                # Get text_form
+                text_form = approximate_text_form(example_text, word.main)
+
                 example = Example(
                     type=example_type,
-                    text=example_text
+                    text=example_text,
+                    text_form=text_form,
+                    word_id=word.id
                 )
                 db.add(example)
-                db.flush()  # Flush to get the example ID
-
-                # Create ExampleWord relationship with text_form
-                text_form = approximate_text_form(example_text, word.main)
-                example_word = ExampleWord(
-                    example_id=example.id,
-                    word_id=word.id,
-                    text_form=text_form
-                )
-                db.add(example_word)
 
         db.commit()
         logger.info(f"Default words and examples assigned to user {user_id}")

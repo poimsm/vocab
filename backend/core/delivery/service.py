@@ -1,26 +1,19 @@
-# src/core/delivery/services.py
+# src/core/delivery/service.py
+import time
 from typing import Optional, Dict, Any, List
 from sqlmodel import Session
 from core.delivery.repository import DeliveryRepository
-from core.delivery.enums import DeliveryStatus
+from core.delivery.wheel_manager import WheelManager
 from core.enums import ContentSourceType, ContentType
-from core.event_bus import publish_event_background, publish_event
+from core.event_bus import publish_event_background
 from logging_client import logger
-from core.boost.repository import BoostRepository
 from core.learning_path.services import LearningPathService
 
 class DeliveryService:
     def __init__(self, session: Session):
         self.session = session
         self.repo = DeliveryRepository(session)
-
-    def complete_content(self, buffer_id: int) -> bool:
-        """
-        Invocado cuando el usuario resuelve o completa el contenido en la UI.
-        AQUÍ es donde se confirma que el ítem fue consumido.
-        """
-        updated = self.repo.mark_as_consumed(buffer_id)
-        return updated is not None
+        self.wheel_manager = WheelManager(session)
 
     def register_generated_content(
         self,
@@ -58,13 +51,13 @@ class DeliveryService:
             f"content_type={content_type_value}, source_type={source_type_value})"
         )
 
-    def discard_word_content(self, user_id: int, word_id: int) -> None:
+    def discard_word_content(self, user_id: int, word_id: int, boosted_word_ids: Optional[List[int]] = None) -> None:
         """
-        Publica el evento global 'event.word.unboosted' para descartar
-        todo el contenido PENDING de una palabra específica del usuario.
+        Descarta todo el contenido PENDING de una palabra específica.
         Usado cuando se des-boostea una palabra.
         """
-        publish_event('event.word.unboosted', user_id=user_id, word_id=word_id)
+        # Publicar evento que triggeará removal de rueda y descarte de contenido
+        publish_event_background('word.unboosted', user_id=user_id, word_id=word_id)
 
     def get_mixed_content(
         self,
@@ -73,13 +66,16 @@ class DeliveryService:
         limit: int = 10,
     ) -> Dict[str, Any]:
         """
-        Obtiene contenido con round robin entre palabras boosteadas y contenido normal.
-        Retorna status + contenido.
+        Obtiene contenido con round robin usando una rueda circular persistente con state management.
+        La rueda es la fuente de verdad, actualizada por eventos de boost/unboost.
 
         Estrategia:
-        - Obtiene palabras boosteadas del usuario
-        - Hace round robin: word_A, word_B, word_C, ..., normal, word_A, word_B, ...
-        - Si se agota contenido de una palabra, la reemplaza con la siguiente en la rotación
+        - Inicializa todos los nodos de la rueda a INITIAL
+        - Usa aguja para saber por dónde va la rotación
+        - Alterna: palabra_boosteada, learning_path, palabra_boosteada, learning_path, ...
+        - Para cada nodo:
+          - Si tiene contenido: marca como READY, lo consume
+          - Si NO tiene contenido: marca como GENERATING, publica evento, CONTINÚA al siguiente
         - Retorna items en orden LIFO (último en llegar primero)
 
         Status:
@@ -95,90 +91,288 @@ class DeliveryService:
         Returns:
             Dict con status + content list
         """
-        content_type_enum = content_type
-        boost_repo = BoostRepository(self.session)
-        learning_path_service = LearningPathService(self.session)
+        from core.delivery.enums import RoundRobinWheelNodeStatus
+        from core.enums import ContentSourceType
+        from core.learning_path.enums import LearningPathQueueStatus
 
-        # Obtener palabras boosteadas activas
-        boosted_words = boost_repo.get_active_boosts(user_id)
-        boosted_word_ids = [w.id for w in boosted_words]
+        from features.content_repository import UnifiedContentRepository
 
+        content_repo = UnifiedContentRepository(self.session)
+        learning_path_service = LearningPathService(self.session, content_repo)
         items_collected = []
-        exhausted_words = set()
+        consumed_item_ids = set()
+        generating_node_ids = set()  # Nodos que quedaron en GENERATING
 
-        # ========== PASO 1: Intentar obtener contenido boosteado ==========
-        if boosted_word_ids:
+        # ========== PASO 1: Inicializar estado de la rueda ==========
+        self.wheel_manager.initialize_wheel_status(user_id, content_type)
+
+        # ========== PASO 2: Consumir directamente desde la rueda circular ==========
+        needle_and_next = self.wheel_manager.get_current_needle_and_next(user_id, content_type)
+
+        if needle_and_next:
+            current_node, next_node = needle_and_next
             logger.debug(
-                f"[DeliveryService] User {user_id} has {len(boosted_word_ids)} boosted words. "
-                f"Attempting round robin collection..."
+                f"[DeliveryService] Rueda circular encontrada para user {user_id}: "
+                f"current_node={current_node.word_id if current_node.word_id else 'LEARNING_SLOT'}"
             )
 
-            boost_idx = 0
             iteration_count = 0
-            max_iterations = 15
+            max_iterations = 100
+            exhausted_words = set()  # Palabras sin contenido (evitar duplicar eventos)
+            total_nodes = len(self.wheel_manager.get_wheel_for_user(user_id, content_type))
+            exhausted_node_count = 0  # Contador de nodos EXHAUSTED
+            had_generating_node = False  # Track si hay nodos GENERATING en esta iteración
 
-            while len(items_collected) < limit and boosted_word_ids:
+            while len(items_collected) < limit:
                 iteration_count += 1
+                had_generating_node = False  # Reset para esta iteración
+
                 if iteration_count > max_iterations:
                     logger.warning(
-                        f"[DeliveryService] Max iterations ({max_iterations}) exceeded in boosted content collection "
+                        f"[DeliveryService] Max iterations ({max_iterations}) exceeded consuming from wheel "
                         f"for user {user_id}. Collected {len(items_collected)} items."
                     )
                     break
 
-                # Ciclo round robin: word_A, word_B, word_C, ..., normal, word_A, ...
-                if boost_idx < len(boosted_word_ids):
-                    # Turno de palabra boosteada
-                    word_id = boosted_word_ids[boost_idx]
-                    item = self.repo.get_pending_content(
-                        user_id, limit=1, word_id=word_id, content_type=content_type_enum
+                if not current_node:
+                    break
+
+                # Skipear nodos EXHAUSTED
+                if current_node.status == RoundRobinWheelNodeStatus.EXHAUSTED:
+                    logger.debug(
+                        f"[DeliveryService] Skipping EXHAUSTED node {current_node.id} "
+                        f"for user {user_id}"
+                    )
+                    exhausted_node_count += 1
+                    # Si todos los nodos están EXHAUSTED, salir
+                    if exhausted_node_count >= total_nodes:
+                        logger.info(
+                            f"[DeliveryService] All {total_nodes} nodes are EXHAUSTED for user {user_id}. "
+                            f"Breaking wheel traversal."
+                        )
+                        break
+                    # Avanzar al siguiente nodo
+                    self.wheel_manager.advance_needle(user_id, content_type)
+                    needle_and_next = self.wheel_manager.get_current_needle_and_next(user_id, content_type)
+                    if needle_and_next:
+                        current_node, next_node = needle_and_next
+                    else:
+                        break
+                    continue
+
+                # Reset exhausted_node_count cuando encontramos un nodo que NO es EXHAUSTED
+                exhausted_node_count = 0
+
+                # Consumir de la posición actual de la rueda
+                if current_node.is_learning_slot:
+                    # Nodo LEARNING_SLOT: primero verificar PENDING en delivery_buffer
+                    logger.debug(
+                        f"[DeliveryService] LEARNING_SLOT node {current_node.id}: "
+                        f"checking for pending items first..."
                     )
 
-                    if item:
-                        items_collected.extend(item)
+                    pending_learning_items = self.repo.get_pending_content(
+                        user_id=user_id,
+                        limit=1,
+                        content_type=content_type,
+                        source_type=ContentSourceType.LEARNING_PATH
+                    )
+
+                    if pending_learning_items:
+                        # ✅ Hay item PENDING generado anteriormente
+                        delivery_item = pending_learning_items[0]
+                        if delivery_item.id not in consumed_item_ids:
+                            items_collected.append(delivery_item)
+                            consumed_item_ids.add(delivery_item.id)
+
+                            # Marcar item como DISPATCHED inmediatamente para no reiterarlo
+                            self.repo.mark_multiple_as_dispatched([delivery_item.id])
+
+                            # Marcar nodo como READY
+                            self.wheel_manager.update_node_status(
+                                current_node.id, RoundRobinWheelNodeStatus.READY
+                            )
+
+                            logger.debug(
+                                f"[DeliveryService] Consumed pending learning path content (id={delivery_item.id}) "
+                                f"from delivery_buffer for user {user_id}. Node marked as READY and DISPATCHED."
+                            )
                     else:
-                        # Si se agota contenido de esta palabra, publicar evento para regeneración (una sola vez)
-                        if content_type and word_id not in exhausted_words:
-                            publish_event(
-                                'event.boost.content_exhausted',
+                        # No hay PENDING, obtener contenido prioritizado nuevo
+                        logger.debug(
+                            f"[DeliveryService] No pending learning items. "
+                            f"Fetching prioritized content from learning path service..."
+                        )
+
+                        queue_item = learning_path_service.get_prioritized_content(
+                            user_id=user_id,
+                            content_type=content_type,
+                        )
+
+                        if queue_item:
+                            try:
+                                # Transferir a DeliveryBuffer on-demand
+                                delivery_item = self.repo.push_to_buffer(
+                                    user_id=user_id,
+                                    content_id=queue_item.content_id,
+                                    source_type=ContentSourceType.LEARNING_PATH,
+                                    content_type=queue_item.content_type,
+                                    word_id=queue_item.word_id,
+                                    learning_path_queue_id=queue_item.id,
+                                )
+
+                                if delivery_item and delivery_item.id not in consumed_item_ids:
+                                    items_collected.append(delivery_item)
+                                    consumed_item_ids.add(delivery_item.id)
+
+                                    # Marcar como TRANSFERRED
+                                    queue_item.status = LearningPathQueueStatus.TRANSFERRED
+                                    self.session.add(queue_item)
+                                    self.session.commit()
+
+                                    # Marcar item como DISPATCHED inmediatamente para no reiterarlo
+                                    self.repo.mark_multiple_as_dispatched([delivery_item.id])
+
+                                    # Marcar nodo como READY
+                                    self.wheel_manager.update_node_status(
+                                        current_node.id, RoundRobinWheelNodeStatus.READY
+                                    )
+
+                                    logger.debug(
+                                        f"[DeliveryService] Consumed learning path content (id={delivery_item.id}, "
+                                        f"queue_item={queue_item.id}) for user {user_id}. Node marked as READY and DISPATCHED."
+                                    )
+                            except Exception as e:
+                                logger.error(
+                                    f"[DeliveryService] Error consuming learning path content: {e}",
+                                    exc_info=True
+                                )
+                        else:
+                            # No hay contenido (ni PENDING ni nuevo)
+                            # Verificar si hay generación en progreso
+                            is_generating = learning_path_service.is_content_generating(user_id, content_type)
+
+                            if is_generating:
+                                # Generación en progreso: marcar como GENERATING
+                                self.wheel_manager.update_node_status(
+                                    current_node.id, RoundRobinWheelNodeStatus.GENERATING
+                                )
+                                generating_node_ids.add(current_node.id)
+                                had_generating_node = True
+                                logger.info(
+                                    f"[DeliveryService] Learning path content is GENERATING for user {user_id}. "
+                                    f"Node {current_node.id} marked as GENERATING."
+                                )
+                            else:
+                                # No hay generación en progreso: marcar como EXHAUSTED (definitivo)
+                                self.wheel_manager.update_node_status(
+                                    current_node.id, RoundRobinWheelNodeStatus.EXHAUSTED
+                                )
+                                logger.warning(
+                                    f"[DeliveryService] Learning path content exhausted (no pending, no prioritized, "
+                                    f"no generation in progress). Node {current_node.id} marked as EXHAUSTED."
+                                )
+                            # CONTINUAR al siguiente nodo, no break
+
+                else:
+                    # Nodo de palabra boosteada
+                    word_id = current_node.word_id
+                    logger.debug(
+                        f"[DeliveryService] Checking boost word node {current_node.id}: "
+                        f"word_id={word_id}, status={current_node.status.value}"
+                    )
+
+                    items = self.repo.get_pending_content(
+                        user_id,
+                        limit=1,
+                        word_id=word_id,
+                        content_type=content_type,
+                        source_type=ContentSourceType.BOOST
+                    )
+
+                    logger.debug(
+                        f"[DeliveryService] Query for boost word {word_id}: "
+                        f"found {len(items)} pending items"
+                    )
+
+                    # Filtrar items ya consumidos en esta request
+                    found_item = False
+                    for item in items:
+                        if item.id not in consumed_item_ids:
+                            items_collected.append(item)
+                            consumed_item_ids.add(item.id)
+                            found_item = True
+
+                            # Marcar item como DISPATCHED inmediatamente para no reiterarlo
+                            self.repo.mark_multiple_as_dispatched([item.id])
+
+                            # Marcar nodo como READY
+                            self.wheel_manager.update_node_status(
+                                current_node.id, RoundRobinWheelNodeStatus.READY
+                            )
+
+                            logger.debug(
+                                f"[DeliveryService] Consumed boost content (id={item.id}, word_id={word_id}) "
+                                f"for user {user_id}. Node marked as READY and DISPATCHED."
+                            )
+
+                    if not found_item:
+                        # No hay contenido
+                        if word_id not in exhausted_words:
+                            # Primera vez sin contenido: publicar evento y marcar como GENERATING
+                            self.wheel_manager.update_node_status(
+                                current_node.id, RoundRobinWheelNodeStatus.GENERATING
+                            )
+                            generating_node_ids.add(current_node.id)
+                            had_generating_node = True
+
+                            publish_event_background(
+                                'boost.content.exhausted',
                                 user_id=user_id,
                                 word_id=word_id,
                                 content_type=content_type.value,
                             )
-                            exhausted_words.add(word_id)
                             logger.info(
-                                f"[DeliveryService] Boost content exhausted for word {word_id}: {content_type.value}"
+                                f"[DeliveryService] Boost content exhausted for word {word_id}. "
+                                f"Node marked as GENERATING. Event published."
                             )
-
-                        # Remover palabra agotada de la rotación
-                        boosted_word_ids.pop(boost_idx)
-                        if not boosted_word_ids:
-                            break
-
-                        # Ajustar índice
-                        if boost_idx >= len(boosted_word_ids):
-                            boost_idx = 0
+                            exhausted_words.add(word_id)
                         else:
-                            boost_idx += 1
+                            # Boost word nodes NUNCA se marcan como EXHAUSTED
+                            # Siempre pueden generar más contenido (boost es infinito)
+                            # Mantener GENERATING hasta que haya contenido disponible
+                            self.wheel_manager.update_node_status(
+                                current_node.id, RoundRobinWheelNodeStatus.GENERATING
+                            )
+                            generating_node_ids.add(current_node.id)
+                            had_generating_node = True
+                            logger.debug(
+                                f"[DeliveryService] Boost word {word_id} still has no content. "
+                                f"Node remains GENERATING (boost can generate indefinitely)."
+                            )
+                        # CONTINUAR al siguiente nodo, no break
+
+                # Avanzar aguja al siguiente nodo
+                self.wheel_manager.advance_needle(user_id, content_type)
+                needle_and_next = self.wheel_manager.get_current_needle_and_next(user_id, content_type)
+                if needle_and_next:
+                    current_node, next_node = needle_and_next
                 else:
-                    # Turno de contenido normal (learning path)
-                    if not boosted_word_ids:
-                        break
+                    break
 
-                    item = self.repo.get_pending_content(
-                        user_id, limit=1, word_id=None, content_type=content_type_enum
+                # Si hay nodos GENERATING, hacer sleep para dar tiempo a la generación
+                if had_generating_node:
+                    logger.debug(
+                        f"[DeliveryService] Found GENERATING node, sleeping 0.2s to allow content generation "
+                        f"for user {user_id}"
                     )
+                    time.sleep(0.2)
 
-                    if item:
-                        items_collected.extend(item)
-
-                    # Resetear índice para nuevo ciclo
-                    boost_idx = 0
-
-        # ========== PASO 2: Si hay contenido boosteado, retornarlo ==========
+        # ========== PASO 3: Si hay contenido (boosted + learning), retornarlo ==========
         if items_collected:
             logger.info(
-                f"[DeliveryService] Returning {len(items_collected)} boosted content items for user {user_id}"
+                f"[DeliveryService] Returning {len(items_collected)} mixed content items "
+                f"(round-robin boosted + learning path) for user {user_id}"
             )
             return {
                 "status": "ok",
@@ -196,113 +390,40 @@ class DeliveryService:
                 ],
             }
 
-        # ========== PASO 3: No hay contenido boosteado, obtener contenido priorizando ==========
-        logger.debug(
-            f"[DeliveryService] No boosted content for user {user_id}. "
-            f"Getting prioritized learning path content..."
-        )
-
-        # 3a. Obtener contenido priorizando usando priority engine
-        prioritized_items = learning_path_service.get_prioritized_content(
-            user_id=user_id,
-            content_type=content_type_enum,
-            limit=limit,
-        )
-
-        if prioritized_items:
-            # 3a.1: Transferir items a DeliveryBuffer (bajo demanda)
-            from core.enums import ContentSourceType
-            from core.learning_path.enums import LearningPathQueueStatus
-            from core.learning_path.models import LearningPathQueue
-
-            delivery_items = []
-            for queue_item in prioritized_items:
-                try:
-                    delivery_item = self.repo.push_to_buffer(
-                        user_id=user_id,
-                        content_id=queue_item.content_id,
-                        source_type=ContentSourceType.LEARNING_PATH,
-                        content_type=queue_item.content_type,
-                        word_id=None,
-                        learning_path_queue_id=queue_item.id,
-                    )
-
-                    if delivery_item:
-                        delivery_items.append(delivery_item)
-
-                        # Mark queue item as TRANSFERRED to avoid re-transfer
-                        queue_item.status = LearningPathQueueStatus.TRANSFERRED
-                        self.session.add(queue_item)
-                        self.session.commit()
-
-                        logger.debug(
-                            f"[DeliveryService] Transferred queue_item {queue_item.id} to DeliveryBuffer "
-                            f"for user {user_id} (status now TRANSFERRED)"
-                        )
-                except Exception as e:
-                    logger.error(
-                        f"[DeliveryService] Error transferring queue_item {queue_item.id}: {e}",
-                        exc_info=True
-                    )
-                    continue
-
-            if delivery_items:
-                logger.info(
-                    f"[DeliveryService] Returning {len(delivery_items)} prioritized content items "
-                    f"for user {user_id}"
-                )
-                return {
-                    "status": "ok",
-                    "content": [
-                        {
-                            'id': item.id,
-                            'content_id': item.content_id,
-                            'queue_item_id': item.learning_path_queue_id,
-                            'word_id': item.word_id,
-                            'content_type': item.content_type.value,
-                            'source_type': item.source_type.value,
-                            'status': item.status.value,
-                        }
-                        for item in delivery_items
-                    ],
-                }
-
-        # 3b. No hay contenido: chequear si hay generación en progreso
-        if learning_path_service.is_content_generating(user_id, content_type_enum):
+        # ========== PASO 4: Si hay nodos en GENERATING, retornar "generating" ==========
+        if generating_node_ids:
             logger.info(
-                f"[DeliveryService] Learning path content is currently generating for user {user_id}"
+                f"[DeliveryService] {len(generating_node_ids)} wheel nodes are GENERATING for user {user_id}"
             )
             return {
                 "status": "generating",
                 "content": [],
             }
 
-        # 3c. Chequear si hay palabras disponibles para generar
-        has_available_words = learning_path_service.has_available_words_for_generation(
-            user_id, content_type_enum
+        # ========== PASO 5: No hay contenido - determinar estado ==========
+        # El while ya verificó PENDING e intentó obtener de LearningPathQueue
+        # Si llegamos aquí, no hay contenido disponible
+
+        logger.info(
+            f"[DeliveryService] No content available after wheel traversal for user {user_id}"
         )
 
-        if not has_available_words:
-            logger.warning(
-                f"[DeliveryService] No available words for user {user_id} to generate content"
+        # Verificar si hay generación en progreso
+        if learning_path_service.is_content_generating(user_id, content_type):
+            logger.info(
+                f"[DeliveryService] Content is currently generating for user {user_id}"
             )
             return {
-                "status": "no_words",
+                "status": "generating",
                 "content": [],
             }
 
-        # 3d. Hay palabras disponibles pero no se está generando: triggear generación
-        logger.info(
-            f"[DeliveryService] No learning path content in buffer but words available for user {user_id}. "
-            f"Triggering generation..."
-        )
-        publish_event_background(
-            'content.exhausted',
-            user_id=user_id,
-            content_type=content_type_enum.value,
+        # Si no hay generación en progreso y no hay contenido, es "no_words"
+        logger.warning(
+            f"[DeliveryService] No content available and no generation in progress for user {user_id}"
         )
         return {
-            "status": "generating",
+            "status": "no_words",
             "content": [],
         }
 

@@ -538,6 +538,7 @@ def toggle_boost(
     - Aumenta la prioridad en el PriorityEngine (40% vs 20%)
     - Reduce penalizaciones por exposición reciente
     - Genera 1-2 ejemplos adicionales automáticamente
+    - Agrega la palabra a la rueda circular de distribución
     """
     logger.info(f"[toggle_boost] User {current_user.id}: Toggling boost for word {word_id}")
 
@@ -549,17 +550,16 @@ def toggle_boost(
         raise HTTPException(status_code=404, detail="Word not found")
 
     was_boosted = word.is_boosted
-    updated_word = word_repo.toggle_boost(word_id)
-    logger.debug(f"[toggle_boost] Word {word_id} boost toggled to {updated_word.is_boosted}")
+    enable_boost = not was_boosted  # Toggle the boost state
 
-    # Si se activó el boost, generar ejemplos adicionales de forma asíncrona
-    if updated_word.is_boosted and not was_boosted:
-        from celery_app import celery_app
-        celery_app.send_task(
-            'tasks.words.generate_boost_examples',
-            args=[current_user.id, word_id]
-        )
-        logger.info(f"[toggle_boost] Scheduled additional examples for boosted word {word_id}")
+    # Usar BoostService para publicar eventos correctamente
+    from core.boost.services import BoostService
+    boost_service = BoostService(db)
+    result = boost_service.toggle_boost(current_user.id, word_id, enable_boost)
+    logger.debug(f"[toggle_boost] Word {word_id} boost toggled: {result['status']}")
+
+    # Actualizar word object para obtener el estado actualizado
+    updated_word = word_repo.get(db, word_id)
 
     # Log de actividad
     UserActivityService.log_button_click(

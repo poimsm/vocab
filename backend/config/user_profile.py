@@ -239,7 +239,8 @@ class UserProfileManager:
         Returns:
             Updated profile
         """
-        from features.words.models import Word, ExampleWord
+        from features.words.models import Word
+        from features.examples.models import Example
         from features.best_options.models import BestOption
         from features.collocations.models import Collocation
         from features.quick_write.models import QuickWrite
@@ -254,8 +255,8 @@ class UserProfileManager:
             ).one() or 0
 
             total_examples = session.exec(
-                select(func.count(ExampleWord.example_id)).join(
-                    Word, Word.id == ExampleWord.word_id
+                select(func.count(Example.id)).join(
+                    Word, Word.id == Example.word_id
                 ).where(Word.user_id == user_id)
             ).one() or 0
 

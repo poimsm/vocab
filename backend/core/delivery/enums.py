@@ -2,8 +2,15 @@ import enum
 
 
 class DeliveryStatus(str, enum.Enum):
-    """Estados de un ítem en el buffer de delivery."""
-    PENDING = "pending"      # Esperando ser mostrado al usuario
-    DISPATCHED = "dispatching"   # Ya fue enviado/entregado al buffer del usuario
-    DISCARDED = "discarded"  # Descartado (ej: palabra des-boosteada)
+    """Estados del contenido en DeliveryBuffer."""
+    PENDING = "pending"           # Esperando ser despachado
+    DISPATCHED = "dispatched"     # Enviado al usuario (mostrado en explore)
+    DISCARDED = "discarded"       # Descartado (palabra desbosteada, etc.)
 
+
+class RoundRobinWheelNodeStatus(str, enum.Enum):
+    """Estados de nodos en el round-robin wheel."""
+    INITIAL = "initial"           # Inicializado, no procesado aún
+    GENERATING = "generating"     # Generando contenido
+    READY = "ready"               # Contenido listo para colectar
+    EXHAUSTED = "exhausted"       # Se agotó el contenido (para control)

@@ -249,13 +249,11 @@ def generate_examples_for_single_word(
     if db is not None:
         from sqlmodel import select
         from features.examples.models import Example
-        from features.words.models import ExampleWord
 
         try:
             existing_examples = db.exec(
                 select(Example.text)
-                .join(ExampleWord, Example.id == ExampleWord.example_id)
-                .where(ExampleWord.word_id == word.id)
+                .where(Example.word_id == word.id)
                 .limit(5)
             ).all()
             logger.debug(f"[AI] Found {len(existing_examples)} existing examples for word {word.id}")
