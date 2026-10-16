@@ -70,9 +70,63 @@ const loadingMore = ref(false)
 const showAddDesktop = ref(false)
 const showAddMobile = ref(false)
 const newWordText = ref('')
+const addMode = ref<'simple' | 'context' | null>(null)
 const adding = ref(false)
 const addError = ref<string | null>(null)
 const addSuccess = ref<string | null>(null)
+
+// ─── Command System State ───
+interface CommandField {
+  name: string
+  label: string
+  placeholder: string
+}
+
+interface Command {
+  id: string
+  name: string
+  description: string
+  icon: string
+  fields: CommandField[]
+  hint: string
+}
+
+const commands: Command[] = [
+  {
+    id: 'target',
+    name: 'Understand Word in Context',
+    description: 'Explain a word using your sentence',
+    icon: '🎯',
+    fields: [
+      { name: 'sentence', label: 'sentence', placeholder: 'He hit the ball with the baseball bat' },
+      { name: 'word', label: 'word to explain', placeholder: 'bat' }
+    ],
+    hint: `Understand Word in Context - Explains a word based on how it's used in YOUR sentence
+This is the most powerful tool: instead of generic definitions, you get meaning specific to your context
+
+How it works:
+1. Paste a sentence or phrase
+2. Select the word you want to understand
+3. System explains that word in relation to your sentence
+
+Example:
+Sentence: "I need to book a flight"
+Target word: "book"
+Result: Explains the VERB meaning (to reserve), not the noun
+
+Why this works:
+✓ Learns words in real context (how native speakers use them)
+✓ Avoids confusion from multiple meanings
+✓ Helps with phrasal verbs, collocations, and idioms naturally
+✓ Perfect for words from articles, movies, or conversations you're studying`
+  },
+]
+
+const showCommandMenu = ref(false)
+const selectedCommand = ref<Command | null>(null)
+const filteredCommands = ref<Command[]>(commands)
+const commandFieldValues = ref<Record<string, string>>({})
+const showCommandHint = ref(false)
 
 // ─── Explanation State ───
 const showExplanation = ref(false)
@@ -221,7 +275,7 @@ const data = response.data
     }
 
     // Llenar el Set con palabras boosteadas
-    newItems.forEach(item => {
+    newItems.forEach((item: any) => {
       if (item.is_boosted) {
         boostedWords.value.add(item.id)
       }
@@ -270,6 +324,7 @@ const data = response.data
       category: data.context || data.type || 'General',
       frequency: data.frequency,
       isFavorite: data.is_favorite,
+      is_boosted: data.is_boosted,
       isLearned: data.is_learned,
       addedAt: data.created_at ? data.created_at.split('T')[0] : '—',
       totalExamples: data.total_examples,
@@ -312,7 +367,18 @@ async function toggleFavoriteApi(word: Word) {
 }
 
 async function addWordApi() {
-  const text = newWordText.value.trim()
+  let text = ''
+
+  // Build text based on mode
+  if (addMode.value === 'simple') {
+    text = newWordText.value.trim()
+  } else if (addMode.value === 'context' && selectedCommand.value) {
+    // For context mode, build formatted text: "sentence <- word"
+    const sentence = commandFieldValues.value['sentence'] || ''
+    const word = commandFieldValues.value['word'] || ''
+    text = `${sentence} <- ${word}`.trim()
+  }
+
   if (!text) return
   adding.value = true
   addError.value = null
@@ -339,6 +405,7 @@ async function addWordApi() {
         category: existingWord.context || existingWord.type,
         frequency: existingWord.frequency || 'common',
         isFavorite: existingWord.is_favorite,
+        is_boosted: existingWord.is_boosted || false,
         isLearned: existingWord.is_learned,
         addedAt: new Date(existingWord.created_at).toISOString().split('T')[0] ?? '',
         totalExamples: existingWord.total_examples || 0,
@@ -372,6 +439,7 @@ async function addWordApi() {
         category: 'Pending',
         frequency: 'common',
         isFavorite: false,
+        is_boosted: false,
         isLearned: false,
         addedAt: new Date().toISOString().split('T')[0] ?? '',
         totalExamples: 0,
@@ -664,6 +732,9 @@ function closeAdd() {
   showAddDesktop.value = false
   showAddMobile.value = false
   newWordText.value = ''
+  addMode.value = null
+  selectedCommand.value = null
+  commandFieldValues.value = {}
   addError.value = null
   addSuccess.value = null
 }
@@ -676,6 +747,92 @@ function addWord() {
 function handleAddKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter') addWord()
   if (e.key === 'Escape') closeAdd()
+}
+
+// ─── Command System Functions ───
+function handleInputChange(text: string) {
+  // Si el texto comienza con "/" y no hay comando seleccionado, mostrar menú
+  if (text.startsWith('/') && !selectedCommand.value) {
+    const query = text.slice(1).toLowerCase()
+    if (query === '') {
+      filteredCommands.value = commands
+    } else {
+      filteredCommands.value = commands.filter(cmd =>
+        cmd.name.toLowerCase().includes(query) ||
+        cmd.id.toLowerCase().includes(query)
+      )
+    }
+    showCommandMenu.value = true
+  } else {
+    showCommandMenu.value = false
+  }
+}
+
+function selectCommand(command: Command | undefined) {
+  if (!command) return
+  selectedCommand.value = command
+  newWordText.value = ''
+  showCommandMenu.value = false
+  showCommandHint.value = false
+  // Inicializar los valores de los campos
+  commandFieldValues.value = {}
+  command.fields.forEach(field => {
+    commandFieldValues.value[field.name] = ''
+  })
+  trackButtonClick('select_command', { command_id: command.id })
+}
+
+function cancelCommandSelection() {
+  selectedCommand.value = null
+  showCommandMenu.value = false
+  showCommandHint.value = false
+  newWordText.value = ''
+  commandFieldValues.value = {}
+}
+
+function submitCommand() {
+  if (!selectedCommand.value) return
+
+  // Obtener los valores (permitir vacíos)
+  const values = Object.values(commandFieldValues.value)
+
+  // Construir el texto según el tipo de comando
+  let finalText = ''
+  switch (selectedCommand.value.id) {
+    case 'search':
+      finalText = values[0] || ''
+      break
+    case 'pattern':
+      finalText = values[0] || ''
+      break
+    case 'slang':
+      finalText = values[0] || ''
+      break
+    case 'target':
+      finalText = `${values[0] || ''} <- ${values[1] || ''}`.trim()
+      break
+    case 'pos':
+      finalText = `${values[0] || ''} : ${values[1] || ''}`.trim()
+      break
+    case 'compare':
+      finalText = `${values[0] || ''} vs ${values[1] || ''}`.trim()
+      break
+  }
+
+  // Solo si hay algo que buscar
+  if (!finalText.trim()) {
+    return
+  }
+
+  newWordText.value = finalText
+  selectedCommand.value = null
+  commandFieldValues.value = {}
+  adding.value = true
+  addError.value = null
+  addSuccess.value = null
+
+  // Ejecutar directamente
+  addWordApi()
 }
 
 // ─── Watchers ───
@@ -1323,41 +1480,99 @@ onUnmounted(() => {
             </button>
           </div>
           <div class="modal-body">
-            <p class="modal-hint">
-              Type a word and our AI will tell you about it
-            </p>
-            <div v-if="addError" class="add-error">
+            <!-- CARDS: Only show when addMode is null -->
+            <div v-if="addMode === null" class="mode-cards-grid">
+              <div class="mode-card" @click="addMode = 'simple'; selectedCommand = null">
+                <div class="card-icon">📝</div>
+                <div class="card-title">Simple</div>
+              </div>
+              <div class="mode-card" @click="addMode = 'context'; selectCommand(commands[0])">
+                <div class="card-icon">🎯</div>
+                <div class="card-title">In Context</div>
+              </div>
+            </div>
+
+            <!-- ERROR MESSAGE -->
+            <div v-if="addError && addMode !== null" class="add-error">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="12" cy="12" r="10"/>
                 <path fill="white" d="M12 5c-3.9 0-7 3.1-7 7s3.1 7 7 7 7-3.1 7-7-3.1-7-7-7zm3.5 7c0 .8-.7 1.5-1.5 1.5S12.5 12.8 12.5 12 13.2 10.5 14 10.5s1.5.7 1.5 1.5zm-7 0c0 .8-.7 1.5-1.5 1.5S4.5 12.8 4.5 12 5.2 10.5 6 10.5 7.5 11.2 7.5 12z"/>
               </svg>
               {{ addError }}
             </div>
-            <div v-if="addSuccess" class="add-success">
+
+            <!-- SUCCESS MESSAGE -->
+            <div v-if="addSuccess && addMode !== null" class="add-success">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
               </svg>
               {{ addSuccess }}
             </div>
-            <div class="form-group">
-              <label class="form-label">Word</label>
-              <input
-                ref="desktopInput"
-                v-model="newWordText"
-                type="text"
-                placeholder="e.g. ephemeral, wanderlust..."
-                class="form-input"
-                @keydown="handleAddKeydown"
-                autofocus
-              />
+
+            <!-- SIMPLE MODE INPUT -->
+            <div v-if="addMode === 'simple'" class="simple-mode-input">
+              <div class="input-wrapper">
+                <input
+                  ref="desktopInput"
+                  v-model="newWordText"
+                  type="text"
+                  placeholder="Type a word..."
+                  class="form-input form-input-large"
+                  @keydown="handleAddKeydown"
+                  autofocus
+                />
+              </div>
+            </div>
+
+            <!-- CONTEXT MODE FIELDS -->
+            <div v-if="addMode === 'context' && selectedCommand" class="command-input-section">
+              <div class="command-fields">
+                <div v-for="field in selectedCommand.fields" :key="field.name" class="command-field">
+                  <label class="field-label">{{ field.label }}</label>
+                  <textarea v-if="field.name === 'sentence'" v-model="commandFieldValues[field.name]" :placeholder="field.placeholder" class="field-textarea" rows="3"></textarea>
+                  <input v-else v-model="commandFieldValues[field.name]" type="text" :placeholder="field.placeholder" class="field-input" @keydown.enter="addWord"/>
+                </div>
+              </div>
             </div>
           </div>
-          <div class="modal-footer">
+
+          <!-- Footer (Only visible after mode selected) -->
+          <div v-if="addMode !== null" class="modal-footer">
             <button class="modal-btn secondary" @click="trackButtonClick('cancel_add_word'); closeAdd()">Cancel</button>
-            <button class="modal-btn primary" @click="addWord" :disabled="!newWordText.trim() || adding">
+            <button class="modal-btn primary" @click="addWord" :disabled="adding || (addMode === 'simple' ? !newWordText.trim() : !selectedCommand || !commandFieldValues['sentence']?.trim() || !commandFieldValues['word']?.trim())">
               <span v-if="adding">Adding...</span>
               <span v-else>Add Word</span>
             </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Desktop: Commands Modal (Top Sheet) -->
+    <transition name="slide-down">
+      <div v-if="showCommandMenu && !selectedCommand && showAddDesktop" class="desktop-commands-modal">
+        <div class="desktop-commands-overlay" @click="handleInputChange('')"></div>
+        <div class="desktop-commands-sheet">
+          <div class="desktop-commands-header">
+            <h3 class="desktop-commands-title">Available Commands</h3>
+            <button class="desktop-commands-close" @click="handleInputChange('')">✕</button>
+          </div>
+          <div class="desktop-commands-grid">
+            <button
+              v-for="cmd in filteredCommands"
+              :key="cmd.id"
+              class="desktop-command-card"
+              @click="selectCommand(cmd)"
+            >
+              <span class="card-icon">{{ cmd.icon }}</span>
+              <div class="card-content">
+                <div class="card-title">{{ cmd.name }}</div>
+                <div class="card-desc">{{ cmd.description }}</div>
+              </div>
+            </button>
+            <div v-if="filteredCommands.length === 0" class="desktop-commands-empty">
+              No commands found
+            </div>
           </div>
         </div>
       </div>
@@ -1370,34 +1585,62 @@ onUnmounted(() => {
           <div class="handle-bar"></div>
         </div>
         <div class="mobile-add-content">
-          <h3 class="mobile-add-title">Add New Word</h3>
-          <p class="mobile-add-hint">
-            Type a word and our AI will tell you about it
-          </p>
-          <div v-if="addError" class="add-error">
+          <h3 v-if="addMode !== null" class="mobile-add-title">Add New Word</h3>
+
+          <!-- CARDS -->
+          <div v-if="addMode === null" class="mode-selection-screen mobile-mode-selection">
+            <h3 class="mobile-add-title">Add New Word</h3>
+            <div class="mode-cards-grid mobile-cards-grid">
+              <div class="mode-card" @click="addMode = 'simple'; selectedCommand = null">
+                <div class="card-icon">📝</div>
+                <div class="card-title">Simple</div>
+              </div>
+              <div class="mode-card" @click="addMode = 'context'; selectCommand(commands[0])">
+                <div class="card-icon">🎯</div>
+                <div class="card-title">In Context</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ERROR -->
+          <div v-if="addError && addMode !== null" class="add-error">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
               <circle cx="12" cy="12" r="10"/>
               <path fill="white" d="M12 5c-3.9 0-7 3.1-7 7s3.1 7 7 7 7-3.1 7-7-3.1-7-7-7zm3.5 7c0 .8-.7 1.5-1.5 1.5S12.5 12.8 12.5 12 13.2 10.5 14 10.5s1.5.7 1.5 1.5zm-7 0c0 .8-.7 1.5-1.5 1.5S4.5 12.8 4.5 12 5.2 10.5 6 10.5 7.5 11.2 7.5 12z"/>
             </svg>
             {{ addError }}
           </div>
-          <div v-if="addSuccess" class="add-success">
+
+          <!-- SUCCESS -->
+          <div v-if="addSuccess && addMode !== null" class="add-success">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
               <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
             </svg>
             {{ addSuccess }}
           </div>
-          <input
-            v-model="newWordText"
-            type="text"
-            placeholder="Type a word..."
-            class="mobile-add-input"
-            @keydown="handleAddKeydown"
-            autofocus
-          />
-          <div class="mobile-add-actions">
+
+          <!-- SIMPLE INPUT -->
+          <div v-if="addMode === 'simple'">
+            <div class="input-wrapper mobile-input-wrapper">
+              <input v-model="newWordText" type="text" placeholder="Type a word..." class="mobile-add-input mobile-add-input-large" @keydown="handleAddKeydown" autofocus/>
+            </div>
+          </div>
+
+          <!-- CONTEXT FIELDS -->
+          <div v-if="addMode === 'context' && selectedCommand" class="command-input-section mobile-command-section">
+            <div class="command-fields mobile-fields">
+              <div v-for="field in selectedCommand.fields" :key="field.name" class="command-field">
+                <label class="field-label">{{ field.label }}</label>
+                <textarea v-if="field.name === 'sentence'" v-model="commandFieldValues[field.name]" :placeholder="field.placeholder" class="field-textarea" rows="2"></textarea>
+                <input v-else v-model="commandFieldValues[field.name]" type="text" :placeholder="field.placeholder" class="field-input" @keydown.enter="addWord"/>
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions (Only visible after mode selected) - Mobile -->
+          <div v-if="addMode !== null" class="mobile-add-actions">
             <button class="mobile-add-btn secondary" @click="trackButtonClick('cancel_mobile_add_word'); closeAdd()">Cancel</button>
-            <button class="mobile-add-btn primary" @click="addWord" :disabled="!newWordText.trim() || adding">
+            <button class="mobile-add-btn primary" @click="addWord" :disabled="adding || (addMode === 'simple' ? !newWordText.trim() : !selectedCommand || !commandFieldValues['sentence']?.trim() || !commandFieldValues['word']?.trim())">
               <span v-if="adding">Adding...</span>
               <span v-else>Add</span>
             </button>
@@ -1409,6 +1652,36 @@ onUnmounted(() => {
     <!-- Mobile: Backdrop for add panel -->
     <transition name="fade">
       <div v-if="showAddMobile" class="mobile-backdrop" @click="trackButtonClick('close_mobile_add_backdrop'); closeAdd()"></div>
+    </transition>
+
+    <!-- Mobile: Commands Modal (Bottom Sheet) -->
+    <transition name="slide-up">
+      <div v-if="showCommandMenu && !selectedCommand && showAddMobile" class="mobile-commands-modal">
+        <div class="mobile-commands-overlay" @click="handleInputChange('')"></div>
+        <div class="mobile-commands-sheet">
+          <div class="mobile-commands-header">
+            <h3 class="mobile-commands-title">Choose a Command</h3>
+            <button class="mobile-commands-close" @click="handleInputChange('')">✕</button>
+          </div>
+          <div class="mobile-commands-list">
+            <button
+              v-for="cmd in filteredCommands"
+              :key="cmd.id"
+              class="mobile-command-btn"
+              @click="selectCommand(cmd)"
+            >
+              <span class="cmd-icon">{{ cmd.icon }}</span>
+              <div class="cmd-text">
+                <div class="cmd-title">{{ cmd.name }}</div>
+                <div class="cmd-desc">{{ cmd.description }}</div>
+              </div>
+            </button>
+            <div v-if="filteredCommands.length === 0" class="mobile-commands-empty">
+              No commands found
+            </div>
+          </div>
+        </div>
+      </div>
     </transition>
 
     <!-- Relearn Dialog -->
@@ -3030,7 +3303,7 @@ onUnmounted(() => {
   background: #36324a;
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .modal-header {
@@ -3093,10 +3366,119 @@ onUnmounted(() => {
   }
 }
 
+/* ─── Mode Selection Screen ─── */
+.mode-selection-screen {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+}
+
+.content-screen {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ─── Mode Selector Cards ─── */
+.mode-cards-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 0 0 24px 0;
+}
+
+.mode-card {
+  padding: 20px;
+  border-radius: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.mode-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+}
+
+.mode-card.selected {
+  border-color: rgba(124, 58, 237, 0.6);
+  background: rgba(124, 58, 237, 0.15);
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.2);
+}
+
+.card-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #e2e0e8;
+}
+
+@media (max-width: 768px) {
+  .mode-cards-grid {
+    gap: 10px;
+    margin: 0 0 18px 0;
+  }
+
+  .mode-card {
+    padding: 16px;
+    gap: 10px;
+  }
+
+  .card-icon {
+    font-size: 28px;
+  }
+
+  .card-title {
+    font-size: 13px;
+  }
+
+  .card-description {
+    font-size: 11px;
+  }
+}
+
+.mobile-cards-grid {
+  margin: 0 -16px 0 -16px;
+  padding: 0 16px;
+}
+
+.mobile-mode-selection {
+  padding: 16px;
+  min-height: 320px;
+}
+
+.mobile-content-screen {
+  padding: 16px;
+}
+
+.simple-mode-input {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
 .form-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  position: relative;
 }
 
 .form-label {
@@ -3114,6 +3496,7 @@ onUnmounted(() => {
 }
 
 .form-input {
+  width: 100%;
   padding: 14px 16px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -3123,6 +3506,7 @@ onUnmounted(() => {
   outline: none;
   transition: all 0.2s ease;
   font-family: inherit;
+  box-sizing: border-box;
 }
 
 @media (max-width: 768px) {
@@ -3132,6 +3516,49 @@ onUnmounted(() => {
 }
 
 .form-input:focus {
+  border-color: rgba(124, 58, 237, 0.25);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Large Input for Command Input */
+.form-input-large {
+  padding: 18px 18px;
+  /* min-height: 120px; */
+  font-size: 15px;
+}
+
+@media (max-width: 768px) {
+  .form-input-large {
+    min-height: 100px;
+  }
+}
+
+/* Textarea for Command Input */
+.form-textarea-large {
+  width: 100%;
+  padding: 16px 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e2e0e8;
+  font-size: 15px;
+  outline: none;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 120px;
+  line-height: 1.5;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .form-textarea-large {
+    font-size: 16px;
+    min-height: 100px;
+  }
+}
+
+.form-textarea-large:focus {
   border-color: rgba(124, 58, 237, 0.4);
   background: rgba(255, 255, 255, 0.06);
 }
@@ -3966,6 +4393,675 @@ onUnmounted(() => {
   .mobile-add-panel,
   .mobile-backdrop {
     display: none;
-  }  
+  }
 }
+
+/* ════════════════════════════════════════
+   COMMAND SYSTEM — Slash Commands
+   ════════════════════════════════════════ */
+
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.input-slash-btn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  background: rgba(124, 58, 237, 0.2);
+  border: 1px solid rgba(124, 58, 237, 0.4);
+  border-radius: 8px;
+  color: #a78bfa;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 700;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.input-slash-btn:hover {
+  background: rgba(124, 58, 237, 0.3);
+  border-color: rgba(124, 58, 237, 0.6);
+  color: #d8b4fe;
+}
+
+/* Quick Commands Section */
+.quick-commands-section {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(124, 58, 237, 0.08);
+  border: 1px solid rgba(124, 58, 237, 0.15);
+  border-radius: 10px;
+}
+
+.quick-commands-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #7c99ab;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.quick-commands-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.quick-command-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(124, 58, 237, 0.15);
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  border-radius: 16px;
+  color: #a78bfa;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.quick-command-chip:hover {
+  background: rgba(124, 58, 237, 0.25);
+  border-color: rgba(124, 58, 237, 0.5);
+  color: #d8b4fe;
+}
+
+.quick-command-chip span:first-child {
+  font-size: 13px;
+}
+
+.mobile-input-wrapper {
+  width: 100%;
+  position: relative;
+}
+
+.mobile-add-input-large {
+  /* min-height: 100px; */
+  padding: 14px 14px;
+  font-size: 16px;
+}
+
+.mobile-slash-btn {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 28px;
+  height: 28px;
+  background: rgba(124, 58, 237, 0.2);
+  border: 1px solid rgba(124, 58, 237, 0.4);
+  border-radius: 6px;
+  color: #a78bfa;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.mobile-quick-commands {
+  margin-top: 10px;
+}
+
+.mobile-commands-list {
+  gap: 4px;
+}
+
+.mobile-command-chip {
+  padding: 5px 8px;
+  font-size: 11px;
+  gap: 3px;
+}
+
+.mobile-command-chip span:first-child {
+  font-size: 12px;
+}
+
+/* Command Input Section */
+.command-input-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mobile-command-section {
+  gap: 12px;
+  padding: 12px;
+}
+
+/* Command Header Actions */
+.command-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cmd-help-btn {
+  background: rgba(124, 58, 237, 0.15);
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  color: #a78bfa;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.cmd-help-btn:hover {
+  background: rgba(124, 58, 237, 0.25);
+  border-color: rgba(124, 58, 237, 0.5);
+  color: #d8b4fe;
+}
+
+/* Command Hint Tooltip */
+.command-hint-tooltip {
+  font-size: 12px;
+  color: #9c99ab;
+  line-height: 1.6;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  border-left: 3px solid rgba(124, 58, 237, 0.5);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.mobile-hint-tooltip {
+  font-size: 11px;
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+
+/* Command Header */
+.command-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.mobile-cmd-header {
+  gap: 10px;
+}
+
+.command-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.command-title-icon {
+  font-size: 20px;
+}
+
+.command-title-text {
+  font-size: 14px;
+  font-weight: 700;
+  color: #a78bfa;
+}
+
+.cmd-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: #9c99ab;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.cmd-close-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #e2e0e8;
+}
+
+/* Dynamic Fields */
+.command-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mobile-fields {
+  gap: 10px;
+}
+
+.command-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #9c99ab;
+  letter-spacing: 0.5px;
+}
+
+.field-input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e0e8;
+  font-size: 14.7px;
+  outline: none;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.field-input::placeholder {
+  color: #9c99ab;
+}
+
+.field-input:focus {
+  border-color: rgba(124, 58, 237, 0.25);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Textarea for sentence fields */
+.field-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e0e8;
+  font-size: 14.7px;
+  outline: none;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  box-sizing: border-box;
+  resize: vertical;
+  line-height: 1.5;
+  min-height: 100px;
+}
+
+.field-textarea::placeholder {
+  color: #9c99ab;
+}
+
+.field-textarea:focus {
+  border-color: rgba(124, 58, 237, 0.25);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Parts of Speech Chips */
+
+.hint-text {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #9c99ab;
+  margin: 0;
+}
+
+
+/* Command Menu Dropdown */
+.command-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: rgba(20, 18, 30, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  backdrop-filter: blur(15px);
+  max-height: 80vh;
+  overflow-y: scroll;
+  overflow-x: hidden;
+  z-index: 10000;
+  box-shadow: 0 15px 50px rgba(0, 0, 0, 0.6);
+  min-width: 100%;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+/* En pantallas pequeñas, usar menos altura */
+@media (max-height: 800px) {
+  .command-menu {
+    max-height: 60vh;
+  }
+}
+
+/* Custom scrollbar for command menu */
+.command-menu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.command-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.command-menu::-webkit-scrollbar-thumb {
+  background: rgba(124, 58, 237, 0.4);
+  border-radius: 3px;
+}
+
+.command-menu::-webkit-scrollbar-thumb:hover {
+  background: rgba(124, 58, 237, 0.6);
+}
+
+.command-menu-header {
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #7c7a8a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  letter-spacing: 0.5px;
+}
+
+.command-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+}
+
+.command-item:hover {
+  background: rgba(124, 58, 237, 0.15);
+}
+
+.command-item:last-child {
+  border-bottom: none;
+}
+
+.command-icon {
+  font-size: 20px;
+  min-width: 24px;
+  text-align: center;
+}
+
+.command-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.command-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e2e0e8;
+  margin-bottom: 2px;
+}
+
+.command-desc {
+  font-size: 12px;
+  color: #9c99ab;
+}
+
+.command-empty {
+  padding: 20px 14px;
+  text-align: center;
+  color: #9c99ab;
+  font-size: 13px;
+}
+
+/* Mobile Specific */
+
+/* Mobile Commands Modal (Bottom Sheet) */
+.mobile-commands-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+
+.mobile-commands-overlay {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+}
+
+.mobile-commands-sheet {
+  background: #36324a;
+  border-radius: 16px 16px 0 0;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+  box-shadow: 0 -5px 30px rgba(0, 0, 0, 0.3);
+}
+
+.mobile-commands-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mobile-commands-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #e2e0e8;
+  margin: 0;
+}
+
+.mobile-commands-close {
+  background: none;
+  border: none;
+  color: #9c99ab;
+  cursor: pointer;
+  font-size: 20px;
+  padding: 0;
+  transition: color 0.2s ease;
+}
+
+.mobile-commands-close:active {
+  color: #e2e0e8;
+}
+
+.mobile-commands-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mobile-command-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.mobile-command-btn:active {
+  background: rgba(124, 58, 237, 0.2);
+  border-color: rgba(124, 58, 237, 0.4);
+}
+
+.cmd-icon {
+  font-size: 22px;
+  min-width: 24px;
+}
+
+.cmd-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.cmd-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e2e0e8;
+  margin-bottom: 2px;
+}
+
+.cmd-desc {
+  font-size: 12px;
+  color: #9c99ab;
+}
+
+.mobile-commands-empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: #9c99ab;
+  font-size: 13px;
+}
+
+/* Desktop Commands Modal (Top Sheet) */
+.desktop-commands-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+
+.desktop-commands-overlay {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+}
+
+.desktop-commands-sheet {
+  background: #36324a;
+  border-radius: 0 0 16px 16px;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+}
+
+.desktop-commands-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.desktop-commands-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #e2e0e8;
+  margin: 0;
+}
+
+.desktop-commands-close {
+  background: none;
+  border: none;
+  color: #9c99ab;
+  cursor: pointer;
+  font-size: 22px;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+}
+
+.desktop-commands-close:hover {
+  color: #e2e0e8;
+}
+
+.desktop-commands-grid {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 24px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.desktop-command-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.desktop-command-card:hover {
+  background: rgba(124, 58, 237, 0.15);
+  border-color: rgba(124, 58, 237, 0.3);
+}
+
+.card-icon {
+  font-size: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #e2e0e8;
+  margin-bottom: 4px;
+}
+
+.card-desc {
+  font-size: 12px;
+  color: #9c99ab;
+  line-height: 1.4;
+}
+
+.desktop-commands-empty {
+  padding: 40px 24px;
+  text-align: center;
+  color: #9c99ab;
+  font-size: 14px;
+  grid-column: 1 / -1;
+}
+
 </style>

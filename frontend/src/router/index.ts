@@ -12,6 +12,7 @@ import GameStoryPage from '@/pages/GameStoryPage.vue'
 import QuickWritePage from '@/pages/QuickWritePage.vue'
 import CollocationsPage from '@/pages/CollocationsPage.vue'
 import WordDetailPage from '@/pages/WordDetailPage.vue'
+import AtlasPage from '@/pages/AtlasPage.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -89,6 +90,12 @@ const router = createRouter({
       name: 'word-detail',
       component: WordDetailPage,
       meta: { requiresAuth: true, hideLayout: true }
+    },
+    {
+      path: '/atlas/:theme?',
+      name: 'atlas',
+      component: AtlasPage,
+      meta: { requiresAuth: true }
     }
   ]
 })
