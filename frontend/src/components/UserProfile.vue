@@ -33,7 +33,6 @@ const displayEmail = computed(() => {
     </div>
     <div v-if="!compact" class="user-info">
       <div class="user-name">{{ displayEmail }}</div>
-      <div class="user-email">{{ authStore.userEmail }}</div>
     </div>
   </div>
 </template>

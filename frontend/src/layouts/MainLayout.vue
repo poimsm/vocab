@@ -39,7 +39,7 @@ function scrollToActiveTab() {
 
 const sidebarCollapsed = ref(false)
 const drawerOpen = ref(false)
-const logoutMenuOpen = ref(false)
+const userMenuOpen = ref(false)
 
 function toggleSidebar() {
   sidebarCollapsed.value = !sidebarCollapsed.value
@@ -53,18 +53,39 @@ function closeDrawer() {
   drawerOpen.value = false
 }
 
-function toggleLogoutMenu() {
-  logoutMenuOpen.value = !logoutMenuOpen.value
+function toggleUserMenu() {
+  userMenuOpen.value = !userMenuOpen.value
 }
 
-function closeLogoutMenu() {
-  logoutMenuOpen.value = false
+function closeUserMenu() {
+  userMenuOpen.value = false
 }
 
-function handleLogout() {
-  closeLogoutMenu()
-  authStore.logout()
-  router.push({ name: 'login' })
+function handleMenuOption(action: string) {
+  closeUserMenu()
+
+  switch (action) {
+    case 'profile':
+      router.push({ name: 'profile' })
+      break
+    case 'achievements':
+      router.push({ name: 'achievements' })
+      break
+    case 'settings':
+      router.push({ name: 'settings' })
+      break
+    case 'help':
+      // Open help in a modal or new page
+      window.open('/help', '_blank')
+      break
+    case 'preferences':
+      router.push({ name: 'preferences' })
+      break
+    case 'logout':
+      authStore.logout()
+      router.push({ name: 'login' })
+      break
+  }
 }
 
 // Mapeamos los módulos a las propiedades "to" usando el "name" de tus rutas
@@ -133,21 +154,42 @@ const modules = [
       <div class="sidebar-footer">
         <button
           class="user-footer-btn"
-          @click="toggleLogoutMenu"
+          @click="toggleUserMenu"
           :title="sidebarCollapsed ? (authStore.userEmail ?? '') : ''"
         >
           <UserProfile :compact="sidebarCollapsed" />
         </button>
 
-        <!-- Logout Menu Overlay (close on click outside) -->
+        <!-- User Menu Overlay (close on click outside) -->
         <transition name="fade">
-          <div v-if="logoutMenuOpen" class="logout-overlay" @click="closeLogoutMenu"></div>
+          <div v-if="userMenuOpen" class="user-menu-overlay" @click="closeUserMenu"></div>
         </transition>
 
-        <!-- Logout Menu Popup -->
+        <!-- User Menu Popup -->
         <transition name="fade">
-          <div v-if="logoutMenuOpen" class="logout-menu">
-            <button class="logout-menu-item" @click="handleLogout">
+          <div v-if="userMenuOpen" class="user-menu">
+            <button class="user-menu-item" @click="handleMenuOption('profile')">
+              <Icon icon="solar:user-linear" width="18" />
+              <span>Profile</span>
+            </button>
+            <button class="user-menu-item" @click="handleMenuOption('achievements')">
+              <Icon icon="solar:cup-bold" width="18" />
+              <span>My Achievements</span>
+            </button>
+            <button class="user-menu-item" @click="handleMenuOption('settings')">
+              <Icon icon="solar:settings-linear" width="18" />
+              <span>Settings</span>
+            </button>
+            <button class="user-menu-item" @click="handleMenuOption('preferences')">
+              <Icon icon="solar:sliders-linear" width="18" />
+              <span>Preferences</span>
+            </button>
+            <button class="user-menu-item" @click="handleMenuOption('help')">
+              <Icon icon="solar:question-circle-linear" width="18" />
+              <span>Help & Support</span>
+            </button>
+            <div class="user-menu-divider"></div>
+            <button class="user-menu-item logout-item" @click="handleMenuOption('logout')">
               <Icon icon="solar:logout-3-linear" width="18" />
               <span>Logout</span>
             </button>
@@ -199,7 +241,7 @@ const modules = [
             </button>
           </div>
 
-          <button class="drawer-user" @click="toggleLogoutMenu">
+          <button class="drawer-user" @click="toggleUserMenu">
             <UserProfile class="drawer-profile" />
           </button>
 
@@ -223,10 +265,31 @@ const modules = [
             </router-link>
           </nav>
 
-          <!-- Logout Menu Popup en Mobile -->
+          <!-- User Menu Popup en Mobile -->
           <transition name="fade">
-            <div v-if="logoutMenuOpen" class="logout-menu-mobile">
-              <button class="logout-menu-item" @click="handleLogout">
+            <div v-if="userMenuOpen" class="user-menu-mobile">
+              <button class="user-menu-item" @click="handleMenuOption('profile'); closeDrawer()">
+                <Icon icon="solar:user-linear" width="18" />
+                <span>Profile</span>
+              </button>
+              <button class="user-menu-item" @click="handleMenuOption('achievements'); closeDrawer()">
+                <Icon icon="solar:cup-bold" width="18" />
+                <span>My Achievements</span>
+              </button>
+              <button class="user-menu-item" @click="handleMenuOption('settings'); closeDrawer()">
+                <Icon icon="solar:settings-linear" width="18" />
+                <span>Settings</span>
+              </button>
+              <button class="user-menu-item" @click="handleMenuOption('preferences'); closeDrawer()">
+                <Icon icon="solar:sliders-linear" width="18" />
+                <span>Preferences</span>
+              </button>
+              <button class="user-menu-item" @click="handleMenuOption('help'); closeDrawer()">
+                <Icon icon="solar:question-circle-linear" width="18" />
+                <span>Help & Support</span>
+              </button>
+              <div class="user-menu-divider"></div>
+              <button class="user-menu-item logout-item" @click="handleMenuOption('logout'); closeDrawer()">
                 <Icon icon="solar:logout-3-linear" width="18" />
                 <span>Logout</span>
               </button>
@@ -473,7 +536,7 @@ const modules = [
   height: 36px;
 }
 
-.logout-overlay {
+.user-menu-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -482,7 +545,7 @@ const modules = [
   z-index: 105;
 }
 
-.logout-menu {
+.user-menu {
   position: absolute;
   bottom: 60px;
   left: 12px;
@@ -495,7 +558,7 @@ const modules = [
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-.logout-menu-item {
+.user-menu-item {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -503,15 +566,30 @@ const modules = [
   padding: 12px 16px;
   border: none;
   background: transparent;
-  color: #f87171;
+  color: #e2e0e8;
   cursor: pointer;
   font-size: 15px;
   transition: all 0.15s ease;
 }
 
-.logout-menu-item:hover {
+.user-menu-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e0e8;
+}
+
+.user-menu-item.logout-item {
+  color: #f87171;
+}
+
+.user-menu-item.logout-item:hover {
   background: rgba(248, 113, 113, 0.1);
   color: #f87171;
+}
+
+.user-menu-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 4px 0;
 }
 
 .nav-icon {
@@ -742,16 +820,20 @@ const modules = [
     border-left-color: #9b8fb5;
   }
 
-  .logout-menu-mobile {
-    padding: 12px 0;
+  .user-menu-mobile {
+    padding: 8px 0;
     border-top: 1px solid rgba(255, 255, 255, 0.06);
     margin-top: auto;
   }
 
-  .logout-menu-mobile .logout-menu-item {
+  .user-menu-mobile .user-menu-item {
     width: 100%;
     padding-left: 16px;
     padding-right: 16px;
+  }
+
+  .user-menu-mobile .user-menu-divider {
+    margin: 8px 0;
   }
 
   .mobile-nav::-webkit-scrollbar {
