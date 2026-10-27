@@ -35,6 +35,7 @@ const searchQuery = ref('')
 const selectedCategory = ref<string>('all')
 const loadingThemes = ref(false)
 const loadingWords = ref(false)
+const isImageFullscreen = ref(false)
 
 // Computed
 const categories = computed(() => {
@@ -151,6 +152,16 @@ function clearFilters() {
   selectedCategory.value = 'all'
 }
 
+function openImageFullscreen() {
+  isImageFullscreen.value = true
+  document.body.style.overflow = 'hidden'
+}
+
+function closeImageFullscreen() {
+  isImageFullscreen.value = false
+  document.body.style.overflow = 'auto'
+}
+
 // Load themes on mount
 onMounted(() => {
   loadThemes()
@@ -199,11 +210,11 @@ onMounted(() => {
             </div>
             <div class="theme-info">
               <h2 class="theme-name">{{ theme.name }}</h2>
-              <p class="theme-description">{{ theme.description }}</p>
-              <div class="theme-footer">
+              <!-- <p class="theme-description">{{ theme.description }}</p> -->
+              <!-- <div class="theme-footer">
                 <span class="word-count">{{ theme.words_count }} words</span>
                 <Icon icon="solar:alt-arrow-right-linear" width="18" />
-              </div>
+              </div> -->
             </div>
           </div>
         </div>
@@ -222,8 +233,29 @@ onMounted(() => {
 
       <!-- Image Section -->
       <div class="image-section">
-        <img :src="buildAssetUrl(selectedTheme.main_image)" :alt="selectedTheme.name" class="vocab-image" />
+        <img
+          :src="buildAssetUrl(selectedTheme.main_image)"
+          :alt="selectedTheme.name"
+          class="vocab-image"
+          @click="openImageFullscreen"
+        />
       </div>
+
+      <!-- Image Fullscreen Modal -->
+      <transition name="fade">
+        <div v-if="isImageFullscreen" class="image-fullscreen-overlay" @click="closeImageFullscreen">
+          <div class="image-fullscreen-container" @click.stop>
+            <button class="close-btn" @click="closeImageFullscreen">
+              <Icon icon="solar:close-circle-linear" width="28" />
+            </button>
+            <img
+              :src="buildAssetUrl(selectedTheme.main_image)"
+              :alt="selectedTheme.name"
+              class="fullscreen-image"
+            />
+          </div>
+        </div>
+      </transition>
 
       <!-- Vocabulary List Section -->
       <div class="list-section">
@@ -235,12 +267,12 @@ onMounted(() => {
 
         <!-- Filters -->
         <div class="filters">
-          <input
+          <!-- <input
             v-model="searchQuery"
             type="text"
             placeholder="Search words..."
             class="search-input"
-          />
+          /> -->
 
           <div class="category-filters">
             <button
@@ -358,7 +390,7 @@ onMounted(() => {
 .themes-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  gap: 24px;
 }
 
 .theme-card {
@@ -383,15 +415,17 @@ onMounted(() => {
 
 .theme-cover-wrapper {
   width: 100%;
-  height: 80%;
+  height: 85%;
   overflow: hidden;
   background: #1a1825;
+  flex-shrink: 0;
 }
 
 .theme-cover {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
   transition: transform 0.3s ease;
 }
 
@@ -483,6 +517,83 @@ onMounted(() => {
   height: auto;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.vocab-image:active {
+  opacity: 0.9;
+}
+
+/* Fullscreen Modal */
+.image-fullscreen-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #000000;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn 0.3s ease;
+}
+
+.image-fullscreen-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: pinch-zoom;
+}
+
+.fullscreen-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  cursor: pointer;
+  z-index: 1001;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(4px);
+}
+
+.close-btn:hover {
+  background: rgba(0, 0, 0, 0.8);
+  transform: scale(1.1);
+}
+
+.close-btn:active {
+  transform: scale(0.95);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* List Section */
@@ -818,11 +929,15 @@ onMounted(() => {
 
   .themes-grid {
     grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
+    gap: 16px;
   }
 
   .theme-card {
-    aspect-ratio: 1;
+    aspect-ratio: 1 / 1.1;
+  }
+
+  .theme-cover-wrapper {
+    height: 80%;
   }
 
   .list-section {
@@ -835,22 +950,134 @@ onMounted(() => {
 
   .words-list {
     grid-template-columns: 1fr;
+    margin-bottom: 150px;
   }
 
   .filters {
     flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
   }
 
   .search-input {
+    width: 100%;
     min-width: auto;
+    font-size: 16px;
+    padding: 14px 16px;
+    min-height: 48px;
+    box-sizing: border-box;
   }
 
   .category-filters {
     width: 100%;
+    gap: 12px;
+  }
+
+  .category-btn {
+    font-size: 14px;
+    padding: 12px 18px;
+    min-height: 44px;
+  }
+
+  .clear-btn {
+    font-size: 14px;
+    padding: 12px 18px;
+    min-height: 44px;
   }
 
   .back-bar {
     padding: 12px 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .themes-container {
+    padding: 16px 12px;
+  }
+
+  .themes-title {
+    font-size: 20px;
+    margin-bottom: 16px;
+  }
+
+  .themes-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .theme-card {
+    aspect-ratio: 1 / 1;
+  }
+
+  .theme-cover-wrapper {
+    height: 80%;
+  }
+
+  .theme-info {
+    padding: 10px;
+  }
+
+  .theme-name {
+    font-size: 14px;
+  }
+
+  .theme-description {
+    font-size: 12px;
+  }
+
+  .list-section {
+    padding: 14px 12px;
+  }
+
+  .title {
+    font-size: 20px;
+  }
+
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .search-input {
+    width: 100%;
+    font-size: 16px;
+    padding: 14px 16px;
+    min-height: 48px;
+    box-sizing: border-box;
+  }
+
+  .category-filters {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .category-btn {
+    font-size: 14px;
+    padding: 12px 18px;
+    min-height: 44px;
+  }
+
+  .clear-btn {
+    font-size: 14px;
+    padding: 12px 18px;
+    min-height: 44px;
+  }
+
+  .word-card {
+    padding: 14px;
+  }
+
+  .word {
+    font-size: 16px;
+  }
+
+  .add-btn {
+    padding: 12px 16px;
+    font-size: 14px;
+    min-height: 44px;
   }
 }
 

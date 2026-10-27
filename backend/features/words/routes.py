@@ -1,17 +1,17 @@
 import csv
 import io
 import re
-from typing import List
+from typing import List, Optional
 from logging_client import logger
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, status, Body
 from fastapi.responses import StreamingResponse
-from sqlmodel import Session
+from sqlmodel import Session, select
 from db import get_db
 from features.words.models import WordLevel
 from auth.models import User
 from core.enums import ContentType
 from helpers import TextFormatter
-from auth.repository import get_current_user
+from auth.repository import get_current_user, SECRET_KEY, ALGORITHM
 from datetime import datetime, timezone
 from features.words.schemas import WordListItem, WordDetail, CreateWordRequest, CreateWordFromTextRequest
 from decorators import log_endpoint
@@ -21,9 +21,128 @@ from config import QuotaValidator, UserProfileManager
 from activity.user_activity_service import UserActivityService
 import ai
 import os
+import json
+import jwt
+import asyncio
+from jwt import PyJWTError
 
 
 router = APIRouter()
+
+
+async def get_current_user_sse(
+    db: Session = Depends(get_db),
+    token: Optional[str] = Query(None),
+) -> User:
+    """Autenticación para SSE endpoint usando token en query param."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="No se pudieron validar las credenciales",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    if token:
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            email: str = payload.get("sub")
+            if email is None:
+                raise credentials_exception
+            user = db.exec(
+                select(User).where(User.email == email)
+            ).first()
+            if user is None:
+                raise credentials_exception
+            return user
+        except PyJWTError:
+            raise credentials_exception
+
+    return get_current_user(token=None, db=db)
+
+
+@router.get("/create-stream")
+async def create_words_stream(
+    current_user: User = Depends(get_current_user_sse),
+):
+    """
+    SSE endpoint que transmite eventos de creación de palabras en tiempo real.
+
+    Eventos transmitidos:
+        - words_create.started: Creación iniciada
+        - words_create.completed: Palabra creada exitosamente
+        - words_create.failed: Error durante la creación
+    """
+    import redis
+    import time
+
+    redis_host = os.getenv("REDIS_HOST", "redis")
+    redis_port = int(os.getenv("REDIS_PORT", 6379))
+
+    logger.info(f"[create_words_stream] Iniciando SSE para user {current_user.id}")
+
+    try:
+        r = redis.Redis(
+            host=redis_host,
+            port=redis_port,
+            db=0,
+            decode_responses=True,
+            socket_timeout=2,
+        )
+        pubsub = r.pubsub()
+        pubsub.psubscribe(f"user:{current_user.id}:words_create.*")
+        logger.info(f"[create_words_stream] Suscrito a eventos de user {current_user.id}")
+    except Exception as e:
+        logger.error(f"[create_words_stream] Redis connection error: {e}")
+        return StreamingResponse(
+            iter([f"event: error\ndata: {json.dumps({'error': 'Redis connection failed'})}\n\n"]),
+            media_type="text/event-stream",
+            status_code=500
+        )
+
+    async def event_generator():
+        """Genera eventos SSE usando Redis pubsub"""
+        try:
+            last_keep_alive = time.time()
+
+            while True:
+                try:
+                    message = pubsub.get_message()
+
+                    if message and message.get("type") in ("message", "pmessage"):
+                        channel = message.get("channel")
+                        raw_data = message.get("data")
+
+                        if channel and raw_data:
+                            try:
+                                data = json.loads(raw_data)
+                                event_type = channel.split(":")[-1]
+                                yield f"event: {event_type}\n"
+                                yield f"data: {json.dumps(data)}\n\n"
+                                logger.debug(f"[create_words_stream] Evento enviado: {event_type}")
+                                last_keep_alive = time.time()
+                            except json.JSONDecodeError:
+                                logger.error(f"Invalid JSON: {raw_data}")
+                    else:
+                        now = time.time()
+                        if now - last_keep_alive > 30:
+                            yield ": keep-alive\n\n"
+                            last_keep_alive = now
+                        else:
+                            await asyncio.sleep(0.2)
+
+                except Exception as e:
+                    logger.error(f"[create_words_stream] Error en generador: {e}")
+                    yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+                    break
+
+        except GeneratorExit:
+            logger.debug(f"[create_words_stream] Cliente desconectado")
+        finally:
+            try:
+                pubsub.close()
+            except:
+                pass
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 # Load bad words list at startup

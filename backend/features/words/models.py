@@ -85,8 +85,8 @@ class Word(SQLModel, table=True):
     user_id: Optional[int] = Field(default=None, foreign_key="users.id")
     user: Optional[User] = Relationship()
 
-    # Vocabulary image word reference
-    vocab_image_word_id: Optional[str] = Field(default=None, foreign_key="vocab_image_words.id", index=True)
+    # Vocabulary image word reference (optional, no FK constraint in SQLAlchemy)
+    vocab_image_word_id: Optional[str] = Field(default=None, index=True)
 
     statistics: List["WordStatistics"] = Relationship(back_populates="word")
 

@@ -4,8 +4,17 @@ import { Icon } from '@iconify/vue'
 import api from '@/utils/api'
 import { wordApi } from '@/services/wordApi'
 import { useActivityTracking } from '@/composables/useActivityTracking'
+import { useAuthStore } from '@/stores/auth'
 
 const { trackButtonClick } = useActivityTracking()
+const authStore = useAuthStore()
+
+// API base URL from environment
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost/api'
+
+// SSE EventSource
+let sseEventSource: EventSource | null = null
+let sseActive = ref(false)
 
 // ─── Throttle helper for infinite scroll ───
 let scrollTimeout: ReturnType<typeof setTimeout> | null = null
@@ -215,6 +224,90 @@ function speak(text: string) {
     utterance.voice = enVoice
   }
   window.speechSynthesis.speak(utterance)
+}
+
+// ─── SSE (Server-Sent Events) para creación de palabras ───
+function startSSE() {
+  console.log('[startSSE] Starting SSE stream for word creation')
+  console.log('[startSSE] API_BASE:', API_BASE)
+  console.log('[startSSE] authStore.token exists:', !!authStore.token)
+
+  // Clean up any previous SSE connection
+  if (sseEventSource) {
+    console.log('[startSSE] Cleaning up previous EventSource')
+    sseEventSource.close()
+    sseEventSource = null
+  }
+
+  sseActive.value = true
+
+  // Construir URL del SSE con token en query param
+  const sseUrl = new URL(`${API_BASE}/words/create-stream`)
+  if (authStore.token) {
+    sseUrl.searchParams.append('token', authStore.token)
+  }
+
+  const fullUrl = sseUrl.toString()
+  console.log('[startSSE] Conectando a:', fullUrl)
+
+  try {
+    sseEventSource = new EventSource(fullUrl)
+
+    // ─── Evento: words_create.completed ───
+    sseEventSource.addEventListener('words_create.completed', (event: MessageEvent) => {
+      if (!sseActive.value) {
+        console.log('[SSE:words_create.completed] Stream disabled, ignoring event')
+        return
+      }
+
+      try {
+        const data = JSON.parse(event.data)
+        console.log('[SSE:words_create.completed] Palabra creada:', data)
+
+        // Recargar palabras para obtener los datos actualizados
+        fetchWords(true)
+
+        sseActive.value = false
+        sseEventSource?.close()
+      } catch (e) {
+        console.error('[SSE:words_create.completed] Error parsing event:', e)
+      }
+    })
+
+    // ─── Evento: words_create.failed ───
+    sseEventSource.addEventListener('words_create.failed', (event: MessageEvent) => {
+      if (!sseActive.value) {
+        console.log('[SSE:words_create.failed] Stream disabled, ignoring event')
+        return
+      }
+
+      try {
+        const data = JSON.parse(event.data)
+        console.error('[SSE:words_create.failed] Error en creación:', data.message)
+        addError.value = data.message || 'Error creating word'
+        sseActive.value = false
+        sseEventSource?.close()
+      } catch (e) {
+        console.error('[SSE:words_create.failed] Error parsing event:', e)
+      }
+    })
+
+    sseEventSource.addEventListener('error', (event: Event) => {
+      console.error('[SSE] Connection error:', event)
+      if (sseEventSource?.readyState === EventSource.CLOSED) {
+        console.log('[SSE] Connection closed')
+        sseActive.value = false
+      } else {
+        console.error('[SSE] Unexpected error')
+        addError.value = 'Connection error - please try again'
+        sseActive.value = false
+        sseEventSource?.close()
+      }
+    })
+  } catch (e) {
+    console.error('[startSSE] Error creating EventSource:', e)
+    addError.value = 'Failed to connect to stream'
+  }
 }
 
 // ─── API ───
@@ -473,14 +566,12 @@ async function addWordApi() {
       words.value.unshift(newWord)
       totalWords.value++
 
-      addSuccess.value = 'Word added! It will be processed shortly.'
+      addSuccess.value = 'Word added! Processing...'
       newWordText.value = ''
       closeAdd()
 
-      // Reload after a delay to get the real word data
-      setTimeout(() => {
-        fetchWords(true)
-      }, 4000)
+      // Start SSE to listen for word creation completion
+      startSSE()
     }
   } catch (error: any) {
     const detail = error.response?.data?.detail || error.response?.data?.message || error.message
@@ -895,6 +986,12 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('scroll', throttledScroll)
+  // Clean up SSE connection if active
+  if (sseEventSource) {
+    sseEventSource.close()
+    sseEventSource = null
+    sseActive.value = false
+  }
 })
 </script>
 

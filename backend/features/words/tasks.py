@@ -209,11 +209,43 @@ def create_single_task(
 
             logger.info(f"[WordGenerator] Successfully created word {word.id} for user {user_id}")
 
+            # ✅ Publicar evento SSE de completación
+            try:
+                from core.realtime_event_bus import get_realtime_bus
+                event_bus = get_realtime_bus()
+                event_bus.publish(
+                    f"user:{user_id}:words_create.completed",
+                    {
+                        "word_id": word.id,
+                        "word": word.main,
+                        "meaning": word.meaning,
+                        "status": "ok"
+                    }
+                )
+                logger.debug(f"[WordGenerator] Event published: words_create.completed for word {word.id}")
+            except Exception as e:
+                logger.error(f"[WordGenerator] Error publishing completion event: {e}")
+
     except Exception as e:
         logger.error(
             f"[WordGenerator] Error creating word for user {user_id}: {e}",
             exc_info=True
         )
+
+        # ✅ Publicar evento SSE de error
+        try:
+            from core.realtime_event_bus import get_realtime_bus
+            event_bus = get_realtime_bus()
+            event_bus.publish(
+                f"user:{user_id}:words_create.failed",
+                {
+                    "status": "error",
+                    "message": str(e)
+                }
+            )
+            logger.debug(f"[WordGenerator] Event published: words_create.failed")
+        except Exception as pub_error:
+            logger.error(f"[WordGenerator] Error publishing error event: {pub_error}")
 
 
 @celery_app.task(name="tasks.words.create_bulk", queue=CeleryQueue.AI)
@@ -491,6 +523,22 @@ def create_bulk_task(
 
             if created_word_ids:
                 logger.info(f"[BulkWordGenerator] Successfully created {len(created_words)} words for user {user_id}")
+
+                # ✅ Publicar evento SSE de completación
+                try:
+                    from core.realtime_event_bus import get_realtime_bus
+                    event_bus = get_realtime_bus()
+                    event_bus.publish(
+                        f"user:{user_id}:words_create.completed",
+                        {
+                            "word_count": len(created_words),
+                            "words": [{"id": w.id, "word": w.main} for w in created_words],
+                            "status": "ok"
+                        }
+                    )
+                    logger.debug(f"[BulkWordGenerator] Event published: words_create.completed for {len(created_words)} words")
+                except Exception as e:
+                    logger.error(f"[BulkWordGenerator] Error publishing completion event: {e}")
             else:
                 logger.warning(f"[BulkWordGenerator] No words were created for user {user_id}")
 
@@ -499,6 +547,21 @@ def create_bulk_task(
             f"[BulkWordGenerator] Error creating bulk words for user {user_id}: {e}",
             exc_info=True
         )
+
+        # ✅ Publicar evento SSE de error
+        try:
+            from core.realtime_event_bus import get_realtime_bus
+            event_bus = get_realtime_bus()
+            event_bus.publish(
+                f"user:{user_id}:words_create.failed",
+                {
+                    "status": "error",
+                    "message": str(e)
+                }
+            )
+            logger.debug(f"[BulkWordGenerator] Event published: words_create.failed")
+        except Exception as pub_error:
+            logger.error(f"[BulkWordGenerator] Error publishing error event: {pub_error}")
 
 
 @celery_app.task(name="tasks.words.generate_boost_examples", queue=CeleryQueue.AI)
