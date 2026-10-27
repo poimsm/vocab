@@ -13,6 +13,7 @@ from features.examples.models import Example, ExampleType, ExploreConfiguration
 from features.best_options.models import BestOption
 from features.quick_write.models import QuickWrite
 from features.collocations.models import Collocation
+from features.vocab_imgs.models import VocabImage, VocabImageWord
 from core.learning_path.models import (
     LearningPath, LearningPathHistory, LearningPathCursor,
     LearningPathQueue, LearningPathAnomaly, PathRepairLog, LearningPathGenerationMonitor

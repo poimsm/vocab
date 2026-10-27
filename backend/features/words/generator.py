@@ -13,14 +13,14 @@ class WordGenerator:
     """Interfaz para solicitar generación de palabras desde el backend."""
 
     @staticmethod
-    def create_single(user_id: int, text: str):
+    def create_single(user_id: int, text: str, target_word: str = None):
         """
         Solicita la creación de una palabra individual desde texto.
 
         La tarea se ejecuta en background en el worker_ai.
         """
         from features.words.tasks import create_single_task
-        return create_single_task.delay(user_id, text)
+        return create_single_task.delay(user_id, text, target_word)
 
     @staticmethod
     def create_bulk(user_id: int, texts: List[str]):

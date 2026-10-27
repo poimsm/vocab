@@ -1,0 +1,81 @@
+{
+  "id": "zombies-001",
+  "name": "Zombies & Apocalypse",
+  "description": "Post-apocalyptic and undead related vocabulary",
+  "cover_image": "/media/vocab/zombies_cover.png",
+  "main_image": "/media/vocab/zombies.png",
+  "words": [
+    {
+      "id": "zom-001",
+      "word": "Zombie",
+      "definition": "A reanimated corpse that craves human flesh",
+      "category": "Creatures"
+    },
+    {
+      "id": "zom-002",
+      "word": "Apocalypse",
+      "definition": "A catastrophic event that destroys civilization",
+      "category": "Events"
+    },
+    {
+      "id": "zom-003",
+      "word": "Outbreak",
+      "definition": "A sudden occurrence of widespread disease",
+      "category": "Events"
+    },
+    {
+      "id": "zom-004",
+      "word": "Infected",
+      "definition": "Someone contaminated with a virus or disease",
+      "category": "People"
+    },
+    {
+      "id": "zom-005",
+      "word": "Undead",
+      "definition": "Creatures that are dead but still moving",
+      "category": "Creatures"
+    },
+    {
+      "id": "zom-006",
+      "word": "Survivor",
+      "definition": "A person who remains alive after catastrophe",
+      "category": "People"
+    },
+    {
+      "id": "zom-007",
+      "word": "Bunker",
+      "definition": "A reinforced underground shelter for safety",
+      "category": "Places"
+    },
+    {
+      "id": "zom-008",
+      "word": "Barricade",
+      "definition": "A barrier built to block passage",
+      "category": "Objects"
+    },
+    {
+      "id": "zom-009",
+      "word": "Horde",
+      "definition": "A large group of zombies moving together",
+      "category": "Groups"
+    },
+    {
+      "id": "zom-010",
+      "word": "Mutant",
+      "definition": "A creature changed by radiation or virus",
+      "category": "Creatures"
+    },
+    {
+      "id": "zom-011",
+      "word": "Biohazard",
+      "definition": "A hazard posed by biological agents",
+      "category": "Dangers"
+    },
+    {
+      "id": "zom-012",
+      "word": "Virus",
+      "definition": "A microscopic organism causing infection",
+      "category": "Objects"
+    }
+  ]
+}

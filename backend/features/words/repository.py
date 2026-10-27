@@ -248,6 +248,9 @@ class WordRepository:
             context=word_data.get("context"),
             source_text=word_data.get("source_text"),
             normalized=word_data.get("main", "").lower() if word_data.get("main") else None,
+            target_word=word_data.get("target_word"),
+            target_synonym=word_data.get("target_synonym"),
+            target_explanation=word_data.get("target_explanation"),
             created_at=datetime.now(timezone.utc),
         )
 

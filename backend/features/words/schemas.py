@@ -6,6 +6,7 @@ from datetime import datetime
 class CreateWordFromTextRequest(BaseModel):
     """Schema para crear palabra desde texto libre"""
     text: str = Field(..., description="Texto libre para extraer la palabra")
+    target_word: Optional[str] = Field(None, description="Palabra objetivo opcional para análisis de contexto")
 
 
 class CreateWordRequest(BaseModel):
@@ -51,6 +52,9 @@ class WordDetail(BaseModel):
     total_examples: int
     examples: List[str]
     explanation: Optional[str] = None
+    target_word: Optional[str] = None
+    target_synonym: Optional[str] = None
+    target_explanation: Optional[str] = None
 
 
 class WordResponse(BaseModel):

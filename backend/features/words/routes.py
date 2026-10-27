@@ -134,7 +134,10 @@ def get_words(
             "is_favorite": w.is_favorite,
             "is_boosted": w.is_boosted,
             "is_learned": word_repo.is_learned(w.id, ContentType.EXAMPLE),
-            "total_examples": total_examples
+            "total_examples": total_examples,
+            "target_word": w.target_word,
+            "target_synonym": w.target_synonym,
+            "target_explanation": w.target_explanation
         }
         for w, total_examples in paginated_data["items"]
     ]
@@ -162,6 +165,9 @@ def get_random_words(
             "meaning": TextFormatter.capitalize(w.meaning),
             "type": w.type,
             "frequency": w.frequency,
+            "target_word": w.target_word,
+            "target_synonym": w.target_synonym,
+            "target_explanation": w.target_explanation,
             "level": w.level,
         }
         for w in random_words
@@ -220,7 +226,10 @@ def get_word(
         "created_at": word.created_at,
         "total_examples": explore_examples_count,
         "examples": initial_examples,
-        "explanation": word.explanation
+        "explanation": word.explanation,
+        "target_word": word.target_word,
+        "target_synonym": word.target_synonym,
+        "target_explanation": word.target_explanation
     }
 
 
@@ -288,24 +297,33 @@ def create_single_word(
         }
 
     try:
-        # Extraer palabra del texto
-        extracted = ai.extract_learning_intent([text])
+        # Get target_word from request if provided
+        target_word = request_data.target_word
+        main_word = None
 
-        if not extracted or len(extracted) == 0:
-            logger.warning(f"[create_single_word] Could not extract word from text for user {current_user.id}")
-            return {
-                "status": "error",
-                "message": "No pudimos extraer una palabra del texto proporcionado"
-            }
+        if target_word:
+            # When target is provided, use it directly as main_word
+            main_word = target_word.strip()
+            logger.info(f"[create_single_word] Target word provided: {main_word}")
+        else:
+            # Extract main_word from text
+            extracted = ai.extract_learning_intent([text])
 
-        main_word = extracted[0].get("main")
+            if not extracted or len(extracted) == 0:
+                logger.warning(f"[create_single_word] Could not extract word from text for user {current_user.id}")
+                return {
+                    "status": "error",
+                    "message": "No pudimos extraer una palabra del texto proporcionado"
+                }
 
-        if not main_word:
-            logger.warning(f"[create_single_word] No main word extracted for user {current_user.id}")
-            return {
-                "status": "error",
-                "message": "No pudimos extraer una palabra del texto proporcionado"
-            }
+            main_word = extracted[0].get("main")
+
+            if not main_word:
+                logger.warning(f"[create_single_word] No main word extracted for user {current_user.id}")
+                return {
+                    "status": "error",
+                    "message": "No pudimos extraer una palabra del texto proporcionado"
+                }
 
         # Verificar si la palabra ya existe
         word_repo = WordRepository(db)
@@ -350,7 +368,7 @@ def create_single_word(
             }
 
         # Palabra no existe, enqueue task
-        task = WordGenerator.create_single(current_user.id, text)
+        task = WordGenerator.create_single(current_user.id, text, target_word)
 
         logger.info(f"[create_single_word] Task {task.id} queued for user {current_user.id}")
 

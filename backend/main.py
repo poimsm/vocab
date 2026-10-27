@@ -28,6 +28,7 @@ from features.examples.models import Example, ExampleType, ExploreConfiguration
 from features.best_options.models import BestOption
 from features.quick_write.models import QuickWrite
 from features.collocations.models import Collocation
+from features.vocab_imgs.models import VocabImage, VocabImageWord
 from core.learning_path.models import (
     LearningPath, LearningPathHistory, LearningPathCursor,
     LearningPathQueue, LearningPathAnomaly, PathRepairLog, LearningPathGenerationMonitor
@@ -43,6 +44,7 @@ from features.words.routes import router as words_router
 from features.best_options.routes import router as best_options_router
 from features.quick_write.routes import router as quick_write_router
 from features.collocations.routes import router as collocation_router
+from features.vocab_imgs.routes import router as vocab_imgs_router
 from auth import routes as auth
 from test import routes as test
 from activity import activity_routes as activity
@@ -68,6 +70,7 @@ app.include_router(words_router, prefix="/words", tags=["words"])
 app.include_router(best_options_router, prefix="/best-options", tags=["best_options"])
 app.include_router(quick_write_router, prefix="/quick-write", tags=["quick_write"])
 app.include_router(collocation_router, prefix="/collocations", tags=["collocations"])
+app.include_router(vocab_imgs_router, prefix="/vocab-imgs", tags=["vocab_imgs"])
 app.include_router(activity.router)
 app.include_router(test.router, prefix="/test", tags=["test"])
 

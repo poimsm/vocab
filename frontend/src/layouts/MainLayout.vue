@@ -65,21 +65,32 @@ function handleMenuOption(action: string) {
   closeUserMenu()
 
   switch (action) {
-    case 'profile':
-      router.push({ name: 'profile' })
+    case 'stats':
+      router.push({ name: 'stats' })
       break
-    case 'achievements':
-      router.push({ name: 'achievements' })
+    case 'badges':
+      router.push({ name: 'badges' })
       break
-    case 'settings':
-      router.push({ name: 'settings' })
+    case 'daily-challenge':
+      router.push({ name: 'daily-challenge' })
       break
-    case 'help':
-      // Open help in a modal or new page
-      window.open('/help', '_blank')
+    case 'leaderboard':
+      router.push({ name: 'leaderboard' })
       break
-    case 'preferences':
-      router.push({ name: 'preferences' })
+    case 'theme':
+      router.push({ name: 'theme' })
+      break
+    case 'customization':
+      router.push({ name: 'customization' })
+      break
+    case 'sound':
+      router.push({ name: 'sound-settings' })
+      break
+    case 'referral':
+      router.push({ name: 'referral' })
+      break
+    case 'feedback':
+      router.push({ name: 'feedback' })
       break
     case 'logout':
       authStore.logout()
@@ -91,13 +102,16 @@ function handleMenuOption(action: string) {
 // Mapeamos los módulos a las propiedades "to" usando el "name" de tus rutas
 const modules = [
   { id: 'words', label: 'My Words', icon: 'solar:book-bookmark-linear', to: { name: 'my-words' } },
+  // { id: 'vocab-images', label: 'Vocab Images', icon: 'ci:image-02', to: { name: 'vocab-images' } },
   { id: 'examples', label: 'Examples', icon: 'solar:chat-round-line-linear', to: { name: 'examples' } },
   { id: 'best-options', label: 'Best Options', icon: 'akar-icons:chat-question', to: { name: 'best-options' } },
   { id: 'randomizer', label: 'Randomizer', icon: 'bi:dice-5', to: { name: 'randomizer' } },
   // { id: 'game-story', label: 'Game Story', icon: 'fluent:game-20-filled', to: { name: 'game-story' } },
   { id: 'quick-write', label: 'Quick Write', icon: 'solar:pen-bold', to: { name: 'quick-write' } },
   { id: 'collocations', label: 'Word Combos', icon: 'boxicons:burger-filled', to: { name: 'collocations' } },
-  // { id: 'atlas', label: 'Atlas', icon: 'bi:map', to: { name: 'atlas' } },
+  { id: 'vocab-images', label: 'Explore', icon: 'ci:image-02', to: { name: 'vocab-images' } },
+  // { id: 'store', label: 'Store', icon: 'solar:bag-linear', to: { name: 'store' } },
+  { id: 'atlas', label: 'Atlas', icon: 'bi:map', to: { name: 'atlas' } },
   // { id: 'search', label: 'Search', icon: 'iconamoon:search-light', to: { name: 'home' } },
   // { id: 'explore', label: 'Explore', icon: 'material-symbols-light:explore-outline', to: { name: 'home' } },
   // { id: 'clusters', label: 'Clusters', icon: 'solar:widget-3-linear', to: { name: 'home' } },
@@ -168,30 +182,47 @@ const modules = [
         <!-- User Menu Popup -->
         <transition name="fade">
           <div v-if="userMenuOpen" class="user-menu">
-            <button class="user-menu-item" @click="handleMenuOption('profile')">
-              <Icon icon="solar:user-linear" width="18" />
-              <span>Profile</span>
+            <button class="user-menu-item" @click="handleMenuOption('stats')">
+              <Icon icon="solar:chart-linear" width="18" />
+              <span>Your Stats</span>
             </button>
-            <button class="user-menu-item" @click="handleMenuOption('achievements')">
-              <Icon icon="solar:cup-bold" width="18" />
-              <span>My Achievements</span>
+            <button class="user-menu-item" @click="handleMenuOption('badges')">
+              <Icon icon="solar:medal-ribbon-linear" width="18" />
+              <span>Badges & Streaks</span>
             </button>
-            <button class="user-menu-item" @click="handleMenuOption('settings')">
-              <Icon icon="solar:settings-linear" width="18" />
-              <span>Settings</span>
+            <button class="user-menu-item" @click="handleMenuOption('daily-challenge')">
+              <Icon icon="solar:fire-linear" width="18" />
+              <span>Daily Challenge</span>
             </button>
-            <button class="user-menu-item" @click="handleMenuOption('preferences')">
-              <Icon icon="solar:sliders-linear" width="18" />
-              <span>Preferences</span>
+            <button class="user-menu-item" @click="handleMenuOption('leaderboard')">
+              <Icon icon="solar:ranking-linear" width="18" />
+              <span>Leaderboard</span>
             </button>
-            <button class="user-menu-item" @click="handleMenuOption('help')">
-              <Icon icon="solar:question-circle-linear" width="18" />
-              <span>Help & Support</span>
+            <div class="user-menu-divider"></div>
+            <button class="user-menu-item" @click="handleMenuOption('theme')">
+              <Icon icon="solar:sun-2-linear" width="18" />
+              <span>Theme</span>
+            </button>
+            <button class="user-menu-item" @click="handleMenuOption('customization')">
+              <Icon icon="solar:palette-linear" width="18" />
+              <span>Customize</span>
+            </button>
+            <button class="user-menu-item" @click="handleMenuOption('sound')">
+              <Icon icon="solar:volume-loud-linear" width="18" />
+              <span>Sound & Haptics</span>
+            </button>
+            <button class="user-menu-item" @click="handleMenuOption('referral')">
+              <Icon icon="solar:share-linear" width="18" />
+              <span>Invite Friends</span>
+            </button>
+            <button class="user-menu-item" @click="handleMenuOption('feedback')">
+              <Icon icon="solar:chat-line-linear" width="18" />
+              <span>Send Feedback</span>
             </button>
             <div class="user-menu-divider"></div>
             <button class="user-menu-item logout-item" @click="handleMenuOption('logout')">
               <Icon icon="solar:logout-3-linear" width="18" />
-              <span>Logout</span>
+              <span>See you later!</span>
             </button>
           </div>
         </transition>
@@ -268,30 +299,47 @@ const modules = [
           <!-- User Menu Popup en Mobile -->
           <transition name="fade">
             <div v-if="userMenuOpen" class="user-menu-mobile">
-              <button class="user-menu-item" @click="handleMenuOption('profile'); closeDrawer()">
-                <Icon icon="solar:user-linear" width="18" />
-                <span>Profile</span>
+              <button class="user-menu-item" @click="handleMenuOption('stats'); closeDrawer()">
+                <Icon icon="solar:chart-linear" width="18" />
+                <span>Your Stats</span>
               </button>
-              <button class="user-menu-item" @click="handleMenuOption('achievements'); closeDrawer()">
-                <Icon icon="solar:cup-bold" width="18" />
-                <span>My Achievements</span>
+              <button class="user-menu-item" @click="handleMenuOption('badges'); closeDrawer()">
+                <Icon icon="solar:medal-ribbon-linear" width="18" />
+                <span>Badges & Streaks</span>
               </button>
-              <button class="user-menu-item" @click="handleMenuOption('settings'); closeDrawer()">
-                <Icon icon="solar:settings-linear" width="18" />
-                <span>Settings</span>
+              <button class="user-menu-item" @click="handleMenuOption('daily-challenge'); closeDrawer()">
+                <Icon icon="solar:fire-linear" width="18" />
+                <span>Daily Challenge</span>
               </button>
-              <button class="user-menu-item" @click="handleMenuOption('preferences'); closeDrawer()">
-                <Icon icon="solar:sliders-linear" width="18" />
-                <span>Preferences</span>
+              <button class="user-menu-item" @click="handleMenuOption('leaderboard'); closeDrawer()">
+                <Icon icon="solar:ranking-linear" width="18" />
+                <span>Leaderboard</span>
               </button>
-              <button class="user-menu-item" @click="handleMenuOption('help'); closeDrawer()">
-                <Icon icon="solar:question-circle-linear" width="18" />
-                <span>Help & Support</span>
+              <div class="user-menu-divider"></div>
+              <button class="user-menu-item" @click="handleMenuOption('theme'); closeDrawer()">
+                <Icon icon="solar:sun-2-linear" width="18" />
+                <span>Theme</span>
+              </button>
+              <button class="user-menu-item" @click="handleMenuOption('customization'); closeDrawer()">
+                <Icon icon="solar:palette-linear" width="18" />
+                <span>Customize</span>
+              </button>
+              <button class="user-menu-item" @click="handleMenuOption('sound'); closeDrawer()">
+                <Icon icon="solar:volume-loud-linear" width="18" />
+                <span>Sound & Haptics</span>
+              </button>
+              <button class="user-menu-item" @click="handleMenuOption('referral'); closeDrawer()">
+                <Icon icon="solar:share-linear" width="18" />
+                <span>Invite Friends</span>
+              </button>
+              <button class="user-menu-item" @click="handleMenuOption('feedback'); closeDrawer()">
+                <Icon icon="solar:chat-line-linear" width="18" />
+                <span>Send Feedback</span>
               </button>
               <div class="user-menu-divider"></div>
               <button class="user-menu-item logout-item" @click="handleMenuOption('logout'); closeDrawer()">
                 <Icon icon="solar:logout-3-linear" width="18" />
-                <span>Logout</span>
+                <span>See you later!</span>
               </button>
             </div>
           </transition>
@@ -482,6 +530,7 @@ const modules = [
   padding-top: 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   position: relative;
+  overflow: visible;
 }
 
 .user-footer-btn {
@@ -547,9 +596,10 @@ const modules = [
 
 .user-menu {
   position: absolute;
-  bottom: 60px;
-  left: 12px;
-  right: 12px;
+  top: -12px;
+  left: -8px;
+  right: -8px;
+  transform: translateY(-100%);
   background: #3d3a52;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
@@ -561,9 +611,9 @@ const modules = [
 .user-menu-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   width: 100%;
-  padding: 12px 16px;
+  padding: 14px 20px;
   border: none;
   background: transparent;
   color: #e2e0e8;

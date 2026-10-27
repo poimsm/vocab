@@ -108,7 +108,7 @@ const loadCollocations = async () => {
   try {
     isLoading.value = true
     error.value = null
-    const statusFilter = showOnlyMarked.value ? 'marked' : 'all'
+    const statusFilter = showOnlyMarked.value ? 'marked' : 'not_marked'
     const response = await collocationApi.getCollocations(statusFilter, currentPage.value, ITEMS_PER_PAGE)
 
     if (currentPage.value === 1) {
@@ -135,7 +135,7 @@ const loadMoreCollocations = async () => {
   currentPage.value++
 
   try {
-    const statusFilter = showOnlyMarked.value ? 'marked' : 'all'
+    const statusFilter = showOnlyMarked.value ? 'marked' : 'not_marked'
     const response = await collocationApi.getCollocations(statusFilter, currentPage.value, ITEMS_PER_PAGE)
     collocations.value.push(...response.items)
   } catch (err: any) {

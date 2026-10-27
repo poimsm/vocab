@@ -1,0 +1,153 @@
+{
+  "id": "wild-west-001",
+  "name": "Wild West",
+  "description": "Words and expressions from the American Frontier",
+  "cover_image": "/media/vocab/west_cover.png",
+  "main_image": "/media/vocab/west.png",
+  "words": [
+    {
+      "id": "west-001",
+      "word": "Outlaw",
+      "definition": "A criminal who is wanted by law enforcement",
+      "category": "People"
+    },
+    {
+      "id": "west-002",
+      "word": "Sheriff",
+      "definition": "The law enforcement officer of a county",
+      "category": "People"
+    },
+    {
+      "id": "west-003",
+      "word": "Deputy",
+      "definition": "An officer who assists the sheriff",
+      "category": "People"
+    },
+    {
+      "id": "west-004",
+      "word": "Bounty",
+      "definition": "A reward offered for capturing a criminal",
+      "category": "People"
+    },
+    {
+      "id": "west-005",
+      "word": "Posse",
+      "definition": "A group of armed citizens helping law enforcement",
+      "category": "People"
+    },
+    {
+      "id": "west-006",
+      "word": "Saloon",
+      "definition": "A bar or tavern in the Old West",
+      "category": "Places"
+    },
+    {
+      "id": "west-007",
+      "word": "Gunslinger",
+      "definition": "A person skilled at using pistols",
+      "category": "People"
+    },
+    {
+      "id": "west-008",
+      "word": "Showdown",
+      "definition": "A decisive confrontation or final challenge",
+      "category": "Events"
+    },
+    {
+      "id": "west-009",
+      "word": "Frontier",
+      "definition": "The edge of settled territory; the border region",
+      "category": "Places"
+    },
+    {
+      "id": "west-010",
+      "word": "Homestead",
+      "definition": "A house and farm, especially a settlement",
+      "category": "Places"
+    },
+    {
+      "id": "west-011",
+      "word": "Cattle drive",
+      "definition": "Moving a large herd of cattle across long distances",
+      "category": "Activities"
+    },
+    {
+      "id": "west-012",
+      "word": "Wrangle",
+      "definition": "To herd livestock; to manage or control",
+      "category": "Activities"
+    },
+    {
+      "id": "west-013",
+      "word": "Stampede",
+      "definition": "A sudden rush of animals in panic",
+      "category": "Events"
+    },
+    {
+      "id": "west-014",
+      "word": "Lasso",
+      "definition": "A rope with a loop for catching animals",
+      "category": "Tools"
+    },
+    {
+      "id": "west-015",
+      "word": "Spur",
+      "definition": "A device worn on a rider's heel to urge a horse",
+      "category": "Tools"
+    },
+    {
+      "id": "west-016",
+      "word": "Stetson",
+      "definition": "A type of wide-brimmed cowboy hat",
+      "category": "Clothing"
+    },
+    {
+      "id": "west-017",
+      "word": "Six-shooter",
+      "definition": "A revolver that holds six bullets",
+      "category": "Weapons"
+    },
+    {
+      "id": "west-018",
+      "word": "Chuck wagon",
+      "definition": "A mobile kitchen wagon used during cattle drives",
+      "category": "Vehicles"
+    },
+    {
+      "id": "west-019",
+      "word": "Claim",
+      "definition": "A plot of land marked for mining or settlement",
+      "category": "Places"
+    },
+    {
+      "id": "west-020",
+      "word": "Ranch",
+      "definition": "A large farm for raising cattle or horses",
+      "category": "Places"
+    },
+    {
+      "id": "west-021",
+      "word": "Trail",
+      "definition": "A path or route across the frontier",
+      "category": "Places"
+    },
+    {
+      "id": "west-022",
+      "word": "Buckaroo",
+      "definition": "A cowboy, especially in the western US",
+      "category": "People"
+    },
+    {
+      "id": "west-023",
+      "word": "Saddle up",
+      "definition": "To put a saddle on a horse; to prepare for action",
+      "category": "Activities"
+    },
+    {
+      "id": "west-024",
+      "word": "Rattle",
+      "definition": "To rattle around - to move restlessly",
+      "category": "Activities"
+    }
+  ]
+}

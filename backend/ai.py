@@ -153,8 +153,6 @@ Return ONLY JSON.
     logger.info(f"enrich_word:::: {content}")
     return content
 
-# backend/ai.py
-
 
 def enrich_words_bulk(words: list[str]) -> list[dict] | None:
     """
@@ -232,6 +230,48 @@ Rules:
         print(f"Error parsing bulk enrich JSON: {e}")
         print("Raw content was:", content)
         return None
+
+
+def target_meaning(sentence: str, target: str):
+    logger.info("target_meaning")
+    logger.debug(f"sentence: {sentence}")
+    logger.debug(f"target: {target}")
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        temperature=0,
+        messages=[
+            {
+                "role": "system",
+                "content": """
+You are an English vocabulary analyzer.
+
+Return:
+{
+  "synonym": string,
+  "explanation": string
+}
+
+Rules:
+- synonym: a simple, common English word or short phrase conveying the target's meaning in context.
+- explanation: briefly explain what the target means in this specific sentence.
+- Resolve ambiguity using context, not the target's most common meaning.
+- Prefer basic, natural English.
+- Do not repeat the target as its own synonym.
+- Explain the target's meaning, not the entire sentence.
+- Return ONLY valid JSON.
+"""
+            },
+            {
+                "role": "user",
+                "content": f"Sentence: {sentence}\nTarget: {target}"
+            }
+        ]
+    )
+
+    content = json.loads(response.choices[0].message.content)
+    logger.info(f"target_meaning:::: {content}")
+    return content
 
 
 def generate_examples_for_single_word(

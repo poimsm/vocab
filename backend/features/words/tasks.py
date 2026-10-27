@@ -22,14 +22,16 @@ from config import UserProfileManager
 def create_single_task(
     user_id: int,
     text: str,
+    target_word: str = None,
 ) -> None:
     """
     Crea una palabra individual desde texto libre.
 
     Flujo:
     1. Usar ai.extract_learning_intent(text) para obtener main, meaning, etc.
-    2. Crear Word en BD
-    3. Generar examples automáticamente
+    2. Si target_word está presente, procesar con ai.target_meaning()
+    3. Crear Word en BD
+    4. Generar examples automáticamente
     """
     from db import engine
     from features.words.models import Word, WordStatistics, WordLevel
@@ -44,36 +46,45 @@ def create_single_task(
     logger.info(f"[WordGenerator] Creating single word from text for user {user_id}")
 
     try:
-        # Extraer información de la palabra del texto
-        extracted = ai.extract_learning_intent([text])
+        # Determine main_word: use target_word if provided, otherwise extract from text
+        main_word = None
+        word_type = "word"
 
-        if not extracted or len(extracted) == 0:
-            logger.warning(f"[WordGenerator] Could not extract word data from text for user {user_id}")
-            return
+        if target_word:
+            # When target is provided, use it directly as main_word
+            main_word = target_word.strip()
+            logger.info(f"[WordGenerator] Using target_word as main: {main_word}")
+        else:
+            # Extract main_word from text
+            extracted = ai.extract_learning_intent([text])
 
-        # Obtener la palabra principal extraída
-        main_word = extracted[0].get("main")
-        word_type = extracted[0].get("type", "word")
+            if not extracted or len(extracted) == 0:
+                logger.warning(f"[WordGenerator] Could not extract word data from text for user {user_id}")
+                return
+
+            main_word = extracted[0].get("main")
+            word_type = extracted[0].get("type", "word")
 
         if not main_word:
-            logger.warning(f"[WordGenerator] No main word extracted for user {user_id}")
+            logger.warning(f"[WordGenerator] No main word determined for user {user_id}")
             return
 
         # Crear sesión
         with Session(engine) as db:
             word_repo = WordRepository(db)
 
-            # Verificar si la palabra ya existe
+            # Verificar si la palabra ya existe (solo si está activa)
             existing_word = db.exec(
                 select(Word)
                 .where(
                     Word.user_id == user_id,
-                    Word.main == main_word
+                    Word.main == main_word,
+                    Word.is_active == True
                 )
             ).first()
 
             if existing_word:
-                logger.info(f"[WordGenerator] Word '{main_word}' already exists for user {user_id}, skipping")
+                logger.info(f"[WordGenerator] Word '{main_word}' already exists and is active for user {user_id}, skipping")
                 return
 
             # Enriquecer la palabra con detalles completos
@@ -82,6 +93,20 @@ def create_single_task(
             if not enriched:
                 logger.warning(f"[WordGenerator] Could not enrich word {main_word} for user {user_id}")
                 return
+
+            # Procesar target si está presente
+            target_synonym = None
+            target_explanation = None
+            if target_word:
+                try:
+                    logger.info(f"[WordGenerator] Processing target '{target_word}' for user {user_id}")
+                    target_result = ai.target_meaning(text, target_word)
+                    if target_result:
+                        target_synonym = target_result.get("synonym")
+                        target_explanation = target_result.get("explanation")
+                        logger.debug(f"[WordGenerator] Target info retrieved: synonym={target_synonym}")
+                except Exception as e:
+                    logger.error(f"[WordGenerator] Error processing target meaning: {e}", exc_info=True)
 
             # Crear palabra
             word = word_repo.create(user_id, {
@@ -93,6 +118,9 @@ def create_single_task(
                 "level": WordLevel.to_int(enriched.get("level")),
                 "context": enriched.get("category"),
                 "source_text": text,
+                "target_word": target_word,
+                "target_synonym": target_synonym,
+                "target_explanation": target_explanation,
             })
 
             logger.debug(f"[WordGenerator] Word {word.id} created for user {user_id}")

@@ -76,8 +76,17 @@ class Word(SQLModel, table=True):
     is_boosted: bool = Field(default=False)
     boosted_at: Optional[datetime] = Field(default=None)
     explanation: Optional[str] = Field(default=None, max_length=500)
+
+    # Target-related fields
+    target_word: Optional[str] = Field(default=None, max_length=100)
+    target_synonym: Optional[str] = Field(default=None, max_length=200)
+    target_explanation: Optional[str] = Field(default=None, max_length=500)
+
     user_id: Optional[int] = Field(default=None, foreign_key="users.id")
     user: Optional[User] = Relationship()
+
+    # Vocabulary image word reference
+    vocab_image_word_id: Optional[str] = Field(default=None, foreign_key="vocab_image_words.id", index=True)
 
     statistics: List["WordStatistics"] = Relationship(back_populates="word")
 

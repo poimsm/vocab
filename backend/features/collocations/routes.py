@@ -34,7 +34,7 @@ router = APIRouter()
 @router.get("/list", response_model=dict)
 @log_endpoint
 def get_collocations(
-    status: str = "all",
+    status: str = "not_marked",
     page: int = Query(1, ge=1),
     limit: int = Query(15, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -43,11 +43,11 @@ def get_collocations(
     """Obtiene las collocations del usuario actual con paginación.
 
     Parameters:
-    - status: "all" (default), "marked", "not_marked"
+    - status: "not_marked" (default), "marked", "all"
     - page: página actual (default: 1)
     - limit: items por página (default: 15, máximo: 100)
 
-    Returns unmarked collocations first, then marked ones.
+    Returns unmarked collocations by default, or marked ones when status="marked".
     """
     # Log de actividad
     UserActivityService.log_page_view(

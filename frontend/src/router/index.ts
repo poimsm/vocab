@@ -13,6 +13,9 @@ import QuickWritePage from '@/pages/QuickWritePage.vue'
 import CollocationsPage from '@/pages/CollocationsPage.vue'
 import WordDetailPage from '@/pages/WordDetailPage.vue'
 import AtlasPage from '@/pages/AtlasPage.vue'
+import StorePage from '@/pages/StorePage.vue'
+import LandingPage from '@/pages/LandingPage.vue'
+import VocabImagePage from '@/pages/VocabImagePage.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -29,6 +32,12 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: HomePage,
+      meta: { requiresGuest: true }
+    },
+    {
+      path: '/landing',
+      name: 'landing',
+      component: LandingPage,
       meta: { requiresGuest: true }
     },
     {
@@ -95,6 +104,18 @@ const router = createRouter({
       path: '/atlas/:theme?',
       name: 'atlas',
       component: AtlasPage,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/store',
+      name: 'store',
+      component: StorePage,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/vocab-images',
+      name: 'vocab-images',
+      component: VocabImagePage,
       meta: { requiresAuth: true }
     }
   ]

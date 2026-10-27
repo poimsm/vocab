@@ -42,6 +42,9 @@ interface Word {
   status?: 'pending' | 'ready'
   isExisting?: boolean
   explanation?: string
+  targetWord?: string
+  targetSynonym?: string
+  targetExplanation?: string
 }
 
 // ─── State ───
@@ -56,7 +59,12 @@ const showBoostedOnly = ref(false)
 const selectedWord = ref<Word | null>(null)
 const showMobileDetail = ref(false)
 const showFilterMenu = ref(false)
+const showFilterDropdown = ref(false)
+const showMoreControls = ref(false)
 const showSearchMobile = ref(false)
+const showSimpleBanner = ref(false)
+const showVariantBanner = ref(false)
+const showTipBanner = ref(true)
 
 // ─── Infinite Scroll State ───
 const currentPage = ref(1)
@@ -70,10 +78,12 @@ const loadingMore = ref(false)
 const showAddDesktop = ref(false)
 const showAddMobile = ref(false)
 const newWordText = ref('')
-const addMode = ref<'simple' | 'context' | null>(null)
+const addMode = ref<'simple' | 'context' | null>('simple')
 const adding = ref(false)
 const addError = ref<string | null>(null)
 const addSuccess = ref<string | null>(null)
+const isSelectingTarget = ref(false)
+const selectedTarget = ref<string | null>(null)
 
 // ─── Command System State ───
 interface CommandField {
@@ -331,7 +341,10 @@ const data = response.data
       type: data.type,
       sourceText: data.source_text,
       examples: data.examples || [],
-      synonyms: data.synonyms || []
+      synonyms: data.synonyms || [],
+      targetWord: data.target_word,
+      targetSynonym: data.target_synonym,
+      targetExplanation: data.target_explanation
     }
     // Scroll detail panel to top after selecting
     await nextTick()
@@ -368,10 +381,12 @@ async function toggleFavoriteApi(word: Word) {
 
 async function addWordApi() {
   let text = ''
+  let targetWord = null
 
   // Build text based on mode
   if (addMode.value === 'simple') {
     text = newWordText.value.trim()
+    targetWord = selectedTarget.value || null
   } else if (addMode.value === 'context' && selectedCommand.value) {
     // For context mode, build formatted text: "sentence <- word"
     const sentence = commandFieldValues.value['sentence'] || ''
@@ -385,7 +400,11 @@ async function addWordApi() {
   addSuccess.value = null
 
   try {
-    const response = await api.post('/words/single', { text })
+    const payload = { text }
+    if (targetWord) {
+      payload.target_word = targetWord
+    }
+    const response = await api.post('/words/single', payload)
     const data = response.data
 
     // Handle error
@@ -515,12 +534,26 @@ function toggleExplanation() {
 function setFilterModeAll() {
   trackButtonClick('filter_mode_all')
   filterMode.value = 'all'
+  showBoostedOnly.value = false
+  showFilterDropdown.value = false
+  fetchWords(true)
 }
 
 function setFilterModeFavorites() {
   trackButtonClick('filter_mode_favorites')
   filterMode.value = 'favorites'
+  showBoostedOnly.value = false
   learningStateFilter.value = 'all'
+  showFilterDropdown.value = false
+  fetchWords(true)
+}
+
+function setFilterBoosted() {
+  trackButtonClick('filter_mode_boosted')
+  showBoostedOnly.value = !showBoostedOnly.value
+  filterMode.value = 'all'
+  showFilterDropdown.value = false
+  fetchWords(true)
 }
 
 function setLearningStateAll() {
@@ -721,6 +754,8 @@ function closeDetail() {
 function openAdd() {
   trackButtonClick('open_add_word_modal')
   newWordText.value = ''
+  isSelectingTarget.value = false
+  selectedTarget.value = null
   if (window.innerWidth <= 768) {
     showAddMobile.value = true
   } else {
@@ -732,11 +767,13 @@ function closeAdd() {
   showAddDesktop.value = false
   showAddMobile.value = false
   newWordText.value = ''
-  addMode.value = null
+  addMode.value = 'simple'
   selectedCommand.value = null
   commandFieldValues.value = {}
   addError.value = null
   addSuccess.value = null
+  isSelectingTarget.value = false
+  selectedTarget.value = null
 }
 
 function addWord() {
@@ -747,6 +784,15 @@ function addWord() {
 function handleAddKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter') addWord()
   if (e.key === 'Escape') closeAdd()
+}
+
+function toggleSelectTarget() {
+  isSelectingTarget.value = !isSelectingTarget.value
+}
+
+function selectWordAsTarget(word: string) {
+  selectedTarget.value = word
+  isSelectingTarget.value = false
 }
 
 // ─── Command System Functions ───
@@ -854,6 +900,71 @@ onUnmounted(() => {
 
 <template>
   <div class="my-words-view">
+    <!-- Slogan Banner -->
+    <!-- <div class="slogan-banner">
+      <img src="/banner.png" alt="Add words from books, movies, and beyond" class="banner-image" />
+      <div class="banner-overlay">
+        <div class="banner-content" style="display:none">
+          <h2 class="banner-title">add words from <span class="title-highlight">your books</span></h2>
+          <p class="banner-subtitle">Turn the words you find in books into learning experience</p>
+        </div>
+      </div>
+    </div> -->
+
+    <!-- Simple Banner -->
+    <transition name="slide-down">
+      <div v-if="showSimpleBanner" class="simple-banner">
+        <div class="banner-message">
+          <p>Add words from your books, movies, and real life to build your vocabulary</p>
+        </div>
+        <button class="banner-close" @click="showSimpleBanner = false" title="Dismiss">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </transition>
+
+    <!-- Variant Banner (Alternative) -->
+    <transition name="slide-down">
+      <div v-if="showVariantBanner" class="variant-banner">
+        <div class="variant-banner-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+        </div>
+        <div class="variant-banner-content">
+          <h3 class="variant-banner-title">Expand Your Vocabulary</h3>
+          <p class="variant-banner-text">Add words from your favorite books, movies, and real-life conversations</p>
+        </div>
+        <div class="variant-banner-actions">
+          <button class="variant-banner-btn-action" @click="showVariantBanner = false">
+            Add Now
+          </button>
+          <button class="variant-banner-btn-close" @click="showVariantBanner = false">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Tip Banner (Completely Different) -->
+    <transition name="slide-down">
+      <div v-if="showTipBanner" class="tip-banner">
+        <div class="tip-banner-left">
+          <div class="tip-badge">Word Collector</div>
+          <p class="tip-banner-message">Hear a fun word in a movie or book? Put it in your list so you don't forget to practice it later!</p>
+        </div>
+        <button class="tip-banner-dismiss" @click="showTipBanner = false">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </transition>
+
     <!-- Header -->
     <header class="words-header">
       <div class="header-left">
@@ -889,38 +1000,87 @@ onUnmounted(() => {
           class="search-input"
         />
       </div>
-      <div class="filter-tabs">
-        <button
-          class="filter-tab"
-          :class="{ active: filterMode === 'all' }"
-          @click="setFilterModeAll"
-        >
-          All
-        </button>
-        <button
-          class="filter-tab"
-          :class="{ active: filterMode === 'favorites' }"
-          @click="setFilterModeFavorites"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+
+      <!-- Toolbar Controls (Right side) -->
+      <div class="toolbar-controls">
+        <!-- Filter Dropdown -->
+        <div class="filter-dropdown-wrap">
+          <button class="filter-dropdown-toggle" @click="showFilterDropdown = !showFilterDropdown">
+            {{ filterMode === 'favorites' ? 'Favorites' : showBoostedOnly ? 'Boosted' : 'All Words' }}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+          <transition name="fade">
+            <div v-if="showFilterDropdown" class="filter-dropdown-content" @click="showFilterDropdown = false">
+              <button class="dropdown-item" :class="{ active: filterMode === 'all' && !showBoostedOnly }" @click="setFilterModeAll()">
+                All Words
+              </button>
+              <button class="dropdown-item" :class="{ active: filterMode === 'favorites' }" @click="setFilterModeFavorites()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+                Favorites <span v-if="totalFavorites > 0" class="badge">{{ totalFavorites }}</span>
+              </button>
+              <button class="dropdown-item" :class="{ active: showBoostedOnly }" @click="setFilterBoosted()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>
+                Boosted <span v-if="totalBoosted > 0" class="badge">{{ totalBoosted }}</span>
+              </button>
+            </div>
+          </transition>
+        </div>
+        <!-- View Mode Buttons (Desktop) -->
+        <div class="view-mode-desktop">
+          <button class="view-mode-btn" :class="{ active: viewMode === 'list' }" @click="setViewModeList" title="List view">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+          </button>
+          <button class="view-mode-btn" :class="{ active: viewMode === 'grid' }" @click="setViewModeGrid" title="Grid view">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- More Controls Dropdown -->
+        <div class="more-controls-wrap">
+        <button class="more-controls-toggle" @click="showMoreControls = !showMoreControls" title="More options">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
           </svg>
-          <span>Favorites</span>
-          <span v-if="totalFavorites > 0" class="fav-count">{{ totalFavorites }}</span>
         </button>
-        <button
-          class="filter-tab"
-          :class="{ active: showBoostedOnly }"
-          @click="toggleBoostedFilter"
-          title="Show only boosted words"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-          </svg>
-          <span>Boosted</span>
-          <span v-if="totalBoosted > 0" class="boosted-count-badge">{{ totalBoosted }}</span>
-        </button>
+        <transition name="fade">
+          <div v-if="showMoreControls" class="more-controls-content">
+            <div class="controls-section">
+              <div class="section-label">Learning State</div>
+              <button class="control-btn" :class="{ active: learningStateFilter === 'all' }" @click="setLearningStateAll(); showMoreControls = false">
+                All
+              </button>
+              <button class="control-btn" :class="{ active: learningStateFilter === 'new' }" @click="setLearningStateNew(); showMoreControls = false">
+                New
+              </button>
+              <button class="control-btn" :class="{ active: learningStateFilter === 'learning' }" @click="setLearningStateLearning(); showMoreControls = false">
+                In Progress
+              </button>
+              <button class="control-btn" :class="{ active: learningStateFilter === 'mastered' }" @click="setLearningStateMastered(); showMoreControls = false">
+                Learned
+              </button>
+            </div>
+            <div class="controls-divider"></div>
+            <button class="control-btn relearn-option" @click="openRelearnDialog(); showMoreControls = false" :disabled="loading">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-4.95M20.49 15a9 9 0 01-14.85 4.95"/>
+              </svg>
+              Relearn
+            </button>
+          </div>
+        </transition>
       </div>
+      </div>
+
       <!-- Mobile Search Button -->
       <button class="mobile-search-btn" @click="toggleSearchMobile">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1242,6 +1402,31 @@ onUnmounted(() => {
 
             <p class="detail-definition">{{ selectedWord.definition }}</p>
 
+            <!-- Target Info Section - Prominent -->
+            <div v-if="selectedWord.targetWord" class="detail-target-info-v2">
+              <div v-if="selectedWord.sourceText" class="target-context-box">
+                <div class="context-icon">💬</div>
+                <p class="context-text">{{ selectedWord.sourceText }}</p>
+              </div>
+
+              <div class="target-analysis">
+                <div class="analysis-row">
+                  <div class="analysis-label">Target word</div>
+                  <div class="analysis-value target-word-highlight">{{ selectedWord.targetWord }}</div>
+                </div>
+
+                <div v-if="selectedWord.targetSynonym" class="analysis-row">
+                  <div class="analysis-label">Synonym</div>
+                  <div class="analysis-value">{{ selectedWord.targetSynonym }}</div>
+                </div>
+
+                <div v-if="selectedWord.targetExplanation" class="analysis-row">
+                  <div class="analysis-label">Meaning</div>
+                  <div class="analysis-value explanation-text">{{ selectedWord.targetExplanation }}</div>
+                </div>
+              </div>
+            </div>
+
             <!-- Synonyms Section -->
             <div v-if="selectedWord.synonyms && selectedWord.synonyms.length" class="detail-synonyms">
               <h4 class="synonyms-title">Synonyms</h4>
@@ -1379,6 +1564,31 @@ onUnmounted(() => {
           </div>
           <p class="mobile-definition">{{ selectedWord.definition }}</p>
 
+          <!-- Mobile Target Info Section - Prominent -->
+          <div v-if="selectedWord.targetWord" class="detail-target-info-v2">
+            <div v-if="selectedWord.sourceText" class="target-context-box">
+              <div class="context-icon">💬</div>
+              <p class="context-text">{{ selectedWord.sourceText }}</p>
+            </div>
+
+            <div class="target-analysis">
+              <div class="analysis-row">
+                <div class="analysis-label">Target word</div>
+                <div class="analysis-value target-word-highlight">{{ selectedWord.targetWord }}</div>
+              </div>
+
+              <div v-if="selectedWord.targetSynonym" class="analysis-row">
+                <div class="analysis-label">Synonym</div>
+                <div class="analysis-value">{{ selectedWord.targetSynonym }}</div>
+              </div>
+
+              <div v-if="selectedWord.targetExplanation" class="analysis-row">
+                <div class="analysis-label">Meaning</div>
+                <div class="analysis-value explanation-text">{{ selectedWord.targetExplanation }}</div>
+              </div>
+            </div>
+          </div>
+
           <!-- Mobile Synonyms -->
           <div v-if="selectedWord.synonyms && selectedWord.synonyms.length" class="mobile-synonyms">
             <h4 class="synonyms-title">Synonyms</h4>
@@ -1480,20 +1690,8 @@ onUnmounted(() => {
             </button>
           </div>
           <div class="modal-body">
-            <!-- CARDS: Only show when addMode is null -->
-            <div v-if="addMode === null" class="mode-cards-grid">
-              <div class="mode-card" @click="addMode = 'simple'; selectedCommand = null">
-                <div class="card-icon">📝</div>
-                <div class="card-title">Simple</div>
-              </div>
-              <div class="mode-card" @click="addMode = 'context'; selectCommand(commands[0])">
-                <div class="card-icon">🎯</div>
-                <div class="card-title">In Context</div>
-              </div>
-            </div>
-
             <!-- ERROR MESSAGE -->
-            <div v-if="addError && addMode !== null" class="add-error">
+            <div v-if="addError" class="add-error">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="12" cy="12" r="10"/>
                 <path fill="white" d="M12 5c-3.9 0-7 3.1-7 7s3.1 7 7 7 7-3.1 7-7-3.1-7-7-7zm3.5 7c0 .8-.7 1.5-1.5 1.5S12.5 12.8 12.5 12 13.2 10.5 14 10.5s1.5.7 1.5 1.5zm-7 0c0 .8-.7 1.5-1.5 1.5S4.5 12.8 4.5 12 5.2 10.5 6 10.5 7.5 11.2 7.5 12z"/>
@@ -1502,7 +1700,7 @@ onUnmounted(() => {
             </div>
 
             <!-- SUCCESS MESSAGE -->
-            <div v-if="addSuccess && addMode !== null" class="add-success">
+            <div v-if="addSuccess" class="add-success">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
               </svg>
@@ -1516,11 +1714,58 @@ onUnmounted(() => {
                   ref="desktopInput"
                   v-model="newWordText"
                   type="text"
-                  placeholder="Type a word..."
+                  placeholder="Type a word or paste text..."
                   class="form-input form-input-large"
                   @keydown="handleAddKeydown"
                   autofocus
                 />
+              </div>
+
+              <!-- TARGET SELECTION SECTION -->
+              <div v-if="newWordText.trim()" class="target-selector-wrapper">
+                <div v-if="!isSelectingTarget" class="target-display">
+                  <div class="target-label-container">
+                    <Icon icon="mdi:target" width="18" height="18" class="target-icon" />
+                    <div class="target-text-info">
+                      <span v-if="!selectedTarget" class="target-hint">Select a target word (optional)</span>
+                      <span v-else class="target-selected">
+                        Target: <span class="target-word-badge">{{ selectedTarget }}</span>
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    class="target-toggle-btn"
+                    @click="toggleSelectTarget"
+                    :title="selectedTarget ? 'Change target' : 'Add target'"
+                  >
+                    <Icon :icon="selectedTarget ? 'mdi:pencil' : 'mdi:plus'" width="18" height="18" />
+                  </button>
+                </div>
+
+                <!-- WORD SELECTION MODE -->
+                <div v-else class="word-selection-expanded">
+                  <div class="selection-header">
+                    <span class="selection-title">Select Target Word</span>
+                    <button
+                      class="close-selection-btn"
+                      @click="toggleSelectTarget"
+                      title="Close"
+                    >
+                      <Icon icon="mdi:close" width="16" height="16" />
+                    </button>
+                  </div>
+                  <div class="words-grid">
+                    <button
+                      v-for="(word, idx) in newWordText.trim().split(/\s+/)"
+                      :key="idx"
+                      class="word-button"
+                      :class="{ 'word-button-active': selectedTarget === word }"
+                      @click="selectWordAsTarget(word)"
+                    >
+                      {{ word }}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1536,8 +1781,8 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Footer (Only visible after mode selected) -->
-          <div v-if="addMode !== null" class="modal-footer">
+          <!-- Footer -->
+          <div class="modal-footer">
             <button class="modal-btn secondary" @click="trackButtonClick('cancel_add_word'); closeAdd()">Cancel</button>
             <button class="modal-btn primary" @click="addWord" :disabled="adding || (addMode === 'simple' ? !newWordText.trim() : !selectedCommand || !commandFieldValues['sentence']?.trim() || !commandFieldValues['word']?.trim())">
               <span v-if="adding">Adding...</span>
@@ -1587,23 +1832,8 @@ onUnmounted(() => {
         <div class="mobile-add-content">
           <h3 v-if="addMode !== null" class="mobile-add-title">Add New Word</h3>
 
-          <!-- CARDS -->
-          <div v-if="addMode === null" class="mode-selection-screen mobile-mode-selection">
-            <h3 class="mobile-add-title">Add New Word</h3>
-            <div class="mode-cards-grid mobile-cards-grid">
-              <div class="mode-card" @click="addMode = 'simple'; selectedCommand = null">
-                <div class="card-icon">📝</div>
-                <div class="card-title">Simple</div>
-              </div>
-              <div class="mode-card" @click="addMode = 'context'; selectCommand(commands[0])">
-                <div class="card-icon">🎯</div>
-                <div class="card-title">In Context</div>
-              </div>
-            </div>
-          </div>
-
           <!-- ERROR -->
-          <div v-if="addError && addMode !== null" class="add-error">
+          <div v-if="addError" class="add-error">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
               <circle cx="12" cy="12" r="10"/>
               <path fill="white" d="M12 5c-3.9 0-7 3.1-7 7s3.1 7 7 7 7-3.1 7-7-3.1-7-7-7zm3.5 7c0 .8-.7 1.5-1.5 1.5S12.5 12.8 12.5 12 13.2 10.5 14 10.5s1.5.7 1.5 1.5zm-7 0c0 .8-.7 1.5-1.5 1.5S4.5 12.8 4.5 12 5.2 10.5 6 10.5 7.5 11.2 7.5 12z"/>
@@ -1612,7 +1842,7 @@ onUnmounted(() => {
           </div>
 
           <!-- SUCCESS -->
-          <div v-if="addSuccess && addMode !== null" class="add-success">
+          <div v-if="addSuccess" class="add-success">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
               <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
             </svg>
@@ -1622,7 +1852,54 @@ onUnmounted(() => {
           <!-- SIMPLE INPUT -->
           <div v-if="addMode === 'simple'">
             <div class="input-wrapper mobile-input-wrapper">
-              <input v-model="newWordText" type="text" placeholder="Type a word..." class="mobile-add-input mobile-add-input-large" @keydown="handleAddKeydown" autofocus/>
+              <input v-model="newWordText" type="text" placeholder="Type a word or paste text..." class="mobile-add-input mobile-add-input-large" @keydown="handleAddKeydown" autofocus/>
+            </div>
+
+            <!-- TARGET SELECTION SECTION - MOBILE -->
+            <div v-if="newWordText.trim()" class="target-selector-wrapper">
+              <div v-if="!isSelectingTarget" class="target-display">
+                <div class="target-label-container">
+                  <Icon icon="mdi:target" width="18" height="18" class="target-icon" />
+                  <div class="target-text-info">
+                    <span v-if="!selectedTarget" class="target-hint">Select a target word (optional)</span>
+                    <span v-else class="target-selected">
+                      Target: <span class="target-word-badge">{{ selectedTarget }}</span>
+                    </span>
+                  </div>
+                </div>
+                <button
+                  class="target-toggle-btn"
+                  @click="toggleSelectTarget"
+                  :title="selectedTarget ? 'Change target' : 'Add target'"
+                >
+                  <Icon :icon="selectedTarget ? 'mdi:pencil' : 'mdi:plus'" width="18" height="18" />
+                </button>
+              </div>
+
+              <!-- WORD SELECTION MODE - MOBILE -->
+              <div v-else class="word-selection-expanded">
+                <div class="selection-header">
+                  <span class="selection-title">Select Target Word</span>
+                  <button
+                    class="close-selection-btn"
+                    @click="toggleSelectTarget"
+                    title="Close"
+                  >
+                    <Icon icon="mdi:close" width="16" height="16" />
+                  </button>
+                </div>
+                <div class="words-grid">
+                  <button
+                    v-for="(word, idx) in newWordText.trim().split(/\s+/)"
+                    :key="idx"
+                    class="word-button"
+                    :class="{ 'word-button-active': selectedTarget === word }"
+                    @click="selectWordAsTarget(word)"
+                  >
+                    {{ word }}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1637,8 +1914,8 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Actions (Only visible after mode selected) - Mobile -->
-          <div v-if="addMode !== null" class="mobile-add-actions">
+          <!-- Actions - Mobile -->
+          <div class="mobile-add-actions">
             <button class="mobile-add-btn secondary" @click="trackButtonClick('cancel_mobile_add_word'); closeAdd()">Cancel</button>
             <button class="mobile-add-btn primary" @click="addWord" :disabled="adding || (addMode === 'simple' ? !newWordText.trim() : !selectedCommand || !commandFieldValues['sentence']?.trim() || !commandFieldValues['word']?.trim())">
               <span v-if="adding">Adding...</span>
@@ -1772,6 +2049,258 @@ onUnmounted(() => {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+/* ─── Slogan Banner ─── */
+.slogan-banner {
+  position: relative;
+  margin-bottom: 24px;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: -15px;
+}
+
+.banner-image {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.banner-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 48px 60px;
+}
+
+.banner-content {
+  max-width: 450px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;  
+}
+
+.banner-title {
+  margin: 0;
+  font-size: 42px;
+  font-weight: 700;
+  color: #f0ede9;
+  letter-spacing: -1px;
+  line-height: 1.15;
+}
+
+.title-highlight {
+  color: #c4aaf1ff;
+}
+
+.banner-subtitle {
+  margin: 0;
+  font-size: 15px;
+  color: #d0ccc7;
+  line-height: 1.6;
+  font-weight: 400;
+}
+
+/* ─── Simple Banner ─── */
+.simple-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  border-radius: 10px;
+  background: rgba(124, 58, 237, 0.08);
+  border: 1px solid rgba(124, 58, 237, 0.2);
+  animation: slideDown 0.3s ease-out;
+}
+
+.banner-message {
+  flex: 1;
+}
+
+.banner-message p {
+  margin: 0;
+  font-size: 14px;
+  color: #d0ccc7;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+.banner-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: #9c99ab;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  margin-left: 12px;
+  border-radius: 6px;
+}
+
+.banner-close:hover {
+  background: rgba(124, 58, 237, 0.1);
+  color: #c4aaf1;
+}
+
+/* ─── Variant Banner ─── */
+.variant-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.12) 0%, rgba(167, 139, 250, 0.06) 100%);
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  animation: slideDown 0.3s ease-out;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08);
+}
+
+.variant-banner-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(167, 139, 250, 0.15);
+  border-radius: 10px;
+  color: #a78bfa;
+}
+
+.variant-banner-content {
+  flex: 1;
+}
+
+.variant-banner-title {
+  margin: 0 0 4px 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #e2e0e8;
+}
+
+.variant-banner-text {
+  margin: 0;
+  font-size: 13px;
+  color: #b0aac0;
+  line-height: 1.5;
+}
+
+.variant-banner-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.variant-banner-btn-action {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  background: linear-gradient(135deg, #a78bfa 0%, #c4aaf1 100%);
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.variant-banner-btn-action:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(167, 139, 250, 0.3);
+}
+
+.variant-banner-btn-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: #9c99ab;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  border-radius: 6px;
+}
+
+.variant-banner-btn-close:hover {
+  background: rgba(167, 139, 250, 0.1);
+  color: #c4aaf1;
+}
+
+/* ─── Tip Banner (Completely Different Style) ─── */
+.tip-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  margin-bottom: 20px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
+  border-left: 4px solid #06b6d4;
+  animation: slideDown 0.3s ease-out;
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.15);
+}
+
+.tip-banner-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.tip-badge {
+  display: inline-block;
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  font-size: 11px;
+  font-weight: 700;
+  color: #cffafe;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tip-banner-message {
+  margin: 0;
+  font-size: 14px;
+  color: #f0fdfa;
+  line-height: 1.5;
+  font-weight: 500;
+  max-width: 90%;
+}
+
+.tip-banner-dismiss {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: #cffafe;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  border-radius: 6px;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+.tip-banner-dismiss:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(1.1);
+}
+
 /* ─── Header ─── */
 .words-header {
   display: flex;
@@ -1868,7 +2397,7 @@ onUnmounted(() => {
 
 /* ─── Relearn Button ─── */
 .relearn-btn {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 8px;
   padding: 12px 20px;
@@ -1885,6 +2414,7 @@ onUnmounted(() => {
 
 @media (max-width: 768px) {
   .relearn-btn {
+    display: flex;
     font-size: 17px;
   }
 }
@@ -1905,6 +2435,13 @@ onUnmounted(() => {
   gap: 12px;
   margin-bottom: 24px;
   align-items: center;
+}
+
+.toolbar-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
 }
 
 .search-box {
@@ -2107,13 +2644,254 @@ onUnmounted(() => {
   }
 }
 
+/* ─── Filter Dropdown ─── */
+.filter-dropdown-wrap {
+  position: relative;
+}
+
+.filter-dropdown-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  /* color: #e2e0e8; */
+  color: #bbb;
+  font-size: 13px;
+  /* font-weight: 600; */
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.filter-dropdown-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.filter-dropdown-content {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 6px;
+  min-width: 160px;
+  background: #2a2635;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  color: #9c99ab;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e0e8;
+}
+
+.dropdown-item.active {
+  background: rgba(124, 58, 237, 0.2);
+  color: #a78bfa;
+}
+
+.dropdown-item svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.badge {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.2);
+  color: #a78bfa;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+/* ─── View Mode Desktop ─── */
+.view-mode-desktop {
+  display: none;
+  gap: 4px;
+}
+
+@media (min-width: 769px) {
+  .view-mode-desktop {
+    display: flex;
+  }
+}
+
+.view-mode-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #9c99ab;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.view-mode-btn:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #e2e0e8;
+}
+
+.view-mode-btn.active {
+  background: rgba(124, 58, 237, 0.15);
+  border-color: rgba(124, 58, 237, 0.3);
+  color: #a78bfa;
+}
+
+/* ─── More Controls Dropdown ─── */
+.more-controls-wrap {
+  position: relative;
+  display: none;
+}
+
+@media (min-width: 769px) {
+  .more-controls-wrap {
+    display: block;
+  }
+}
+
+.more-controls-toggle {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #9c99ab;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.more-controls-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e0e8;
+}
+
+.more-controls-content {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  width: 200px;
+  background: #2a2635;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.controls-section {
+  padding: 10px;
+}
+
+.section-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #6b6876;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0 6px 8px;
+  display: block;
+}
+
+.control-btn {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: #9c99ab;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  border-radius: 6px;
+  margin-bottom: 4px;
+}
+
+.control-btn:last-child {
+  margin-bottom: 0;
+}
+
+.control-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e0e8;
+}
+
+.control-btn.active {
+  background: rgba(124, 58, 237, 0.2);
+  color: #a78bfa;
+}
+
+.control-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.controls-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 0;
+}
+
+.relearn-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-start;
+}
+
+.relearn-option svg {
+  flex-shrink: 0;
+}
+
 /* ─── Learning State Filter ─── */
 .learning-state-filter {
-  display: flex;
+  display: none;
   gap: 6px;
   margin-bottom: 24px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+@media (max-width: 768px) {
+  .learning-state-filter {
+    display: flex;
+  }
 }
 
 /* ─── Mobile Search Button ─── */
@@ -2183,6 +2961,7 @@ onUnmounted(() => {
 }
 
 .mobile-boosted-btn {
+  display: none;
   position: relative;
   width: 44px;
   height: 44px;
@@ -2195,7 +2974,6 @@ onUnmounted(() => {
   justify-content: center;
   transition: all 0.2s ease;
   flex-shrink: 0;
-  display: flex;
 }
 
 .mobile-boosted-btn:hover {
@@ -3104,6 +3882,121 @@ onUnmounted(() => {
   }
 }
 
+/* ─── Target Info Section V2 ─── */
+.detail-target-info-v2 {
+  margin-bottom: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.target-context-box {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  align-items: flex-start;
+}
+
+.context-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.context-text {
+  margin: 0;
+  font-size: 14px;
+  color: #b8b5c8;
+  line-height: 1.6;
+  font-style: italic;
+}
+
+.target-analysis {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(139, 92, 246, 0.03) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.1);
+  border-radius: 10px;
+}
+
+.analysis-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.analysis-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #9c99ab;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  min-width: 90px;
+  flex-shrink: 0;
+}
+
+.analysis-value {
+  font-size: 14px;
+  color: #e2e0e8;
+  line-height: 1.5;
+  flex: 1;
+}
+
+.target-word-highlight {
+  font-weight: 600;
+  color: #60a5fa;
+}
+
+.explanation-text {
+  color: #b8b5c8;
+  font-style: italic;
+}
+
+@media (max-width: 768px) {
+  .detail-target-info-v2 {
+    margin-bottom: 24px;
+    gap: 14px;
+  }
+
+  .target-context-box {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+
+  .context-icon {
+    font-size: 20px;
+  }
+
+  .context-text {
+    font-size: 15px;
+  }
+
+  .target-analysis {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+
+  .analysis-row {
+    gap: 12px;
+    padding: 6px 0;
+  }
+
+  .analysis-label {
+    font-size: 12px;
+    min-width: 85px;
+  }
+
+  .analysis-value {
+    font-size: 15px;
+  }
+}
+
 .detail-actions {
   display: flex;
   gap: 10px;
@@ -3613,6 +4506,221 @@ onUnmounted(() => {
 .add-success svg {
   flex-shrink: 0;
   margin-top: 2px;
+}
+
+/* ─── Target Selector Styles ─── */
+.target-selector-wrapper {
+  margin-top: 12px;
+  background: transparent;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.target-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.target-label-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.target-icon {
+  color: #9c99ab;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.target-text-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.target-hint {
+  font-size: 13px;
+  color: #9c99ab;
+}
+
+.target-selected {
+  font-size: 13px;
+  color: #9c99ab;
+}
+
+.target-word-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e0e8;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.target-toggle-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #9c99ab;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.target-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e0e8;
+}
+
+.target-toggle-btn:active {
+  transform: scale(0.95);
+}
+
+/* Word Selection Expanded */
+.word-selection-expanded {
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.selection-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.selection-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #9c99ab;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.close-selection-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: #9c99ab;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-selection-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e0e8;
+}
+
+.words-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.word-button {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #9c99ab;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.word-button:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e0e8;
+}
+
+.word-button-active {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.12);
+  color: #e2e0e8;
+  font-weight: 600;
+}
+
+.word-button-active:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.15);
+}
+
+@media (max-width: 768px) {
+  .target-selector-wrapper {
+    margin-top: 16px;
+    margin-left: -16px;
+    margin-right: -16px;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  .target-display {
+    padding: 16px;
+  }
+
+  .target-hint,
+  .target-selected {
+    font-size: 15px;
+  }
+
+  .target-word-badge {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+
+  .target-toggle-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+  }
+
+  .word-selection-expanded {
+    padding: 16px;
+  }
+
+  .selection-title {
+    font-size: 13px;
+  }
+
+  .word-button {
+    padding: 12px 16px;
+    font-size: 14px;
+  }
+
+  .words-grid {
+    gap: 10px;
+  }
 }
 
 .modal-footer {

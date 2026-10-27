@@ -381,7 +381,7 @@ const containerRef = ref<HTMLDivElement>()
 
 .panel-header h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 600;
   color: #e2e0e8;
 }
@@ -436,7 +436,7 @@ const containerRef = ref<HTMLDivElement>()
 
 .section p {
   margin: 0;
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.6;
   color: #c9c7d4;
 }
