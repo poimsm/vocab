@@ -2361,7 +2361,7 @@ onUnmounted(() => {
   padding: 4px 8px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.15);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: #cffafe;
   text-transform: uppercase;
@@ -2370,7 +2370,7 @@ onUnmounted(() => {
 
 .tip-banner-message {
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
   color: #f0fdfa;
   line-height: 1.5;
   font-weight: 500;
@@ -2563,7 +2563,7 @@ onUnmounted(() => {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.04);
   color: #e2e0e8;
-  font-size: 14px;
+  font-size: 15px;
   outline: none;
   transition: all 0.2s ease;
 }
@@ -2756,7 +2756,7 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.05);
   /* color: #e2e0e8; */
   color: #bbb;
-  font-size: 13px;
+  font-size: 14px;
   /* font-weight: 600; */
   cursor: pointer;
   transition: all 0.2s ease;
@@ -2931,7 +2931,7 @@ onUnmounted(() => {
   border: none;
   background: transparent;
   color: #9c99ab;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -3497,7 +3497,7 @@ onUnmounted(() => {
 }
 
 .word-name {
-  font-size: 16px;
+  font-size: 17.7px;
   font-weight: 600;
   color: #e2e0e8;
   margin: 0;
@@ -3561,7 +3561,7 @@ onUnmounted(() => {
 }
 
 .word-definition {
-  font-size: 13px;
+  font-size: 15px;
   color: #9c99ab;
   margin: 0;
   line-height: 1.4;
@@ -3834,7 +3834,7 @@ onUnmounted(() => {
 }
 
 .detail-definition {
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1.6;
   color: #b8b5c8;
   margin-bottom: 28px;
@@ -3965,7 +3965,7 @@ onUnmounted(() => {
 }
 
 .examples-list li {
-  font-size: 14px;
+  font-size: 16px;
   color: #b8b5c8;
   padding: 10px 14px;
   background: rgba(0, 0, 0, 0.12);

@@ -1063,7 +1063,7 @@ const revealWord = (word: string, e: Event) => {
   padding: 6px 12px;
   background: rgba(124, 58, 237, 0.15);
   color: #c4b5fd;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   border-radius: 6px;
   border: 1px solid rgba(124, 58, 237, 0.25);

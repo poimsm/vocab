@@ -372,7 +372,7 @@ const modules = [
 .sidebar {
   width: var(--sidebar-width);
   flex-shrink: 0;
-  padding: 16px 12px;
+  padding: 20px 14px;
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   background: #2d2a3e;
 
@@ -388,14 +388,14 @@ const modules = [
 /* Collapsed: much narrower */
 .layout.sidebar-collapsed .sidebar {
   width: var(--sidebar-collapsed);
-  padding: 16px 8px;
+  padding: 20px 10px;
 }
 
 .sidebar-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   padding: 0 4px;
   min-height: 52px;
   gap: 8px;
@@ -437,11 +437,11 @@ const modules = [
 
 /* Collapse toggle button */
 .collapse-btn {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
   border: none;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(155, 143, 181, 0.06);
   color: #9c99ab;
   cursor: pointer;
   display: flex;
@@ -453,8 +453,8 @@ const modules = [
 }
 
 .collapse-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #e2e0e8;
+  background: rgba(155, 143, 181, 0.12);
+  color: #c4b5fd;
 }
 
 /* When collapsed, center the collapse button */
@@ -471,7 +471,7 @@ const modules = [
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 8px;
 }
 
 .nav-item, .logout-btn {
@@ -480,11 +480,11 @@ const modules = [
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 12px 13px;
   border-radius: 10px;
   cursor: pointer;
   color: #9c99ab;
-  font-size: 16px;
+  font-size: 16.5px;
   transition: background 0.15s ease, color 0.15s ease;
   white-space: nowrap;
   position: relative;
@@ -498,25 +498,27 @@ const modules = [
 }
 
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(155, 143, 181, 0.08);
   color: #e2e0e8;
 }
 
 .nav-item.active {
-  background: rgba(155, 143, 181, 0.12);
-  color: #9b8fb5;
+  background: rgba(155, 143, 181, 0.16);
+  color: #c4b5fd;
+  font-weight: 500;
 }
 
 .logo {
-  height: 28px;
+  height: 32px;
   width: auto;
-  max-width: 28px;
-  opacity: 0.9;
+  max-width: 32px;
+  opacity: 1;
   flex-shrink: 0;
+  transition: opacity 0.2s ease;
 }
 
 .logo:hover {
-  opacity: 1;
+  opacity: 0.9;
 }
 
 /* Hide logo when sidebar collapsed */
@@ -527,7 +529,7 @@ const modules = [
 
 .sidebar-footer {
   margin-top: auto;
-  padding-top: 16px;
+  padding-top: 20px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   position: relative;
   overflow: visible;
@@ -536,17 +538,17 @@ const modules = [
 .user-footer-btn {
   border: none;
   background: transparent;
-  padding: 12px 0px;
+  padding: 13px 0px;
   margin: 0;
   cursor: pointer;
   width: 100%;
-  border-radius: 0;
+  border-radius: 8px;
   transition: background 0.2s ease;
   text-align: left;
 }
 
 .user-footer-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(155, 143, 181, 0.08);
 }
 
 /* UserProfile styling in footer */
@@ -596,16 +598,16 @@ const modules = [
 
 .user-menu {
   position: absolute;
-  top: -12px;
+  top: -16px;
   left: -8px;
   right: -8px;
   transform: translateY(-100%);
   background: #3d3a52;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
   overflow: hidden;
   z-index: 110;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
 .user-menu-item {
@@ -613,7 +615,7 @@ const modules = [
   align-items: center;
   gap: 16px;
   width: 100%;
-  padding: 14px 20px;
+  padding: 13px 20px;
   border: none;
   background: transparent;
   color: #e2e0e8;
@@ -639,7 +641,7 @@ const modules = [
 .user-menu-divider {
   height: 1px;
   background: rgba(255, 255, 255, 0.06);
-  margin: 4px 0;
+  margin: 8px 0;
 }
 
 .nav-icon {
@@ -669,7 +671,7 @@ const modules = [
 .layout.sidebar-collapsed .nav-item,
 .layout.sidebar-collapsed .logout-btn {
   justify-content: center;
-  padding: 10px 0;
+  padding: 12px 0;
 }
 
 /* ─── Main Content Area ─── */
@@ -708,9 +710,9 @@ const modules = [
   .mobile-nav {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     overflow-x: auto;
-    padding: 8px 12px;
+    padding: 10px 12px;
     position: sticky;
     top: 0;
     background: #2d2a3e;
@@ -769,7 +771,7 @@ const modules = [
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px;
+    padding: 18px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
 
@@ -799,7 +801,7 @@ const modules = [
     border: none;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     background: transparent;
-    padding: 16px;
+    padding: 16px 18px;
     margin: 0;
     width: 100%;
     cursor: pointer;
@@ -808,7 +810,7 @@ const modules = [
   }
 
   .drawer-user:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(155, 143, 181, 0.08);
   }
 
   .drawer-profile :deep(.user-profile) {
@@ -843,8 +845,8 @@ const modules = [
   .drawer-nav {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    padding: 12px 0;
+    gap: 8px;
+    padding: 12px 8px;
     flex: 1;
   }
 
@@ -852,26 +854,29 @@ const modules = [
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 12px 16px;
+    padding: 13px 16px;
     color: #9c99ab;
     text-decoration: none;
     transition: all 0.15s ease;
     border-left: 3px solid transparent;
+    border-radius: 8px;
+    margin: 0 4px;
   }
 
   .drawer-item:active {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(155, 143, 181, 0.08);
     color: #e2e0e8;
   }
 
   .drawer-item.active {
-    background: rgba(155, 143, 181, 0.12);
-    color: #9b8fb5;
-    border-left-color: #9b8fb5;
+    background: rgba(155, 143, 181, 0.16);
+    color: #c4b5fd;
+    border-left-color: #c4b5fd;
+    font-weight: 500;
   }
 
   .user-menu-mobile {
-    padding: 8px 0;
+    padding: 12px 8px;
     border-top: 1px solid rgba(255, 255, 255, 0.06);
     margin-top: auto;
   }
@@ -880,10 +885,12 @@ const modules = [
     width: 100%;
     padding-left: 16px;
     padding-right: 16px;
+    border-radius: 8px;
+    margin: 4px 0;
   }
 
   .user-menu-mobile .user-menu-divider {
-    margin: 8px 0;
+    margin: 12px 0;
   }
 
   .mobile-nav::-webkit-scrollbar {
@@ -897,7 +904,7 @@ const modules = [
     align-items: center;
     gap: 8px;
     white-space: nowrap;
-    padding: 10px 14px;
+    padding: 11px 15px;
     border-radius: 999px;
     cursor: pointer;
     color: #9c99ab;
@@ -907,13 +914,14 @@ const modules = [
   }
 
   .mobile-tab:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(155, 143, 181, 0.08);
     color: #e2e0e8;
   }
 
   .mobile-tab.active {
     background: rgba(155, 143, 181, 0.18);
-    color: #9b8fb5;
+    color: #c4b5fd;
+    font-weight: 500;
   }
 
   .content {

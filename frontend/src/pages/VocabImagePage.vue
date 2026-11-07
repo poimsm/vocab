@@ -791,7 +791,7 @@ onMounted(() => {
 
 .subtitle {
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
   color: #9c99ab;
 }
 
@@ -839,7 +839,7 @@ onMounted(() => {
   background: transparent;
   color: #9c99ab;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   transition: all 0.2s ease;
   text-transform: capitalize;
@@ -863,7 +863,7 @@ onMounted(() => {
   background: transparent;
   color: #f87171;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   transition: all 0.2s ease;
 }
@@ -1017,7 +1017,7 @@ onMounted(() => {
 
 .definition {
   margin: 0 0 12px 0;
-  font-size: 13px;
+  font-size: 15px;
   color: #9c99ab;
   line-height: 1.4;
 }
@@ -1153,13 +1153,13 @@ onMounted(() => {
   }
 
   .category-btn {
-    font-size: 14px;
+    font-size: 15px;
     padding: 12px 18px;
     min-height: 44px;
   }
 
   .clear-btn {
-    font-size: 14px;
+    font-size: 15px;
     padding: 12px 18px;
     min-height: 44px;
   }
@@ -1201,7 +1201,7 @@ onMounted(() => {
   }
 
   .theme-description {
-    font-size: 12px;
+    font-size: 14px;
   }
 
   .list-section {

@@ -591,7 +591,7 @@ onUnmounted(() => {
 }
 
 .phrase {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 500;
   color: #b8b5c8;
   word-break: break-word;
