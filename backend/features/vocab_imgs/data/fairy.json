@@ -1,0 +1,159 @@
+{
+  "id": "fairies-001",
+  "name": "Fairies",
+  "description": "Words and expressions from a magical world",
+  "cover_image": "/media/vocab/fairy_cover.png",
+  "main_image": "/media/vocab/fairy.png",
+  "words": [
+    {
+      "id": "fai-001",
+      "word": "Fairy",
+      "definition": "A small, magical being with special powers.",
+      "category": "Magical Creatures"
+    },
+    {
+      "id": "fai-002",
+      "word": "Pixie",
+      "definition": "A mischievous type of fairy, often playful.",
+      "category": "Magical Creatures"
+    },
+    {
+      "id": "fai-003",
+      "word": "Nymph",
+      "definition": "A female spirit of nature, like a forest or river.",
+      "category": "Magical Creatures"
+    },
+    {
+      "id": "fai-004",
+      "word": "Sprite",
+      "definition": "A small, magical creature of the air or forest.",
+      "category": "Magical Creatures"
+    },
+    {
+      "id": "fai-005",
+      "word": "Gnome",
+      "definition": "A small, magical being that lives underground.",
+      "category": "Magical Creatures"
+    },
+    {
+      "id": "fai-006",
+      "word": "Elf",
+      "definition": "A magical being with pointed ears and great skill.",
+      "category": "Magical Creatures"
+    },
+    {
+      "id": "fai-007",
+      "word": "Enchanted",
+      "definition": "Filled with magic or under a magical spell.",
+      "category": "Magic"
+    },
+    {
+      "id": "fai-008",
+      "word": "Spell",
+      "definition": "A magical word or action that produces a special effect.",
+      "category": "Magic"
+    },
+    {
+      "id": "fai-009",
+      "word": "Potion",
+      "definition": "A magical drink with special powers.",
+      "category": "Magic"
+    },
+    {
+      "id": "fai-010",
+      "word": "Wand",
+      "definition": "A stick used to channel magical power.",
+      "category": "Magic"
+    },
+    {
+      "id": "fai-011",
+      "word": "Mushroom ring",
+      "definition": "A circle of mushrooms, often linked to fairy activity.",
+      "category": "Enchanted Nature"
+    },
+    {
+      "id": "fai-012",
+      "word": "Will-o'-the-wisp",
+      "definition": "A mysterious, moving light seen in forests or marshes.",
+      "category": "Enchanted Nature"
+    },
+    {
+      "id": "fai-013",
+      "word": "Grove",
+      "definition": "A small group of trees, often with special meaning.",
+      "category": "Forest"
+    },
+    {
+      "id": "fai-014",
+      "word": "Glade",
+      "definition": "A small open space in a forest.",
+      "category": "Forest"
+    },
+    {
+      "id": "fai-015",
+      "word": "Thicket",
+      "definition": "A dense area of bushes and small trees.",
+      "category": "Forest"
+    },
+    {
+      "id": "fai-016",
+      "word": "Brambles",
+      "definition": "Wild, thorny plants that grow in tangled bushes.",
+      "category": "Plants"
+    },
+    {
+      "id": "fai-017",
+      "word": "Hollow",
+      "definition": "A natural hole or empty space, often inside a tree or hill.",
+      "category": "Forest"
+    },
+    {
+      "id": "fai-018",
+      "word": "Canopy",
+      "definition": "The upper layer of branches and leaves in a forest.",
+      "category": "Forest"
+    },
+    {
+      "id": "fai-019",
+      "word": "Bloom",
+      "definition": "To produce flowers or open into a flower.",
+      "category": "Plants"
+    },
+    {
+      "id": "fai-020",
+      "word": "Thorn",
+      "definition": "A sharp, pointed part of a plant.",
+      "category": "Plants"
+    },
+    {
+      "id": "fai-021",
+      "word": "Faerie tale",
+      "definition": "A story about fairies, magic, and imaginary worlds.",
+      "category": "Stories"
+    },
+    {
+      "id": "fai-022",
+      "word": "Charm",
+      "definition": "A small object that brings luck or protection.",
+      "category": "Magic"
+    },
+    {
+      "id": "fai-023",
+      "word": "Transform",
+      "definition": "To change into a different form.",
+      "category": "Magic"
+    },
+    {
+      "id": "fai-024",
+      "word": "Steal away",
+      "definition": "To leave secretly and quietly.",
+      "category": "Expressions"
+    },
+    {
+      "id": "fai-025",
+      "word": "Bewitch",
+      "definition": "To enchant someone, making them strongly attracted.",
+      "category": "Magic"
+    }
+  ]
+}

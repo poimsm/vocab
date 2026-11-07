@@ -1,0 +1,159 @@
+{
+  "id": "halloween-001",
+  "name": "Halloween & Spooky",
+  "description": "Words and expressions from Halloween and the spooky season",
+  "cover_image": "/media/vocab/halloween_cover.png",
+  "main_image": "/media/vocab/halloween.png",
+  "words": [
+    {
+      "id": "hal-001",
+      "word": "Pumpkin",
+      "definition": "A large orange fruit often carved for decoration.",
+      "category": "Decorations"
+    },
+    {
+      "id": "hal-002",
+      "word": "Jack-o'-lantern",
+      "definition": "A pumpkin with a face cut into it and a candle inside.",
+      "category": "Decorations"
+    },
+    {
+      "id": "hal-003",
+      "word": "Costume",
+      "definition": "Special clothes worn to look like a character.",
+      "category": "Traditions"
+    },
+    {
+      "id": "hal-004",
+      "word": "Trick-or-treat",
+      "definition": "A tradition where children ask for candy.",
+      "category": "Traditions"
+    },
+    {
+      "id": "hal-005",
+      "word": "Haunted house",
+      "definition": "A house believed to be inhabited by ghosts.",
+      "category": "Places"
+    },
+    {
+      "id": "hal-006",
+      "word": "Ghost",
+      "definition": "The spirit of a dead person.",
+      "category": "Supernatural"
+    },
+    {
+      "id": "hal-007",
+      "word": "Witch",
+      "definition": "A person, usually a woman, with magical powers.",
+      "category": "Supernatural"
+    },
+    {
+      "id": "hal-008",
+      "word": "Skeleton",
+      "definition": "The bones of a human or animal.",
+      "category": "Creatures"
+    },
+    {
+      "id": "hal-009",
+      "word": "Vampire",
+      "definition": "A mythical creature that drinks blood.",
+      "category": "Creatures"
+    },
+    {
+      "id": "hal-010",
+      "word": "Werewolf",
+      "definition": "A person who can turn into a wolf.",
+      "category": "Creatures"
+    },
+    {
+      "id": "hal-011",
+      "word": "Mummy",
+      "definition": "A dead body wrapped in cloth.",
+      "category": "Creatures"
+    },
+    {
+      "id": "hal-012",
+      "word": "Zombie",
+      "definition": "A reanimated dead person.",
+      "category": "Creatures"
+    },
+    {
+      "id": "hal-013",
+      "word": "Graveyard",
+      "definition": "A place where dead people are buried.",
+      "category": "Places"
+    },
+    {
+      "id": "hal-014",
+      "word": "Tombstone",
+      "definition": "A stone marker on a grave.",
+      "category": "Places"
+    },
+    {
+      "id": "hal-015",
+      "word": "Cemetery",
+      "definition": "A large area with graves.",
+      "category": "Places"
+    },
+    {
+      "id": "hal-016",
+      "word": "Cobweb",
+      "definition": "A web made by a spider.",
+      "category": "Decorations"
+    },
+    {
+      "id": "hal-017",
+      "word": "Bat",
+      "definition": "A nocturnal flying mammal.",
+      "category": "Animals"
+    },
+    {
+      "id": "hal-018",
+      "word": "Cauldron",
+      "definition": "A large pot used for cooking, often in magic.",
+      "category": "Magic"
+    },
+    {
+      "id": "hal-019",
+      "word": "Spell",
+      "definition": "A magical word or phrase.",
+      "category": "Magic"
+    },
+    {
+      "id": "hal-020",
+      "word": "Potion",
+      "definition": "A liquid with magical properties.",
+      "category": "Magic"
+    },
+    {
+      "id": "hal-021",
+      "word": "Broomstick",
+      "definition": "A long stick with bristles, used by witches.",
+      "category": "Magic"
+    },
+    {
+      "id": "hal-022",
+      "word": "Scarecrow",
+      "definition": "A figure made to frighten animals, often in a field.",
+      "category": "Decorations"
+    },
+    {
+      "id": "hal-023",
+      "word": "Black cat",
+      "definition": "A cat often associated with bad luck.",
+      "category": "Animals"
+    },
+    {
+      "id": "hal-024",
+      "word": "Full moon",
+      "definition": "The time when the moon is completely visible.",
+      "category": "Nature"
+    },
+    {
+      "id": "hal-025",
+      "word": "Spooky",
+      "definition": "Strange and slightly frightening.",
+      "category": "Atmosphere"
+    }
+  ]
+}

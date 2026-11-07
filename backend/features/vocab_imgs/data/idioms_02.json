@@ -1,0 +1,75 @@
+{
+  "id": "idioms_02-001",
+  "name": "Everyday Expressions",
+  "description": "Natural expressions that native speakers actually use",
+  "cover_image": "/media/vocab/idioms_02_cover.png",
+  "main_image": "/media/vocab/idioms_02.png",
+  "words": [
+    {
+      "id": "idioms_02-001",
+      "word": "Give it a shot",
+      "definition": "To try something, even if you're not sure it will work.",
+      "category": "Everyday Idioms"
+    },
+    {
+      "id": "idioms_02-002",
+      "word": "A blessing in disguise",
+      "definition": "Something good that wasn't recognized at first.",
+      "category": "Everyday Idioms"
+    },
+    {
+      "id": "idioms_02-003",
+      "word": "Get cold feet",
+      "definition": "To suddenly feel nervous about something.",
+      "category": "Emotions"
+    },
+    {
+      "id": "idioms_02-004",
+      "word": "Pull yourself together",
+      "definition": "To calm down and become more focused or composed.",
+      "category": "Emotions"
+    },
+    {
+      "id": "idioms_02-005",
+      "word": "Go the extra mile",
+      "definition": "To make extra effort to achieve something or help someone.",
+      "category": "Effort"
+    },
+    {
+      "id": "idioms_02-006",
+      "word": "Spill the beans",
+      "definition": "To accidentally or intentionally reveal a secret.",
+      "category": "Communication"
+    },
+    {
+      "id": "idioms_02-007",
+      "word": "Under the weather",
+      "definition": "To feel slightly sick or unwell.",
+      "category": "Health"
+    },
+    {
+      "id": "idioms_02-008",
+      "word": "The ball is in your court",
+      "definition": "It's your decision or responsibility to take the next step.",
+      "category": "Decisions"
+    },
+    {
+      "id": "idioms_02-009",
+      "word": "Burn the midnight oil",
+      "definition": "To work late into the night.",
+      "category": "Work & Productivity"
+    },
+    {
+      "id": "idioms_02-010",
+      "word": "Read the room",
+      "definition": "To understand the mood or feelings of people in a situation.",
+      "category": "Social Skills"
+    },
+    {
+      "id": "idioms_02-011",
+      "word": "Call it a day",
+      "definition": "To stop working on something and take a break for the day.",
+      "category": "Work & Productivity"
+    }
+  ]
+}

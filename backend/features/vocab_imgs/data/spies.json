@@ -1,0 +1,159 @@
+{
+  "id": "spies-001",
+  "name": "Spies & Secret Agents",
+  "description": "Words and expressions from a world of espionage",
+  "cover_image": "/media/vocab/spies_cover.png",
+  "main_image": "/media/vocab/spies.png",
+  "words": [
+    {
+      "id": "spy-001",
+      "word": "Spy",
+      "definition": "A person who secretly gathers information.",
+      "category": "People"
+    },
+    {
+      "id": "spy-002",
+      "word": "Agent",
+      "definition": "A person who works for an intelligence organization.",
+      "category": "People"
+    },
+    {
+      "id": "spy-003",
+      "word": "Undercover",
+      "definition": "Working in secret with a disguised identity.",
+      "category": "Operations"
+    },
+    {
+      "id": "spy-004",
+      "word": "Surveillance",
+      "definition": "The close observation of a person or place.",
+      "category": "Techniques"
+    },
+    {
+      "id": "spy-005",
+      "word": "Informant",
+      "definition": "A person who gives secret information.",
+      "category": "People"
+    },
+    {
+      "id": "spy-006",
+      "word": "Covert",
+      "definition": "Done in a secret way.",
+      "category": "Operations"
+    },
+    {
+      "id": "spy-007",
+      "word": "Decrypt",
+      "definition": "To convert a secret message into a readable form.",
+      "category": "Cryptography"
+    },
+    {
+      "id": "spy-008",
+      "word": "Disguise",
+      "definition": "To hide one's true identity by changing appearance.",
+      "category": "Techniques"
+    },
+    {
+      "id": "spy-009",
+      "word": "Alias",
+      "definition": "A false name used to hide one's identity.",
+      "category": "Identity"
+    },
+    {
+      "id": "spy-010",
+      "word": "Intel",
+      "definition": "Short for intelligence; valuable information.",
+      "category": "Intelligence"
+    },
+    {
+      "id": "spy-011",
+      "word": "Double agent",
+      "definition": "A spy who works for both sides.",
+      "category": "People"
+    },
+    {
+      "id": "spy-012",
+      "word": "Bug",
+      "definition": "A device used for secret listening.",
+      "category": "Equipment"
+    },
+    {
+      "id": "spy-013",
+      "word": "Tail",
+      "definition": "To follow someone in order to spy on them.",
+      "category": "Techniques"
+    },
+    {
+      "id": "spy-014",
+      "word": "Dead drop",
+      "definition": "A secret place to leave or collect messages.",
+      "category": "Techniques"
+    },
+    {
+      "id": "spy-015",
+      "word": "Code name",
+      "definition": "A secret name used during a mission.",
+      "category": "Identity"
+    },
+    {
+      "id": "spy-016",
+      "word": "Safe house",
+      "definition": "A secure place where agents can stay hidden.",
+      "category": "Locations"
+    },
+    {
+      "id": "spy-017",
+      "word": "Extraction",
+      "definition": "The act of safely removing someone from a dangerous place.",
+      "category": "Operations"
+    },
+    {
+      "id": "spy-018",
+      "word": "Interrogate",
+      "definition": "To question someone demanding information.",
+      "category": "Techniques"
+    },
+    {
+      "id": "spy-019",
+      "word": "Blackmail",
+      "definition": "To threaten to reveal private information.",
+      "category": "Coercion"
+    },
+    {
+      "id": "spy-020",
+      "word": "Defect",
+      "definition": "To leave one's country or organization, often to join an enemy.",
+      "category": "Operations"
+    },
+    {
+      "id": "spy-021",
+      "word": "Decoy",
+      "definition": "A person or thing used to mislead others.",
+      "category": "Techniques"
+    },
+    {
+      "id": "spy-022",
+      "word": "Infiltrate",
+      "definition": "To enter a place secretly, often for a specific purpose.",
+      "category": "Techniques"
+    },
+    {
+      "id": "spy-023",
+      "word": "Reconnaissance",
+      "definition": "A preliminary investigation to gather information.",
+      "category": "Operations"
+    },
+    {
+      "id": "spy-024",
+      "word": "Cover",
+      "definition": "A false identity or story used to hide the real purpose.",
+      "category": "Identity"
+    },
+    {
+      "id": "spy-025",
+      "word": "Asset",
+      "definition": "A valuable person who provides information or assistance.",
+      "category": "People"
+    }
+  ]
+}

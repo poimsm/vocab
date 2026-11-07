@@ -1,0 +1,159 @@
+{
+  "id": "medieval-castle-001",
+  "name": "Medieval Castle",
+  "description": "Words and expressions from the Middle Ages",
+  "cover_image": "/media/vocab/medieval_castle_cover.png",
+  "main_image": "/media/vocab/medieval_castle.png",
+  "words": [
+    {
+      "id": "med-001",
+      "word": "Castle",
+      "definition": "A large fortified building where a lord lived.",
+      "category": "Architecture"
+    },
+    {
+      "id": "med-002",
+      "word": "Fortress",
+      "definition": "A heavily fortified place built for defense.",
+      "category": "Architecture"
+    },
+    {
+      "id": "med-003",
+      "word": "Tower",
+      "definition": "A tall, narrow building part of a castle.",
+      "category": "Architecture"
+    },
+    {
+      "id": "med-004",
+      "word": "Moat",
+      "definition": "A wide, deep trench filled with water around a castle.",
+      "category": "Defenses"
+    },
+    {
+      "id": "med-005",
+      "word": "Drawbridge",
+      "definition": "A bridge that can be raised to block entry.",
+      "category": "Defenses"
+    },
+    {
+      "id": "med-006",
+      "word": "Battlement",
+      "definition": "A wall with raised sections used for defense.",
+      "category": "Defenses"
+    },
+    {
+      "id": "med-007",
+      "word": "Arrow slit",
+      "definition": "A narrow opening for shooting arrows.",
+      "category": "Defenses"
+    },
+    {
+      "id": "med-008",
+      "word": "Portcullis",
+      "definition": "A strong metal gate that can be raised or lowered.",
+      "category": "Defenses"
+    },
+    {
+      "id": "med-009",
+      "word": "Keep",
+      "definition": "The main tower where the lord lived.",
+      "category": "Architecture"
+    },
+    {
+      "id": "med-010",
+      "word": "Courtyard",
+      "definition": "An open area inside the castle walls.",
+      "category": "Architecture"
+    },
+    {
+      "id": "med-011",
+      "word": "Throne",
+      "definition": "A special chair for a king or queen.",
+      "category": "Royalty"
+    },
+    {
+      "id": "med-012",
+      "word": "Banquet",
+      "definition": "A formal meal or feast.",
+      "category": "Feasts"
+    },
+    {
+      "id": "med-013",
+      "word": "Knight",
+      "definition": "A warrior trained to fight, often serving a lord.",
+      "category": "People"
+    },
+    {
+      "id": "med-014",
+      "word": "Squire",
+      "definition": "A young person who assisted a knight.",
+      "category": "People"
+    },
+    {
+      "id": "med-015",
+      "word": "Armor",
+      "definition": "Protective equipment worn in battle.",
+      "category": "Weapons & Equipment"
+    },
+    {
+      "id": "med-016",
+      "word": "Sword",
+      "definition": "A weapon with a long, sharp blade.",
+      "category": "Weapons & Equipment"
+    },
+    {
+      "id": "med-017",
+      "word": "Shield",
+      "definition": "A piece of equipment used for protection.",
+      "category": "Weapons & Equipment"
+    },
+    {
+      "id": "med-018",
+      "word": "Siege",
+      "definition": "A military attack in which a place is surrounded.",
+      "category": "Warfare"
+    },
+    {
+      "id": "med-019",
+      "word": "Trebuchet",
+      "definition": "A large device used to throw heavy stones.",
+      "category": "Weapons & Equipment"
+    },
+    {
+      "id": "med-020",
+      "word": "Catapult",
+      "definition": "A machine that throws stones or other projectiles.",
+      "category": "Weapons & Equipment"
+    },
+    {
+      "id": "med-021",
+      "word": "Dungeon",
+      "definition": "An underground prison.",
+      "category": "Architecture"
+    },
+    {
+      "id": "med-022",
+      "word": "Herald",
+      "definition": "A person who announces important messages.",
+      "category": "People"
+    },
+    {
+      "id": "med-023",
+      "word": "Banner",
+      "definition": "A large flag with a symbol or coat of arms.",
+      "category": "Symbols"
+    },
+    {
+      "id": "med-024",
+      "word": "Joust",
+      "definition": "A medieval sport where knights fought on horseback.",
+      "category": "Traditions"
+    },
+    {
+      "id": "med-025",
+      "word": "Sconce",
+      "definition": "A wall-mounted holder for a torch or candle.",
+      "category": "Architecture"
+    }
+  ]
+}

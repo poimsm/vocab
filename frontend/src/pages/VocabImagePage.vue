@@ -36,6 +36,8 @@ const selectedCategory = ref<string>('all')
 const loadingThemes = ref(false)
 const loadingWords = ref(false)
 const isImageFullscreen = ref(false)
+const imageZoom = ref(1)
+const imageOffset = ref({ x: 0, y: 0 })
 
 // Computed
 const categories = computed(() => {
@@ -75,6 +77,7 @@ async function selectTheme(theme: VocabTheme) {
   selectedCategory.value = 'all'
   successMessage.value = null
   errorMessage.value = null
+  window.scrollTo(0, 0)
   await loadThemeWords(theme.id)
 }
 
@@ -100,6 +103,7 @@ function backToThemes() {
   selectedCategory.value = 'all'
   successMessage.value = null
   errorMessage.value = null
+  window.scrollTo(0, 0)
 }
 
 async function addWord(item: VocabWord) {
@@ -154,12 +158,44 @@ function clearFilters() {
 
 function openImageFullscreen() {
   isImageFullscreen.value = true
+  imageZoom.value = 1
+  imageOffset.value = { x: 0, y: 0 }
   document.body.style.overflow = 'hidden'
 }
 
 function closeImageFullscreen() {
   isImageFullscreen.value = false
+  imageZoom.value = 1
+  imageOffset.value = { x: 0, y: 0 }
   document.body.style.overflow = 'auto'
+}
+
+function zoomIn() {
+  imageZoom.value = Math.min(imageZoom.value + 0.2, 3)
+}
+
+function zoomOut() {
+  imageZoom.value = Math.max(imageZoom.value - 0.2, 1)
+}
+
+function moveUp() {
+  const maxOffsetY = (imageZoom.value - 1) * 300
+  imageOffset.value.y = Math.min(maxOffsetY, imageOffset.value.y + 50)
+}
+
+function moveDown() {
+  const maxOffsetY = (imageZoom.value - 1) * 300
+  imageOffset.value.y = Math.max(-maxOffsetY, imageOffset.value.y - 50)
+}
+
+function moveLeft() {
+  const maxOffsetX = (imageZoom.value - 1) * 300
+  imageOffset.value.x = Math.max(-maxOffsetX, imageOffset.value.x - 50)
+}
+
+function moveRight() {
+  const maxOffsetX = (imageZoom.value - 1) * 300
+  imageOffset.value.x = Math.min(maxOffsetX, imageOffset.value.x + 50)
 }
 
 // Load themes on mount
@@ -252,7 +288,40 @@ onMounted(() => {
               :src="buildAssetUrl(selectedTheme.main_image)"
               :alt="selectedTheme.name"
               class="fullscreen-image"
+              :style="{
+                transform: `scale(${imageZoom}) translate(${imageOffset.x}px, ${imageOffset.y}px)`
+              }"
             />
+            <div class="image-controls">
+              <!-- Navigation Controls -->
+              <div class="nav-controls" v-if="imageZoom > 1">
+                <button class="nav-btn nav-up" @click="moveUp" title="Move up">
+                  <Icon icon="solar:alt-arrow-up-linear" width="18" />
+                </button>
+                <div class="nav-horizontal">
+                  <button class="nav-btn nav-left" @click="moveLeft" title="Move left">
+                    <Icon icon="solar:alt-arrow-left-linear" width="18" />
+                  </button>
+                  <button class="nav-btn nav-right" @click="moveRight" title="Move right">
+                    <Icon icon="solar:alt-arrow-right-linear" width="18" />
+                  </button>
+                </div>
+                <button class="nav-btn nav-down" @click="moveDown" title="Move down">
+                  <Icon icon="solar:alt-arrow-down-linear" width="18" />
+                </button>
+              </div>
+
+              <!-- Zoom Controls -->
+              <div class="zoom-controls">
+                <button class="zoom-btn zoom-minus" @click="zoomOut" :disabled="imageZoom <= 1">
+                  <Icon icon="solar:minus-linear" width="20" />
+                </button>
+                <span class="zoom-level">{{ Math.round(imageZoom * 100) }}%</span>
+                <button class="zoom-btn zoom-plus" @click="zoomIn" :disabled="imageZoom >= 3">
+                  <Icon icon="solar:add-circle-linear" width="20" />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </transition>
@@ -389,7 +458,7 @@ onMounted(() => {
 
 .themes-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 24px;
 }
 
@@ -557,6 +626,7 @@ onMounted(() => {
   object-fit: contain;
   user-select: none;
   -webkit-user-select: none;
+  transition: transform 0.2s ease;
 }
 
 .close-btn {
@@ -594,6 +664,107 @@ onMounted(() => {
   to {
     opacity: 1;
   }
+}
+
+/* Image Controls Container (Desktop only) */
+.image-controls {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 1001;
+}
+
+/* Navigation Controls */
+.nav-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 12px;
+  border-radius: 12px;
+  backdrop-filter: blur(4px);
+}
+
+.nav-horizontal {
+  display: flex;
+  gap: 8px;
+}
+
+.nav-btn {
+  background: rgba(155, 143, 181, 0.2);
+  border: 1px solid rgba(155, 143, 181, 0.4);
+  border-radius: 6px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.nav-btn:hover {
+  background: rgba(155, 143, 181, 0.4);
+  border-color: #9b8fb5;
+  transform: scale(1.1);
+}
+
+.nav-btn:active {
+  transform: scale(0.95);
+}
+
+/* Zoom Controls */
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 12px 16px;
+  border-radius: 12px;
+  backdrop-filter: blur(4px);
+}
+
+.zoom-btn {
+  background: rgba(155, 143, 181, 0.2);
+  border: 1px solid rgba(155, 143, 181, 0.4);
+  border-radius: 6px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.zoom-btn:hover:not(:disabled) {
+  background: rgba(155, 143, 181, 0.4);
+  border-color: #9b8fb5;
+  transform: scale(1.05);
+}
+
+.zoom-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.zoom-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.zoom-level {
+  color: #e2e0e8;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 40px;
+  text-align: center;
 }
 
 /* List Section */
@@ -911,6 +1082,14 @@ onMounted(() => {
 }
 
 /* Responsive */
+
+/* Desktop - Show image controls */
+@media (min-width: 1025px) {
+  .image-controls {
+    display: flex;
+  }
+}
+
 @media (max-width: 1024px) {
   .themes-grid {
     grid-template-columns: repeat(3, 1fr);

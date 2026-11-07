@@ -1,0 +1,159 @@
+{
+  "id": "pirates-001",
+  "name": "Pirates & the High Seas",
+  "description": "Words and expressions from a life at sea",
+  "cover_image": "/media/vocab/pirates_cover.png",
+  "main_image": "/media/vocab/pirates.png",
+  "words": [
+    {
+      "id": "pir-001",
+      "word": "Ahoy!",
+      "definition": "A greeting or call to get someone's attention at sea.",
+      "category": "Expressions"
+    },
+    {
+      "id": "pir-002",
+      "word": "Set sail",
+      "definition": "To begin a journey by sea.",
+      "category": "Expressions"
+    },
+    {
+      "id": "pir-003",
+      "word": "Anchors aweigh",
+      "definition": "An order to lift the anchors and start sailing.",
+      "category": "Expressions"
+    },
+    {
+      "id": "pir-004",
+      "word": "Starboard",
+      "definition": "The right side of a ship when facing forward.",
+      "category": "Navigation"
+    },
+    {
+      "id": "pir-005",
+      "word": "Port",
+      "definition": "The left side of a ship when facing forward.",
+      "category": "Navigation"
+    },
+    {
+      "id": "pir-006",
+      "word": "Crew",
+      "definition": "The people who work and live on a ship.",
+      "category": "People"
+    },
+    {
+      "id": "pir-007",
+      "word": "Captain",
+      "definition": "The person in command of a ship.",
+      "category": "People"
+    },
+    {
+      "id": "pir-008",
+      "word": "First mate",
+      "definition": "The second-in-command after the captain.",
+      "category": "People"
+    },
+    {
+      "id": "pir-009",
+      "word": "Deck",
+      "definition": "The flat surface on a ship where people walk and work.",
+      "category": "Ship Parts"
+    },
+    {
+      "id": "pir-010",
+      "word": "Hull",
+      "definition": "The main body of a ship.",
+      "category": "Ship Parts"
+    },
+    {
+      "id": "pir-011",
+      "word": "Mast",
+      "definition": "A tall vertical pole that supports the sails.",
+      "category": "Ship Parts"
+    },
+    {
+      "id": "pir-012",
+      "word": "Sails",
+      "definition": "Large pieces of fabric that catch the wind.",
+      "category": "Ship Parts"
+    },
+    {
+      "id": "pir-013",
+      "word": "Rudder",
+      "definition": "A device used to steer the ship.",
+      "category": "Ship Parts"
+    },
+    {
+      "id": "pir-014",
+      "word": "Keel",
+      "definition": "The long central beam at the bottom of a ship.",
+      "category": "Ship Parts"
+    },
+    {
+      "id": "pir-015",
+      "word": "Rigging",
+      "definition": "A system of ropes and lines used to control the sails.",
+      "category": "Ship Parts"
+    },
+    {
+      "id": "pir-016",
+      "word": "Treasure",
+      "definition": "Valuable items such as gold, silver, or jewels.",
+      "category": "Treasure"
+    },
+    {
+      "id": "pir-017",
+      "word": "Plunder",
+      "definition": "To steal goods, especially during a sea attack.",
+      "category": "Pirate Activities"
+    },
+    {
+      "id": "pir-018",
+      "word": "Mutiny",
+      "definition": "A rebellion against the captain or those in authority.",
+      "category": "Pirate Activities"
+    },
+    {
+      "id": "pir-019",
+      "word": "Cutlass",
+      "definition": "A short, slightly curved sword used by pirates.",
+      "category": "Weapons"
+    },
+    {
+      "id": "pir-020",
+      "word": "Broadside",
+      "definition": "A simultaneous firing of cannons from one side of a ship.",
+      "category": "Naval Warfare"
+    },
+    {
+      "id": "pir-021",
+      "word": "Walk the plank",
+      "definition": "To be forced to walk off a ship as a form of punishment.",
+      "category": "Expressions"
+    },
+    {
+      "id": "pir-022",
+      "word": "Landlubber",
+      "definition": "A person who is not used to life at sea.",
+      "category": "People"
+    },
+    {
+      "id": "pir-023",
+      "word": "Scallywag",
+      "definition": "A playful or affectionate term for a mischievous person.",
+      "category": "Slang"
+    },
+    {
+      "id": "pir-024",
+      "word": "Harpoon",
+      "definition": "A long spear used for hunting large sea creatures.",
+      "category": "Weapons"
+    },
+    {
+      "id": "pir-025",
+      "word": "Navigate",
+      "definition": "To plan and direct the course of a ship.",
+      "category": "Navigation"
+    }
+  ]
+}

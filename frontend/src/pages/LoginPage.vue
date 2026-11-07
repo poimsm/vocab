@@ -21,7 +21,7 @@
             </div>
 
             <h2 class="form-title">
-                {{ isSignUp ? 'Join the fun 🎉' : 'Hey, welcome back 👋' }}
+                {{ isSignUp ? 'Join the fun' : 'Hey, welcome back' }}
             </h2>
             <p class="form-subtitle">
                 {{ isSignUp ? 'Takes like 10 seconds. No sweat.' : 'Pick up right where you left off.' }}

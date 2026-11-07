@@ -1,0 +1,159 @@
+{
+  "id": "medieval-times-001",
+  "name": "Medieval Times",
+  "description": "Words and expressions from a bygone era",
+  "cover_image": "/media/vocab/medieval_times_cover.png",
+  "main_image": "/media/vocab/medieval_times.png",
+  "words": [
+    {
+      "id": "mt-001",
+      "word": "Knight",
+      "definition": "A mounted soldier who served a lord.",
+      "category": "People"
+    },
+    {
+      "id": "mt-002",
+      "word": "Castle",
+      "definition": "A large fortified building for protection.",
+      "category": "Architecture"
+    },
+    {
+      "id": "mt-003",
+      "word": "Throne",
+      "definition": "The seat of a king or queen.",
+      "category": "Royalty"
+    },
+    {
+      "id": "mt-004",
+      "word": "Kingdom",
+      "definition": "A country ruled by a king or queen.",
+      "category": "Royalty"
+    },
+    {
+      "id": "mt-005",
+      "word": "Monarch",
+      "definition": "A king or queen.",
+      "category": "Royalty"
+    },
+    {
+      "id": "mt-006",
+      "word": "Peasant",
+      "definition": "A poor farm worker.",
+      "category": "People"
+    },
+    {
+      "id": "mt-007",
+      "word": "Noble",
+      "definition": "A member of a high social class.",
+      "category": "People"
+    },
+    {
+      "id": "mt-008",
+      "word": "Lord",
+      "definition": "A powerful landowner.",
+      "category": "People"
+    },
+    {
+      "id": "mt-009",
+      "word": "Lady",
+      "definition": "A noblewoman.",
+      "category": "People"
+    },
+    {
+      "id": "mt-010",
+      "word": "Servant",
+      "definition": "A person who works for someone of higher status.",
+      "category": "People"
+    },
+    {
+      "id": "mt-011",
+      "word": "Blacksmith",
+      "definition": "A person who makes and repairs metal objects.",
+      "category": "Professions"
+    },
+    {
+      "id": "mt-012",
+      "word": "Squire",
+      "definition": "A young nobleman in training to become a knight.",
+      "category": "People"
+    },
+    {
+      "id": "mt-013",
+      "word": "Joust",
+      "definition": "A medieval sport where knights compete on horseback.",
+      "category": "Traditions"
+    },
+    {
+      "id": "mt-014",
+      "word": "Siege",
+      "definition": "A military attack on a fortified place.",
+      "category": "Warfare"
+    },
+    {
+      "id": "mt-015",
+      "word": "Betrayal",
+      "definition": "The act of breaking trust.",
+      "category": "Conflict"
+    },
+    {
+      "id": "mt-016",
+      "word": "Alliance",
+      "definition": "A partnership for mutual support.",
+      "category": "Politics"
+    },
+    {
+      "id": "mt-017",
+      "word": "Feast",
+      "definition": "A large, formal meal.",
+      "category": "Traditions"
+    },
+    {
+      "id": "mt-018",
+      "word": "Quest",
+      "definition": "A long journey to achieve a goal.",
+      "category": "Adventures"
+    },
+    {
+      "id": "mt-019",
+      "word": "Relic",
+      "definition": "A sacred object from the past.",
+      "category": "Artifacts"
+    },
+    {
+      "id": "mt-020",
+      "word": "Dungeon",
+      "definition": "An underground prison.",
+      "category": "Architecture"
+    },
+    {
+      "id": "mt-021",
+      "word": "Herald",
+      "definition": "A person who makes official announcements.",
+      "category": "People"
+    },
+    {
+      "id": "mt-022",
+      "word": "Tavern",
+      "definition": "A place that serves food and drinks.",
+      "category": "Places"
+    },
+    {
+      "id": "mt-023",
+      "word": "Plague",
+      "definition": "A deadly disease.",
+      "category": "Health & Disease"
+    },
+    {
+      "id": "mt-024",
+      "word": "Crusade",
+      "definition": "A holy war, especially to the Holy Land.",
+      "category": "Warfare"
+    },
+    {
+      "id": "mt-025",
+      "word": "Chronicle",
+      "definition": "A historical record of events.",
+      "category": "Literature"
+    }
+  ]
+}

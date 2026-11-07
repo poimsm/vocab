@@ -29,9 +29,12 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      // Only logout if we're not on the login page
+      // Only logout and redirect if we're not on a guest-only route
       const currentPath = window.location.pathname
-      if (!currentPath.includes('/login')) {
+      const guestRoutes = ['/login', '/landing', '/']
+      const isGuestRoute = guestRoutes.some(route => currentPath.includes(route))
+
+      if (!isGuestRoute) {
         const authStore = useAuthStore()
         authStore.logout()
         window.location.href = '/login'

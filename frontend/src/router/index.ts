@@ -31,15 +31,15 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      component: HomePage,
-      meta: { requiresGuest: true }
-    },
-    {
-      path: '/landing',
-      name: 'landing',
       component: LandingPage,
       meta: { requiresGuest: true }
     },
+    // {
+    //   path: '/landing',
+    //   name: 'landing',
+    //   component: LandingPage,
+    //   meta: { requiresGuest: true }
+    // },
     {
       path: '/login',
       name: 'login',

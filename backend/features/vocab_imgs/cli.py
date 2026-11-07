@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + '/../..')
 from sqlmodel import Session, select
 from db import engine
 from features.vocab_imgs.models import VocabImage, VocabImageWord
+from features.words.models import Word
 from logging_client import logger
 
 
@@ -52,39 +53,57 @@ def load_vocab_images_from_json():
                 with open(json_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
 
-                # Check if vocab image already exists
-                existing = session.exec(
+                # Get or create VocabImage
+                vocab_image = session.exec(
                     select(VocabImage).where(VocabImage.id == data.get("id"))
                 ).first()
 
-                if existing:
-                    print(f"⏭️  Skipping {json_file.name} - already exists (id: {data.get('id')})")
-                    continue
+                if vocab_image:
+                    # Update existing
+                    vocab_image.name = data.get("name")
+                    vocab_image.description = data.get("description")
+                    vocab_image.cover_image = data.get("cover_image")
+                    vocab_image.main_image = data.get("main_image")
+                    vocab_image.is_active = True
+                else:
+                    # Create new
+                    vocab_image = VocabImage(
+                        id=data.get("id"),
+                        name=data.get("name"),
+                        description=data.get("description"),
+                        cover_image=data.get("cover_image"),
+                        main_image=data.get("main_image"),
+                        is_active=True
+                    )
+                    session.add(vocab_image)
 
-                # Create VocabImage
-                vocab_image = VocabImage(
-                    id=data.get("id"),
-                    name=data.get("name"),
-                    description=data.get("description"),
-                    cover_image=data.get("cover_image"),
-                    main_image=data.get("main_image"),
-                    is_active=True
-                )
-                session.add(vocab_image)
-                session.flush()  # Ensure image is created before adding words
+                session.flush()  # Ensure image is created/updated before adding words
 
-                # Create VocabImageWords
+                # Get or create VocabImageWords
                 words_data = data.get("words", [])
                 for idx, word_data in enumerate(words_data):
-                    vocab_image_word = VocabImageWord(
-                        id=word_data.get("id"),
-                        vocab_image_id=vocab_image.id,
-                        word=word_data.get("word"),
-                        definition=word_data.get("definition"),
-                        category=word_data.get("category"),
-                        word_order=idx + 1  # Order based on position in array
-                    )
-                    session.add(vocab_image_word)
+                    vocab_image_word = session.exec(
+                        select(VocabImageWord).where(VocabImageWord.id == word_data.get("id"))
+                    ).first()
+
+                    if vocab_image_word:
+                        # Update existing
+                        vocab_image_word.vocab_image_id = vocab_image.id
+                        vocab_image_word.word = word_data.get("word")
+                        vocab_image_word.definition = word_data.get("definition")
+                        vocab_image_word.category = word_data.get("category")
+                        vocab_image_word.word_order = idx + 1
+                    else:
+                        # Create new
+                        vocab_image_word = VocabImageWord(
+                            id=word_data.get("id"),
+                            vocab_image_id=vocab_image.id,
+                            word=word_data.get("word"),
+                            definition=word_data.get("definition"),
+                            category=word_data.get("category"),
+                            word_order=idx + 1  # Order based on position in array
+                        )
+                        session.add(vocab_image_word)
 
                 session.commit()
                 loaded_count += 1
@@ -143,21 +162,47 @@ def list_vocab_images():
 
 
 def clear_vocab_images():
-    """Clears all vocabulary images from the database."""
+    """Clears unused vocabulary images from the database.
+
+    Only deletes vocab_image_words that are NOT referenced by any word.
+    Preserves vocab_image_words that are in use by existing words.
+    """
     with Session(engine) as session:
         try:
-            # Delete all vocab image words first
-            words = session.exec(select(VocabImageWord)).all()
-            for word in words:
+            # Get all vocab_image_word IDs that are being referenced by words
+            words_with_refs = session.exec(
+                select(Word).where(Word.vocab_image_word_id != None)
+            ).all()
+            referenced_ids = {word.vocab_image_word_id for word in words_with_refs}
+
+            # Get all vocab_image_words and identify which ones to delete
+            all_vocab_image_words = session.exec(select(VocabImageWord)).all()
+            words_to_delete = [w for w in all_vocab_image_words if w.id not in referenced_ids]
+            words_to_keep = [w for w in all_vocab_image_words if w.id in referenced_ids]
+
+            # Delete only unreferenced vocab_image_words
+            for word in words_to_delete:
                 session.delete(word)
 
-            # Delete all vocab images
+            # Delete vocab_images that have no remaining words
             images = session.exec(select(VocabImage)).all()
+            images_deleted = 0
             for image in images:
-                session.delete(image)
+                # Check if this image has any remaining words
+                remaining_words = session.exec(
+                    select(VocabImageWord).where(
+                        VocabImageWord.vocab_image_id == image.id
+                    )
+                ).all()
+                if not remaining_words:
+                    session.delete(image)
+                    images_deleted += 1
 
             session.commit()
-            print(f"✅ Cleared {len(images)} vocabulary image(s) and {len(words)} word(s)")
+
+            print(f"✅ Cleared {len(words_to_delete)} unused vocab word(s)")
+            print(f"✅ Preserved {len(words_to_keep)} referenced vocab word(s)")
+            print(f"✅ Cleared {images_deleted} empty vocabulary image(s)")
             return True
 
         except Exception as e:

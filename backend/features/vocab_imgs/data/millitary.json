@@ -1,0 +1,159 @@
+{
+  "id": "military-001",
+  "name": "Military",
+  "description": "Words and expressions from the armed forces",
+  "cover_image": "/media/vocab/military_cover.png",
+  "main_image": "/media/vocab/military.png",
+  "words": [
+    {
+      "id": "mil-001",
+      "word": "Soldier",
+      "definition": "A member of the armed forces.",
+      "category": "People"
+    },
+    {
+      "id": "mil-002",
+      "word": "Platoon",
+      "definition": "A small military unit, usually 20–50 soldiers.",
+      "category": "Units"
+    },
+    {
+      "id": "mil-003",
+      "word": "Squad",
+      "definition": "A very small unit, typically 6–12 soldiers.",
+      "category": "Units"
+    },
+    {
+      "id": "mil-004",
+      "word": "Commander",
+      "definition": "A person who leads a military unit.",
+      "category": "People"
+    },
+    {
+      "id": "mil-005",
+      "word": "Reconnaissance",
+      "definition": "A mission to gather information about an area.",
+      "category": "Operations"
+    },
+    {
+      "id": "mil-006",
+      "word": "Base",
+      "definition": "A location used by the military for operations.",
+      "category": "Locations"
+    },
+    {
+      "id": "mil-007",
+      "word": "Outpost",
+      "definition": "A small, remote military position.",
+      "category": "Locations"
+    },
+    {
+      "id": "mil-008",
+      "word": "Barracks",
+      "definition": "A building where soldiers live.",
+      "category": "Locations"
+    },
+    {
+      "id": "mil-009",
+      "word": "Deployment",
+      "definition": "The act of sending troops to a location.",
+      "category": "Operations"
+    },
+    {
+      "id": "mil-010",
+      "word": "Mission",
+      "definition": "A specific military task or operation.",
+      "category": "Operations"
+    },
+    {
+      "id": "mil-011",
+      "word": "Weapon",
+      "definition": "A tool used for fighting or self-defense.",
+      "category": "Equipment"
+    },
+    {
+      "id": "mil-012",
+      "word": "Ammunition",
+      "definition": "Bullets, shells, or other projectiles.",
+      "category": "Equipment"
+    },
+    {
+      "id": "mil-013",
+      "word": "Grenade",
+      "definition": "A small explosive device thrown by hand.",
+      "category": "Equipment"
+    },
+    {
+      "id": "mil-014",
+      "word": "Mine",
+      "definition": "An explosive device placed on or under the ground.",
+      "category": "Equipment"
+    },
+    {
+      "id": "mil-015",
+      "word": "Tank",
+      "definition": "A heavily armored military vehicle with a gun.",
+      "category": "Vehicles"
+    },
+    {
+      "id": "mil-016",
+      "word": "Helicopter",
+      "definition": "A rotorcraft used for transport, attack, or rescue.",
+      "category": "Vehicles"
+    },
+    {
+      "id": "mil-017",
+      "word": "Aircraft",
+      "definition": "A vehicle that can fly, used in military operations.",
+      "category": "Vehicles"
+    },
+    {
+      "id": "mil-018",
+      "word": "Drone",
+      "definition": "An unmanned aircraft controlled remotely.",
+      "category": "Vehicles"
+    },
+    {
+      "id": "mil-019",
+      "word": "Missile",
+      "definition": "A self-propelled weapon that flies to a target.",
+      "category": "Weapons"
+    },
+    {
+      "id": "mil-020",
+      "word": "Artillery",
+      "definition": "Large weapons used to fire shells over long distances.",
+      "category": "Weapons"
+    },
+    {
+      "id": "mil-021",
+      "word": "Camouflage",
+      "definition": "A pattern or method used to blend in with the environment.",
+      "category": "Tactics"
+    },
+    {
+      "id": "mil-022",
+      "word": "Tactical",
+      "definition": "Relating to strategies and methods in battle.",
+      "category": "Tactics"
+    },
+    {
+      "id": "mil-023",
+      "word": "Intelligence",
+      "definition": "Information about the enemy or a situation.",
+      "category": "Intelligence"
+    },
+    {
+      "id": "mil-024",
+      "word": "Ceasefire",
+      "definition": "A temporary stop in fighting.",
+      "category": "Conflict"
+    },
+    {
+      "id": "mil-025",
+      "word": "Veteran",
+      "definition": "A person who has served in the military.",
+      "category": "People"
+    }
+  ]
+}
