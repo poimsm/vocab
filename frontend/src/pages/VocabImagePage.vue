@@ -503,7 +503,7 @@ onMounted(() => {
 }
 
 .theme-info {
-  padding: 14px;
+  padding: 5px 0px 14px 14px;
   display: flex;
   flex-direction: column;
   flex: 1;

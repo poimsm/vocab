@@ -126,7 +126,8 @@ const modules = [
     <!-- Desktop Sidebar (Solo visible si el usuario está autenticado y no en hideLayout) -->
     <aside v-if="authStore.isAuthenticated && !hideLayout" class="sidebar">
       <div class="sidebar-top" :class="{ 'sidebar-top-expanded': !sidebarCollapsed }">
-        <img src="@/assets/logo.svg" alt="Logo" class="logo" />
+        <!-- <img src="@/assets/logo.svg" alt="Logo" class="logo" /> -->
+         <h1 class="logo"  style="font-size:28px;font-family: 'Fredoka', sans-serif">Strawmist</h1>
 
         <button
           class="collapse-btn"
@@ -182,7 +183,7 @@ const modules = [
         <!-- User Menu Popup -->
         <transition name="fade">
           <div v-if="userMenuOpen" class="user-menu">
-            <button class="user-menu-item" @click="handleMenuOption('stats')">
+            <!-- <button class="user-menu-item" @click="handleMenuOption('stats')">
               <Icon icon="solar:chart-linear" width="18" />
               <span>Your Stats</span>
             </button>
@@ -198,31 +199,31 @@ const modules = [
               <Icon icon="solar:ranking-linear" width="18" />
               <span>Leaderboard</span>
             </button>
-            <div class="user-menu-divider"></div>
-            <button class="user-menu-item" @click="handleMenuOption('theme')">
+            <div class="user-menu-divider"></div> -->
+            <!-- <button class="user-menu-item" @click="handleMenuOption('theme')">
               <Icon icon="solar:sun-2-linear" width="18" />
               <span>Theme</span>
             </button>
             <button class="user-menu-item" @click="handleMenuOption('customization')">
               <Icon icon="solar:palette-linear" width="18" />
               <span>Customize</span>
-            </button>
+            </button> -->
             <button class="user-menu-item" @click="handleMenuOption('sound')">
-              <Icon icon="solar:volume-loud-linear" width="18" />
-              <span>Sound & Haptics</span>
+              <!-- <Icon icon="solar:volume-loud-linear" width="18" /> -->
+              <span>Profile</span>
             </button>
             <button class="user-menu-item" @click="handleMenuOption('referral')">
-              <Icon icon="solar:share-linear" width="18" />
+              <!-- <Icon icon="solar:share-linear" width="18" /> -->
               <span>Invite Friends</span>
             </button>
             <button class="user-menu-item" @click="handleMenuOption('feedback')">
-              <Icon icon="solar:chat-line-linear" width="18" />
+              <!-- <Icon icon="solar:chat-line-linear" width="18" /> -->
               <span>Send Feedback</span>
             </button>
             <div class="user-menu-divider"></div>
             <button class="user-menu-item logout-item" @click="handleMenuOption('logout')">
-              <Icon icon="solar:logout-3-linear" width="18" />
-              <span>See you later!</span>
+              <!-- <Icon icon="solar:logout-3-linear" width="18" /> -->
+              <span>Logout</span>
             </button>
           </div>
         </transition>
@@ -272,9 +273,34 @@ const modules = [
             </button>
           </div>
 
-          <button class="drawer-user" @click="toggleUserMenu">
-            <UserProfile class="drawer-profile" />
-          </button>
+          <div class="drawer-user-section">
+            <button class="drawer-user" @click="toggleUserMenu">
+              <UserProfile class="drawer-profile" />
+            </button>
+
+            <!-- User Menu Dropdown en Mobile -->
+            <transition name="expand">
+              <div v-if="userMenuOpen" class="user-menu-mobile">
+                <button class="user-menu-item" @click="handleMenuOption('sound')">
+                  <Icon icon="solar:volume-loud-linear" width="18" />
+                  <span>Profile</span>
+                </button>
+                <button class="user-menu-item" @click="handleMenuOption('referral')">
+                  <Icon icon="solar:share-linear" width="18" />
+                  <span>Invite Friends</span>
+                </button>
+                <button class="user-menu-item" @click="handleMenuOption('feedback')">
+                  <Icon icon="solar:chat-line-linear" width="18" />
+                  <span>Send Feedback</span>
+                </button>
+                <div class="user-menu-divider"></div>
+                <button class="user-menu-item logout-item" @click="handleMenuOption('logout'); closeDrawer()">
+                  <Icon icon="solar:logout-3-linear" width="18" />
+                  <span>Logout</span>
+                </button>
+              </div>
+            </transition>
+          </div>
 
           <nav class="drawer-nav">
             <router-link
@@ -295,54 +321,6 @@ const modules = [
               </a>
             </router-link>
           </nav>
-
-          <!-- User Menu Popup en Mobile -->
-          <transition name="fade">
-            <div v-if="userMenuOpen" class="user-menu-mobile">
-              <button class="user-menu-item" @click="handleMenuOption('stats'); closeDrawer()">
-                <Icon icon="solar:chart-linear" width="18" />
-                <span>Your Stats</span>
-              </button>
-              <button class="user-menu-item" @click="handleMenuOption('badges'); closeDrawer()">
-                <Icon icon="solar:medal-ribbon-linear" width="18" />
-                <span>Badges & Streaks</span>
-              </button>
-              <button class="user-menu-item" @click="handleMenuOption('daily-challenge'); closeDrawer()">
-                <Icon icon="solar:fire-linear" width="18" />
-                <span>Daily Challenge</span>
-              </button>
-              <button class="user-menu-item" @click="handleMenuOption('leaderboard'); closeDrawer()">
-                <Icon icon="solar:ranking-linear" width="18" />
-                <span>Leaderboard</span>
-              </button>
-              <div class="user-menu-divider"></div>
-              <button class="user-menu-item" @click="handleMenuOption('theme'); closeDrawer()">
-                <Icon icon="solar:sun-2-linear" width="18" />
-                <span>Theme</span>
-              </button>
-              <button class="user-menu-item" @click="handleMenuOption('customization'); closeDrawer()">
-                <Icon icon="solar:palette-linear" width="18" />
-                <span>Customize</span>
-              </button>
-              <button class="user-menu-item" @click="handleMenuOption('sound'); closeDrawer()">
-                <Icon icon="solar:volume-loud-linear" width="18" />
-                <span>Sound & Haptics</span>
-              </button>
-              <button class="user-menu-item" @click="handleMenuOption('referral'); closeDrawer()">
-                <Icon icon="solar:share-linear" width="18" />
-                <span>Invite Friends</span>
-              </button>
-              <button class="user-menu-item" @click="handleMenuOption('feedback'); closeDrawer()">
-                <Icon icon="solar:chat-line-linear" width="18" />
-                <span>Send Feedback</span>
-              </button>
-              <div class="user-menu-divider"></div>
-              <button class="user-menu-item logout-item" @click="handleMenuOption('logout'); closeDrawer()">
-                <Icon icon="solar:logout-3-linear" width="18" />
-                <span>See you later!</span>
-              </button>
-            </div>
-          </transition>
         </aside>
       </transition>
     </div>
@@ -370,7 +348,8 @@ const modules = [
 
 /* ─── Desktop Sidebar ─── */
 .sidebar {
-  width: var(--sidebar-width);
+  /* width: var(--sidebar-width); */
+  width: 210px;
   flex-shrink: 0;
   padding: 20px 14px;
   border-right: 1px solid rgba(255, 255, 255, 0.06);
@@ -598,16 +577,17 @@ const modules = [
 
 .user-menu {
   position: absolute;
-  top: -16px;
-  left: -8px;
-  right: -8px;
+  /* top: -16px; */
+  /* left: -8px; */
+  right: -200px;
+  width: 220px;
   transform: translateY(-100%);
   background: #3d3a52;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   overflow: hidden;
   z-index: 110;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
 
 .user-menu-item {
@@ -856,6 +836,7 @@ const modules = [
     gap: 12px;
     padding: 13px 16px;
     color: #9c99ab;
+    font-size: 18px;
     text-decoration: none;
     transition: all 0.15s ease;
     border-left: 3px solid transparent;
@@ -875,22 +856,29 @@ const modules = [
     font-weight: 500;
   }
 
+  .drawer-user-section {
+    position: relative;
+  }
+
   .user-menu-mobile {
-    padding: 12px 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    margin-top: auto;
+    padding: 8px 8px;
+    /* margin-top: 4px; */
+    background: rgba(155, 143, 181, 0.06);
+    /* border-radius: 8px; */
+    overflow: hidden;
   }
 
   .user-menu-mobile .user-menu-item {
     width: 100%;
     padding-left: 16px;
     padding-right: 16px;
-    border-radius: 8px;
+    border-radius: 6px;
     margin: 4px 0;
+    font-size: 18px;
   }
 
   .user-menu-mobile .user-menu-divider {
-    margin: 12px 0;
+    margin: 8px 0;
   }
 
   .mobile-nav::-webkit-scrollbar {
@@ -976,5 +964,22 @@ const modules = [
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.expand-enter-active,
+.expand-leave-active {
+  transition: all 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.expand-enter-from,
+.expand-leave-to {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.expand-enter-to {
+  max-height: 280px;
+  opacity: 1;
 }
 </style>

@@ -3497,7 +3497,7 @@ onUnmounted(() => {
 }
 
 .word-name {
-  font-size: 17.7px;
+  font-size: 18px;
   font-weight: 600;
   color: #e2e0e8;
   margin: 0;

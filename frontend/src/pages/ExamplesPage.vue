@@ -953,7 +953,7 @@ onUnmounted(() => {
 }
 
 .sentence-text {
-  font-size: 25px;
+  font-size: 25.5px;
   line-height: 1.5;
   font-weight: 400;
   color: #b8b5c8;

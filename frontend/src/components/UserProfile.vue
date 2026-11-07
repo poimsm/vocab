@@ -12,14 +12,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 const authStore = useAuthStore()
 
-const userInitials = computed(() => {
-  if (!authStore.userEmail) return '?'
-  return authStore.userEmail
-    .split('@')[0]
-    .substring(0, 2)
-    .toUpperCase()
-})
-
 const displayEmail = computed(() => {
   if (!authStore.userEmail) return 'User'
   return authStore.userEmail.split('@')[0]
@@ -28,9 +20,7 @@ const displayEmail = computed(() => {
 
 <template>
   <div class="user-profile" :class="{ compact }" :title="compact ? authStore.userEmail : ''">
-    <div class="avatar" :title="compact ? authStore.userEmail : ''">
-      {{ userInitials }}
-    </div>
+    <img src="/avatar.png" alt="User avatar" class="avatar" :title="compact ? authStore.userEmail : ''" />
     <div v-if="!compact" class="user-info">
       <div class="user-name">{{ displayEmail }}</div>
     </div>
@@ -68,21 +58,16 @@ const displayEmail = computed(() => {
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #9b8fb5 0%, #7c6fa8 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #f5f0e8;
-  font-weight: 600;
-  font-size: 14px;
+  object-fit: cover;
   flex-shrink: 0;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 2px solid rgba(155, 143, 181, 0.2);
+  padding-top: 1px;
 }
 
 .user-profile.compact .avatar {
   width: 36px;
   height: 36px;
-  font-size: 13px;
 }
 
 .user-info {
@@ -121,7 +106,6 @@ const displayEmail = computed(() => {
   .avatar {
     width: 36px;
     height: 36px;
-    font-size: 13px;
   }
 
   .user-name {

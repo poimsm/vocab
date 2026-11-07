@@ -555,7 +555,7 @@ onUnmounted(() => {
 .definition {
   margin: 0 0 10px 0;
   color: #d4d2e0;
-  font-size: 16px;
+  font-size: 17px;
   line-height: 1.4;
   font-weight: 400;
 }
