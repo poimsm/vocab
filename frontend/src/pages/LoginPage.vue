@@ -1,391 +1,347 @@
-<template>
-    <div class="login-container">
-        <div class="form-card">
-            <div class="mode-switch">
-                <button
-                    type="button"
-                    class="mode-btn"
-                    :class="{ active: !isSignUp }"
-                    @click="isSignUp = false"
-                >
-                    Sign in
-                </button>
-                <button
-                    type="button"
-                    class="mode-btn"
-                    :class="{ active: isSignUp }"
-                    @click="isSignUp = true"
-                >
-                    Create account
-                </button>
-            </div>
-
-            <h2 class="form-title">
-                {{ isSignUp ? 'Join the fun' : 'Hey, welcome back' }}
-            </h2>
-            <p class="form-subtitle">
-                {{ isSignUp ? 'Takes like 10 seconds. No sweat.' : 'Pick up right where you left off.' }}
-            </p>
-
-            <form @submit.prevent="onSubmit">
-                <label class="form-group">
-                    <span class="form-label">Email</span>
-                    <input
-                        type="email"
-                        v-model="email"
-                        required
-                        placeholder="you@example.com"
-                        autocomplete="email"
-                    />
-                </label>
-
-                <label class="form-group">
-                    <span class="form-label">Password</span>
-                    <input
-                        type="password"
-                        v-model="password"
-                        required
-                        :placeholder="isSignUp ? 'At least 6 characters' : '••••••••'"
-                        :autocomplete="isSignUp ? 'new-password' : 'current-password'"
-                    />
-                </label>
-
-                <label v-if="isSignUp" class="form-group">
-                    <span class="form-label">Confirm password</span>
-                    <input
-                        type="password"
-                        v-model="confirmPassword"
-                        required
-                        placeholder="One more time"
-                        autocomplete="new-password"
-                    />
-                </label>
-
-                <p v-if="successMessage" class="message success">{{ successMessage }}</p>
-                <p v-if="errorMessage" class="message error">{{ errorMessage }}</p>
-
-                <button type="submit" :disabled="isLoading" class="submit-btn">
-                    {{ isLoading
-                        ? (isSignUp ? 'Setting things up...' : 'Let\'s go...')
-                        : (isSignUp ? 'Create my account ✨' : 'Sign me in →') }}
-                </button>
-            </form>
-
-            <p class="foot-note">
-                {{ isSignUp ? 'By joining you agree to be awesome.' : 'Glad to see you again.' }}
-            </p>
-        </div>
-    </div>
-</template>
-
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-import { useRouter } from 'vue-router'
+import { ref } from 'vue';
+import { Icon } from '@iconify/vue';
+import { useAuthStore } from '@/stores/auth';
+import { useRouter } from 'vue-router';
 
-const authStore = useAuthStore()
-const router = useRouter()
+const authStore = useAuthStore();
+const router = useRouter();
 
-const email = ref('')
-const password = ref('')
-const confirmPassword = ref('')
-const isLoading = ref(false)
-const errorMessage = ref('')
-const successMessage = ref('')
-const isSignUp = ref(false)
-
-async function onSubmit() {
-    return isSignUp.value ? handleRegister() : handleLogin()
-}
+const email = ref('');
+const password = ref('');
+const isLoading = ref(false);
+const errorMessage = ref('');
 
 async function handleLogin() {
-    isLoading.value = true
-    errorMessage.value = ''
-    successMessage.value = ''
+  isLoading.value = true;
+  errorMessage.value = '';
 
-    const loginData = {
-        email: email.value,
-        password: password.value
+  try {
+    const success = await authStore.login({
+      email: email.value,
+      password: password.value,
+    });
+    if (success) {
+      router.push({ name: 'my-words' });
     }
-
-    try {
-        const success = await authStore.login(loginData)
-        if (success) {
-            router.push({ name: 'my-words' })
-        }
-    } catch (error: any) {
-        errorMessage.value = 'Invalid email or password. Please try again.'
-    } finally {
-        isLoading.value = false
-    }
+  } catch (error: any) {
+    errorMessage.value = 'Invalid email or password. Please try again.';
+  } finally {
+    isLoading.value = false;
+  }
 }
 
-async function handleRegister() {
-    isLoading.value = true
-    errorMessage.value = ''
-    successMessage.value = ''
+function onSubmit() {
+  handleLogin();
+}
 
-    if (password.value.length < 6) {
-        errorMessage.value = 'Password needs at least 6 characters 🙂'
-        isLoading.value = false
-        return
-    }
+function goBack() {
+  router.push({ name: 'home' });
+}
 
-    if (password.value !== confirmPassword.value) {
-        errorMessage.value = 'Passwords don\'t match. Try again.'
-        isLoading.value = false
-        return
-    }
-
-    const registerData = {
-        email: email.value,
-        password: password.value
-    }
-
-    try {
-        await authStore.register(registerData)
-        successMessage.value = 'Nice, you\'re in! Logging you in...'
-
-        setTimeout(async () => {
-            try {
-                await authStore.login(registerData)
-                router.push({ name: 'my-words' })
-            } catch (error: any) {
-                errorMessage.value = 'Account created, but login failed. Try signing in manually.'
-            }
-        }, 1500)
-    } catch (error: any) {
-        errorMessage.value = error.response?.data?.detail || 'Couldn\'t create your account. Mind trying again?'
-    } finally {
-        isLoading.value = false
-    }
+function toSignUp() {
+  router.push({ name: 'signup' });
 }
 </script>
 
-<style scoped>
-* {
-    box-sizing: border-box;
-}
+<template>
+  <div class="login-container">
+    <!-- Back Button -->
+    <button class="back-btn" @click="goBack">
+      <Icon icon="mdi:arrow-left" width="20" height="20" />
+      Back
+    </button>
 
-/* Palette
-   --bg:      #2d2a3e  app background
-   --surface: #3a354c  inputs
-   --accent:  #8b7fd4  buttons / active states
-*/
+    <!-- Form -->
+    <div class="content form-content">
+      <div class="form-wrapper">
+        <h2 class="form-title">Welcome back, collector</h2>
+        <p class="form-subtitle">Continue collecting words.</p>
+
+        <form @submit.prevent="onSubmit">
+          <label class="form-group">
+            <span class="form-label">Email</span>
+            <input
+              type="email"
+              v-model="email"
+              required
+              placeholder="you@example.com"
+              autocomplete="email"
+            />
+          </label>
+
+          <label class="form-group">
+            <span class="form-label">Password</span>
+            <input
+              type="password"
+              v-model="password"
+              required
+              placeholder="••••••••"
+              autocomplete="current-password"
+            />
+          </label>
+
+          <p v-if="errorMessage" class="message error">{{ errorMessage }}</p>
+
+          <button type="submit" :disabled="isLoading" class="submit-btn">
+            {{
+              isLoading
+                ? "Let's go..."
+                : 'Sign me in →'
+            }}
+          </button>
+        </form>
+
+        <p class="foot-note">Welcome back to your collection.</p>
+
+        <p class="toggle-mode">
+          Don't have an account?
+          <button type="button" @click="toSignUp" class="toggle-btn">Sign up</button>
+        </p>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@300;400;500;600;700&display=swap');
 
 .login-container {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #2d2a3e;
-    padding: 24px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  box-sizing: border-box;
 }
 
-.form-card {
-    width: 100%;
-    max-width: 440px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    border-radius: 22px;
-    padding: 44px 42px 30px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+.content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  text-align: center;
+  animation: fadeIn 0.4s ease-out;
 }
 
-/* ---- Mode switch: no overlay, just an active state per button ---- */
-.mode-switch {
-    display: flex;
-    gap: 4px;
-    background: #3a354c;
-    border-radius: 13px;
-    padding: 5px;
-    margin-bottom: 32px;
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.mode-btn {
-    flex: 1;
-    padding: 11px 0;
-    border: none;
-    border-radius: 9px;
-    font-size: 14px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.55);
-    background: transparent;
-    cursor: pointer;
-    transition: background 0.3s ease, color 0.3s ease;
+.back-btn {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: #a5a0b8;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 600;
+  font-size: 17px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 8px 12px;
+  z-index: 100;
 }
 
-.mode-btn.active {
-    background: #8b7fd4;
-    color: #fff;
+.back-btn:hover {
+  color: #c4b5fd;
+}
+
+.form-content {
+  width: 100%;
+  max-width: 480px;
+  gap: 24px;
+  position: relative;
+}
+
+.form-wrapper {
+  width: 100%;
 }
 
 .form-title {
-    margin: 0 0 8px 0;
-    font-size: 29px;
-    font-weight: 700;
-    color: #fff;
-    letter-spacing: -0.4px;
+  margin: 0 0 8px 0;
+  font-family: 'Fredoka', sans-serif;
+  font-size: 31px;
+  font-weight: 700;
+  color: #c4b5fd;
+  letter-spacing: -0.4px;
 }
 
 .form-subtitle {
-    margin: 0 0 30px 0;
-    font-size: 15px;
-    color: rgba(255, 255, 255, 0.55);
+  margin: 0 0 24px 0;
+  font-family: 'Nunito', sans-serif;
+  font-size: 18px;
+  color: #a5a0b8;
+  line-height: 1.5;
 }
 
 form {
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .form-group {
-    display: flex;
-    flex-direction: column;
+  display: flex;
+  flex-direction: column;
 }
 
 .form-label {
-    font-size: 14px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.78);
-    margin-bottom: 7px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: #a5a0b8;
+  margin-bottom: 8px;
+  text-align: left;
 }
 
 .form-group input {
-    padding: 14px 16px;
-    font-size: 15px;
-    color: #fff;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 12px;
-    outline: none;
-    background: #3a354c;
-    transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+  padding: 12px 14px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 17px;
+  color: #e8e4f0;
+  border: 1px solid rgba(196, 181, 253, 0.2);
+  border-radius: 10px;
+  background: rgba(124, 58, 237, 0.08);
+  outline: none;
+  transition: all 0.3s ease;
 }
 
 .form-group input:focus {
-    border-color: #8b7fd4;
-    background: #443e5a;
-    box-shadow: 0 0 0 3px rgba(139, 127, 212, 0.22);
+  border-color: rgba(196, 181, 253, 0.5);
+  background: rgba(124, 58, 237, 0.12);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
 }
 
 .form-group input::placeholder {
-    color: rgba(255, 255, 255, 0.35);
+  color: #8b7f9f;
 }
 
 .message {
-    margin: 0;
-    padding: 12px 16px;
-    border-radius: 12px;
-    font-size: 14px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 16px;
+  text-align: left;
 }
 
 .message.success {
-    background: rgba(139, 127, 212, 0.14);
-    color: #c3baf0;
-    border: 1px solid rgba(139, 127, 212, 0.35);
+  background: rgba(124, 58, 237, 0.15);
+  color: #c4b5fd;
+  border: 1px solid rgba(196, 181, 253, 0.3);
 }
 
 .message.error {
-    background: rgba(239, 68, 68, 0.1);
-    color: #fca5a5;
-    border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .submit-btn {
-    padding: 15px 16px;
-    background: #8b7fd4;
-    color: #fff;
-    border: none;
-    border-radius: 12px;
-    font-size: 16px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: background 0.25s ease, box-shadow 0.25s ease, transform 0.15s ease;
-    margin-top: 6px;
+  padding: 13px 16px;
+  margin-top: 8px;
+  background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  letter-spacing: 0.3px;
 }
 
 .submit-btn:hover:not(:disabled) {
-    background: #7d70c9;
-    box-shadow: 0 8px 22px rgba(139, 127, 212, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.3);
 }
 
 .submit-btn:active:not(:disabled) {
-    transform: scale(0.98);
+  transform: translateY(0);
 }
 
 .submit-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .foot-note {
-    margin: 28px 0 0 0;
-    text-align: center;
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.4);
+  margin: 20px 0 0 0;
+  font-family: 'Nunito', sans-serif;
+  text-align: center;
+  font-size: 16px;
+  color: #8b7f9f;
 }
 
-/* ---- Mobile: no card, bigger text, roomier inputs ---- */
-@media (max-width: 480px) {
-    .login-container {
-        align-items: flex-start;
-        padding: 26px 20px 20px;
-    }
+.toggle-mode {
+  margin: 20px 0 0 0;
+  font-family: 'Nunito', sans-serif;
+  text-align: center;
+  font-size: 14px;
+  color: #8b7f9f;
+}
 
-    .form-card {
-        max-width: 100%;
-        background: transparent;
-        border: none;
-        box-shadow: none;
-        padding: 0;
-    }
+.toggle-btn {
+  background: none;
+  border: none;
+  color: #c4b5fd;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  padding: 0;
+  margin-left: 4px;
+}
 
-    .form-title {
-        font-size: 27px;
-        margin-top: 10px;
-    }
+.toggle-btn:hover {
+  color: #e8e4f0;
+}
 
-    .form-subtitle {
-        font-size: 16px;
-        margin-bottom: 26px;
-    }
+@media (max-width: 768px) {
+  .form-title {
+    font-size: 27px;
+  }
 
-    .mode-switch {
-        margin-bottom: 24px;
-    }
+  .form-label {
+    font-size: 16px;
+  }
 
-    .mode-btn {
-        font-size: 15px;
-        padding: 12px 0;
-    }
+  .form-subtitle {
+    font-size: 18px;
+  }
 
-    form {
-        gap: 20px;
-    }
+  .form-group input {
+    font-size: 19px;
+    padding: 14px 16px;
+  }
 
-    .form-label {
-        font-size: 15px;
-    }
+  .submit-btn {
+    font-size: 19px;
+    padding: 14px 16px;
+  }
 
-    .form-group input {
-        padding: 16px;
-        font-size: 16px; /* prevents iOS auto-zoom on focus */
-        border-radius: 13px;
-    }
+  .foot-note {
+    font-size: 16px;
+  }
 
-    .message {
-        font-size: 15px;
-    }
-
-    .submit-btn {
-        font-size: 17px;
-        padding: 16px;
-    }
-
-    .foot-note {
-        font-size: 14px;
-    }
+  .toggle-mode {
+    font-size: 13px;
+  }
 }
 </style>

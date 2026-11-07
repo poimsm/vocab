@@ -5,6 +5,7 @@ import ExamplesPage from '@/pages/ExamplesPage.vue'
 import ExampleFavoritesPage from '@/pages/ExampleFavoritesPage.vue'
 import MyWordsPage from '@/pages/MyWordsPage.vue'
 import LoginPage from '@/pages/LoginPage.vue'
+import SignupPage from '@/pages/SignupPage.vue'
 import HomePage from '@/pages/HomePage.vue'
 import BestOptionsPage from '@/pages/BestOptionsPage.vue'
 import RandomizerPage from '@/pages/RandomizerPage.vue'
@@ -44,6 +45,12 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: LoginPage,
+      meta: { requiresGuest: true }
+    },
+    {
+      path: '/signup',
+      name: 'signup',
+      component: SignupPage,
       meta: { requiresGuest: true }
     },
     {

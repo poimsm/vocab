@@ -1,128 +1,25 @@
 <script setup lang="ts">
-import { ref } from 'vue';
 import { Icon } from '@iconify/vue';
-import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
 import { useAssetUrl } from '@/composables/useAssetUrl';
 import { landingCards } from '@/data/landing';
 
 const { buildAssetUrl } = useAssetUrl();
-
-const authStore = useAuthStore();
 const router = useRouter();
 
-const mode = ref<'landing' | 'login' | 'signup'>('landing');
-const email = ref('');
-const password = ref('');
-const confirmPassword = ref('');
-const isLoading = ref(false);
-const errorMessage = ref('');
-const successMessage = ref('');
-
-async function handleLogin() {
-  isLoading.value = true;
-  errorMessage.value = '';
-  successMessage.value = '';
-
-  try {
-    const success = await authStore.login({
-      email: email.value,
-      password: password.value,
-    });
-    if (success) {
-      router.push({ name: 'my-words' });
-    }
-  } catch (error: any) {
-    errorMessage.value = 'Invalid email or password. Please try again.';
-  } finally {
-    isLoading.value = false;
-  }
-}
-
-async function handleRegister() {
-  isLoading.value = true;
-  errorMessage.value = '';
-  successMessage.value = '';
-
-  if (password.value.length < 6) {
-    errorMessage.value = 'Password needs at least 6 characters 🙂';
-    isLoading.value = false;
-    return;
-  }
-
-  if (password.value !== confirmPassword.value) {
-    errorMessage.value = "Passwords don't match. Try again.";
-    isLoading.value = false;
-    return;
-  }
-
-  try {
-    await authStore.register({
-      email: email.value,
-      password: password.value,
-    });
-    successMessage.value = "Nice, you're in! Logging you in...";
-
-    setTimeout(async () => {
-      try {
-        await authStore.login({
-          email: email.value,
-          password: password.value,
-        });
-        router.push({ name: 'my-words' });
-      } catch (error: any) {
-        errorMessage.value = 'Account created, but login failed. Try signing in manually.';
-      }
-    }, 1500);
-  } catch (error: any) {
-    errorMessage.value = error.response?.data?.detail || "Couldn't create your account. Mind trying again?";
-  } finally {
-    isLoading.value = false;
-  }
-}
-
-function onSubmit() {
-  if (mode.value === 'login') {
-    handleLogin();
-  } else if (mode.value === 'signup') {
-    handleRegister();
-  }
-}
-
-function reset() {
-  email.value = '';
-  password.value = '';
-  confirmPassword.value = '';
-  errorMessage.value = '';
-  successMessage.value = '';
-}
-
-function goBack() {
-  mode.value = 'landing';
-  reset();
-}
-
 function toSignUp() {
-  mode.value = 'signup';
-  reset();
+  router.push({ name: 'signup' });
 }
 
 function toLogin() {
-  mode.value = 'login';
-  reset();
+  router.push({ name: 'login' });
 }
 </script>
 
 <template>
   <div class="landing-container">
-    <!-- Back Button (Fixed in mobile) -->
-    <button v-if="mode !== 'landing'" class="back-btn" @click="goBack">
-      <Icon icon="mdi:arrow-left" width="20" height="20" />
-      Back
-    </button>
-
-    <!-- Landing Mode -->
-    <div v-if="mode === 'landing'" class="content landing-content">
+    <!-- Landing Content -->
+    <div class="content landing-content">
       <div class="icon-section">
         <div class="icon-circle">
           <Icon icon="fluent-color:book-16" width="48" height="48" />
@@ -274,73 +171,6 @@ function toLogin() {
         </div>
       </div>
 
-    </div>
-
-    <!-- Form Mode (Login/Signup) -->
-    <div v-else class="content form-content">
-      <!-- Form -->
-      <div class="form-wrapper">
-        <h2 class="form-title">
-          {{ mode === 'signup' ? 'Join the hunt' : 'Welcome back, collector' }}
-        </h2>
-        <p class="form-subtitle">
-          {{ mode === 'signup' ? 'Start building your vocabulary collection.' : 'Continue collecting words.' }}
-        </p>
-
-        <form @submit.prevent="onSubmit">
-          <label class="form-group">
-            <span class="form-label">Email</span>
-            <input
-              type="email"
-              v-model="email"
-              required
-              placeholder="you@example.com"
-              autocomplete="email"
-            />
-          </label>
-
-          <label class="form-group">
-            <span class="form-label">Password</span>
-            <input
-              type="password"
-              v-model="password"
-              required
-              :placeholder="mode === 'signup' ? 'At least 6 characters' : '••••••••'"
-              :autocomplete="mode === 'signup' ? 'new-password' : 'current-password'"
-            />
-          </label>
-
-          <label v-if="mode === 'signup'" class="form-group">
-            <span class="form-label">Confirm password</span>
-            <input
-              type="password"
-              v-model="confirmPassword"
-              required
-              placeholder="One more time"
-              autocomplete="new-password"
-            />
-          </label>
-
-          <p v-if="successMessage" class="message success">{{ successMessage }}</p>
-          <p v-if="errorMessage" class="message error">{{ errorMessage }}</p>
-
-          <button type="submit" :disabled="isLoading" class="submit-btn">
-            {{
-              isLoading
-                ? mode === 'signup'
-                  ? 'Setting things up...'
-                  : "Let's go..."
-                : mode === 'signup'
-                  ? 'Create my account ✨'
-                  : 'Sign me in →'
-            }}
-          </button>
-        </form>
-
-        <p class="foot-note">
-          {{ mode === 'signup' ? 'Let\'s start collecting.' : 'Welcome back to your collection.' }}
-        </p>
-      </div>
     </div>
 
     <!-- Footer -->
@@ -696,7 +526,6 @@ function toLogin() {
   transform: translate(4px, -4px);
 }
 
-
 .btn {
   display: flex;
   align-items: center;
@@ -736,169 +565,6 @@ function toLogin() {
   background: rgba(124, 58, 237, 0.05);
 }
 
-/* ============ Form Content ============ */
-.form-content {
-  width: 100%;
-  max-width: 480px;
-  gap: 24px;
-  position: relative;
-}
-
-.back-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  align-self: flex-start;
-  background: none;
-  border: none;
-  color: #a5a0b8;
-  font-family: 'Nunito', sans-serif;
-  font-weight: 600;
-  font-size: 17px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  padding: 8px 12px;
-  margin-left: -12px;
-}
-
-.back-btn:hover {
-  color: #c4b5fd;
-}
-
-@media (max-width: 768px) {
-  .back-btn {
-    position: fixed;
-    top: 20px;
-    left: 16px;
-    margin-left: 0;
-    z-index: 100;
-  }
-
-  .landing-container {
-    padding-top: 70px;
-  }
-}
-
-.form-wrapper {
-  width: 100%;
-}
-
-.form-title {
-  margin: 0 0 8px 0;
-  font-family: 'Fredoka', sans-serif;
-  font-size: 31px;
-  font-weight: 700;
-  color: #c4b5fd;
-  letter-spacing: -0.4px;
-}
-
-.form-subtitle {
-  margin: 0 0 24px 0;
-  font-family: 'Nunito', sans-serif;
-  font-size: 18px;
-  color: #a5a0b8;
-  line-height: 1.5;
-}
-
-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.form-label {
-  font-family: 'Nunito', sans-serif;
-  font-size: 16px;
-  font-weight: 600;
-  color: #a5a0b8;
-  margin-bottom: 8px;
-  text-align: left;
-}
-
-.form-group input {
-  padding: 12px 14px;
-  font-family: 'Nunito', sans-serif;
-  font-size: 17px;
-  color: #e8e4f0;
-  border: 1px solid rgba(196, 181, 253, 0.2);
-  border-radius: 10px;
-  background: rgba(124, 58, 237, 0.08);
-  outline: none;
-  transition: all 0.3s ease;
-}
-
-.form-group input:focus {
-  border-color: rgba(196, 181, 253, 0.5);
-  background: rgba(124, 58, 237, 0.12);
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
-}
-
-.form-group input::placeholder {
-  color: #8b7f9f;
-}
-
-.message {
-  margin: 0;
-  padding: 12px 14px;
-  border-radius: 10px;
-  font-family: 'Nunito', sans-serif;
-  font-size: 16px;
-  text-align: left;
-}
-
-.message.success {
-  background: rgba(124, 58, 237, 0.15);
-  color: #c4b5fd;
-  border: 1px solid rgba(196, 181, 253, 0.3);
-}
-
-.message.error {
-  background: rgba(239, 68, 68, 0.1);
-  color: #fca5a5;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-}
-
-.submit-btn {
-  padding: 13px 16px;
-  margin-top: 8px;
-  background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
-  color: #ffffff;
-  border: none;
-  border-radius: 10px;
-  font-family: 'Nunito', sans-serif;
-  font-size: 18px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  letter-spacing: 0.3px;
-}
-
-.submit-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.3);
-}
-
-.submit-btn:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.submit-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.foot-note {
-  margin: 20px 0 0 0;
-  font-family: 'Nunito', sans-serif;
-  text-align: center;
-  font-size: 16px;
-  color: #8b7f9f;
-}
 
 @keyframes float {
   0%, 100% {
@@ -1078,44 +744,6 @@ form {
   .card-arrow {
     width: 42px;
     height: 42px;
-  }
-
-  .form-content {
-    max-width: 100%;
-  }
-
-  .form-title {
-    font-size: 27px;
-  }
-
-  .form-label {
-    font-size: 16px;
-  }
-
-  .form-subtitle {
-    font-size: 18px;
-  }
-
-  .form-group input {
-    font-size: 19px;
-    padding: 14px 16px;
-  }
-
-  .submit-btn {
-    font-size: 19px;
-    padding: 14px 16px;
-  }
-
-  .back-btn {
-    font-size: 17px;
-  }
-
-  .message {
-    font-size: 16px;
-  }
-
-  .foot-note {
-    font-size: 16px;
   }
 }
 </style>
