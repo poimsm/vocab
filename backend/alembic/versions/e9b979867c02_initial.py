@@ -503,10 +503,10 @@ def upgrade() -> None:
     op.create_index(op.f('ix_word_statistics_learning_state'), 'word_statistics', ['learning_state'], unique=False)
     op.create_index(op.f('ix_word_statistics_type'), 'word_statistics', ['type'], unique=False)
     op.create_index(op.f('ix_word_statistics_word_id'), 'word_statistics', ['word_id'], unique=False)
-    op.drop_index(op.f('ix_celery_tasksetmeta_date_done'), table_name='celery_tasksetmeta')
-    op.drop_table('celery_tasksetmeta')
-    op.drop_index(op.f('ix_celery_taskmeta_date_done'), table_name='celery_taskmeta')
-    op.drop_table('celery_taskmeta')
+    op.drop_index(op.f('ix_celery_tasksetmeta_date_done'), table_name='celery_tasksetmeta', if_exists=True)
+    op.drop_table('celery_tasksetmeta', if_exists=True)
+    op.drop_index(op.f('ix_celery_taskmeta_date_done'), table_name='celery_taskmeta', if_exists=True)
+    op.drop_table('celery_taskmeta', if_exists=True)
     # ### end Alembic commands ###
 
 
