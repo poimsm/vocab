@@ -3,8 +3,17 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import { quickWriteApi, type QuickWriteExercise } from '@/services/quickWriteApi'
 import { useActivityTracking } from '@/composables/useActivityTracking'
+import { useAuthStore } from '@/stores/auth'
 
 const { trackButtonClick } = useActivityTracking()
+const authStore = useAuthStore()
+
+// API base URL from environment
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost/api'
+
+// SSE EventSource
+let sseEventSource: EventSource | null = null
+let sseActive = ref(false)
 
 const writeMainRef = ref<HTMLElement | null>(null)
 
@@ -71,6 +80,11 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleWindowScroll)
+  // Clean up SSE connection
+  if (sseEventSource) {
+    sseEventSource.close()
+    sseEventSource = null
+  }
 })
 
 // Save masking preference to localStorage
@@ -166,6 +180,106 @@ const toggleFilter = () => {
   loadExercises()
 }
 
+// ─── SSE (Server-Sent Events) para generación de ejercicios ───
+function startSSE() {
+  console.log('[startSSE] Starting SSE stream for quick write generation')
+  console.log('[startSSE] API_BASE:', API_BASE)
+  console.log('[startSSE] authStore.token exists:', !!authStore.token)
+
+  // Clean up any previous SSE connection
+  if (sseEventSource) {
+    console.log('[startSSE] Cleaning up previous EventSource')
+    sseEventSource.close()
+    sseEventSource = null
+  }
+
+  sseActive.value = true
+
+  // Construir URL del SSE con token en query param
+  const sseUrl = new URL(`${API_BASE}/quick-write/generate-stream`)
+  if (authStore.token) {
+    sseUrl.searchParams.append('token', authStore.token)
+  }
+
+  const fullUrl = sseUrl.toString()
+  console.log('[startSSE] Conectando a:', fullUrl)
+
+  try {
+    sseEventSource = new EventSource(fullUrl)
+
+    // ─── Evento: open (conexión establecida) ───
+    sseEventSource.addEventListener('open', () => {
+      console.log('[SSE:open] Conexión SSE establecida exitosamente')
+    })
+
+    // ─── Evento: quick_write.completed ───
+    sseEventSource.addEventListener('quick_write.completed', async (event: MessageEvent) => {
+      if (!sseActive.value) {
+        console.log('[SSE:quick_write.completed] Stream disabled, ignoring event')
+        return
+      }
+
+      try {
+        const data = JSON.parse(event.data)
+        console.log('[SSE:quick_write.completed] Ejercicios generados:', data)
+
+        sseActive.value = false
+        sseEventSource?.close()
+
+        // Recargar ejercicios para obtener los datos actualizados
+        currentPage.value = 1
+        prompts.value = []
+        responses.value.clear()
+        corrections.value.clear()
+        await loadExercises()
+
+        // Poner en false solo después de que se recargan los ejercicios
+        isGenerating.value = false
+      } catch (e) {
+        console.error('[SSE:quick_write.completed] Error parsing event:', e)
+        isGenerating.value = false
+      }
+    })
+
+    // ─── Evento: quick_write.failed ───
+    sseEventSource.addEventListener('quick_write.failed', (event: MessageEvent) => {
+      if (!sseActive.value) {
+        console.log('[SSE:quick_write.failed] Stream disabled, ignoring event')
+        return
+      }
+
+      try {
+        const data = JSON.parse(event.data)
+        console.error('[SSE:quick_write.failed] Error en generación:', data.message)
+        generateError.value = data.message || 'Error generating exercises'
+        sseActive.value = false
+        sseEventSource?.close()
+        isGenerating.value = false
+      } catch (e) {
+        console.error('[SSE:quick_write.failed] Error parsing event:', e)
+        isGenerating.value = false
+      }
+    })
+
+    sseEventSource.addEventListener('error', (event: Event) => {
+      console.error('[SSE] Connection error:', event)
+      if (sseEventSource?.readyState === EventSource.CLOSED) {
+        console.log('[SSE] Connection closed')
+        sseActive.value = false
+      } else {
+        console.error('[SSE] Unexpected error')
+        generateError.value = 'Connection error - please try again'
+        sseActive.value = false
+        sseEventSource?.close()
+      }
+      isGenerating.value = false
+    })
+  } catch (e) {
+    console.error('[startSSE] Error creating EventSource:', e)
+    generateError.value = 'Failed to connect to stream'
+  }
+}
+
 const generateMoreExercises = async () => {
   trackButtonClick('generate_quickwrite_exercises')
   isGenerating.value = true
@@ -175,21 +289,17 @@ const generateMoreExercises = async () => {
     const result = await quickWriteApi.generate()
 
     if (result.status === 'generating') {
-      // Reload exercises after a short delay to get the newly generated ones
-      setTimeout(() => {
-        currentPage.value = 1
-        prompts.value = []
-        responses.value.clear()
-        corrections.value.clear()
-        loadExercises()
-      }, 1500)
+      generateError.value = null
+      // Start SSE to listen for generation completion
+      // isGenerating will stay true until SSE receives the event and loads exercises
+      startSSE()
     } else {
       generateError.value = 'Failed to generate exercises'
+      isGenerating.value = false
     }
   } catch (err: any) {
     console.error('Error generating exercises:', err)
     generateError.value = err.message || 'Failed to generate exercises'
-  } finally {
     isGenerating.value = false
   }
 }
@@ -378,7 +488,20 @@ const revealWord = (word: string, e: Event) => {
   <div class="quick-write-view">
     <!-- List View (Grid of Prompts) -->
     <template v-if="!selectedPromptId">
-      <div class="prompts-container">
+      <!-- Empty State -->
+      <div v-if="prompts.length === 0 && !isLoading" class="empty-state-container">
+        <div class="empty-state">
+          <Icon icon="fluent-emoji:smiling-face" width="48" />
+          <p>Nothing here yet. Generate some to get started!</p>
+          <button @click="generateMoreExercises" class="generate-btn" :disabled="isGenerating">
+            <span v-if="isGenerating">Generating...</span>
+            <span v-else>Generate</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Content with Prompts -->
+      <div v-else class="prompts-container">
         <div class="header-section">
           <div class="header-left">
             <h1 class="title">Quick Write</h1>
@@ -758,6 +881,56 @@ const revealWord = (word: string, e: Event) => {
   margin-bottom: 32px;
 }
 
+.empty-state-container {
+  display: flex;
+  justify-content: center;
+}
+
+.empty-state {
+  padding: 48px 36px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 600px;
+}
+
+.empty-state p {
+  font-size: 16px;
+  color: #9c99ab;
+  margin: 0;
+}
+
+.generate-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  background: rgba(167, 139, 250, 0.1);
+  color: #a78bfa;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.generate-btn:hover:not(:disabled) {
+  background: rgba(167, 139, 250, 0.2);
+  border-color: rgba(167, 139, 250, 0.6);
+}
+
+.generate-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 @media (max-width: 768px) {
   .header-section {
     flex-direction: column;
@@ -791,6 +964,10 @@ const revealWord = (word: string, e: Event) => {
 
   .progress-indicator {
     margin-bottom: 0;
+  }
+
+  .empty-state {
+    padding: 32px 24px;
   }
 }
 

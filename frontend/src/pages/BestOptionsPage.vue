@@ -387,7 +387,7 @@ onUnmounted(() => {
 
     <div v-else-if="!bestOptionsStore.currentBestOption" class="center-state">
       <p>No questions available</p>
-      <button class="retry" @click="fetchBestOptions">Load</button>
+      <button class="retry" @click="fetchBestOptions">Generate</button>
     </div>
 
     <div v-else class="quiz">

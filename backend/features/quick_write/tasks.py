@@ -115,6 +115,24 @@ def generate_quick_write_exercises_task(user_id: int, word_ids: List[int], amoun
                 logger.debug(f"[QuickWriteGenerator] Counted {created_count} quick writes for user {user_id}")
 
             logger.info(f"[QuickWriteGenerator] Successfully created {created_count} quick write exercises for user {user_id}")
+
+            # Publicar evento de completado
+            try:
+                logger.info(f"[QuickWriteGenerator] Intentando publicar evento para user {user_id}")
+                from core.realtime_event_bus import RealtimeEventBus
+                realtime_bus = RealtimeEventBus()
+                event_channel = f"user:{user_id}:quick_write.completed"
+                event_data = {
+                    "status": "success",
+                    "message": f"Created {created_count} exercises",
+                    "created": created_count
+                }
+                logger.info(f"[QuickWriteGenerator] Publishing event - channel: {event_channel}, data: {event_data}")
+                realtime_bus.publish(event_channel, event_data)
+                logger.info(f"[QuickWriteGenerator] Event published successfully for user {user_id}")
+            except Exception as e:
+                logger.error(f"[QuickWriteGenerator] Error publishing completion event: {e}", exc_info=True)
+
             return {
                 "status": "success",
                 "message": f"Created {created_count} exercises",
@@ -126,4 +144,20 @@ def generate_quick_write_exercises_task(user_id: int, word_ids: List[int], amoun
             f"[QuickWriteGenerator] Error generating quick write exercises for user {user_id}: {e}",
             exc_info=True
         )
+
+        # Publicar evento de error
+        try:
+            from core.realtime_event_bus import RealtimeEventBus
+            realtime_bus = RealtimeEventBus()
+            realtime_bus.publish(
+                f"user:{user_id}:quick_write.failed",
+                {
+                    "status": "error",
+                    "message": str(e)
+                }
+            )
+            logger.debug(f"[QuickWriteGenerator] Event published: quick_write.failed for user {user_id}")
+        except Exception as pub_error:
+            logger.error(f"[QuickWriteGenerator] Error publishing error event: {pub_error}")
+
         return {"status": "error", "message": str(e), "created": 0}

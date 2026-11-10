@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, status, Body
+from fastapi.responses import StreamingResponse
 from sqlmodel import Session
 from db import get_db
 from auth.models import User
-from auth.repository import get_current_user
+from auth.repository import get_current_user, SECRET_KEY, ALGORITHM
 from logging_client import logger
 from decorators import log_endpoint
 from typing import Optional, List
@@ -21,10 +22,133 @@ from core.learning_path.models import LearningState
 from sqlmodel import select
 from activity.user_activity_service import UserActivityService
 import ai
+import os
+import json
+import jwt
+import asyncio
+from jwt import PyJWTError
 
 
 router = APIRouter()
 grammar = GrammarEngine()
+
+
+async def get_current_user_sse(
+    db: Session = Depends(get_db),
+    token: Optional[str] = Query(None),
+) -> User:
+    """Autenticación para SSE endpoint usando token en query param."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="No se pudieron validar las credenciales",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    if token:
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            email: str = payload.get("sub")
+            if email is None:
+                raise credentials_exception
+            user = db.exec(
+                select(User).where(User.email == email)
+            ).first()
+            if user is None:
+                raise credentials_exception
+            return user
+        except PyJWTError:
+            raise credentials_exception
+
+    return get_current_user(token=None, db=db)
+
+
+@router.get("/generate-stream")
+async def generate_quick_write_stream(
+    current_user: User = Depends(get_current_user_sse),
+):
+    """
+    SSE endpoint que transmite eventos de generación de quick write exercises en tiempo real.
+
+    Eventos transmitidos:
+        - quick_write.completed: Ejercicios generados exitosamente
+        - quick_write.failed: Error durante la generación
+    """
+    import redis
+    import time
+
+    redis_host = os.getenv("REDIS_HOST", "redis")
+    redis_port = int(os.getenv("REDIS_PORT", 6379))
+
+    logger.info(f"[generate_quick_write_stream] SSE conectado para user {current_user.id} | Redis: {redis_host}:{redis_port}")
+
+    try:
+        r = redis.Redis(
+            host=redis_host,
+            port=redis_port,
+            db=0,
+            decode_responses=True,
+            socket_timeout=2,
+        )
+        pubsub = r.pubsub()
+        channel_pattern = f"user:{current_user.id}:quick_write.*"
+        pubsub.psubscribe(channel_pattern)
+        logger.info(f"[generate_quick_write_stream] SSE suscrito a: {channel_pattern}")
+    except Exception as e:
+        logger.error(f"[generate_quick_write_stream] Redis connection error: {e}")
+        return StreamingResponse(
+            iter([f"event: error\ndata: {json.dumps({'error': 'Redis connection failed'})}\n\n"]),
+            media_type="text/event-stream",
+            status_code=500
+        )
+
+    async def event_generator():
+        """Genera eventos SSE usando Redis pubsub"""
+        try:
+            last_keep_alive = time.time()
+
+            while True:
+                try:
+                    message = pubsub.get_message()
+
+                    if message:
+                        logger.debug(f"[generate_quick_write_stream] Mensaje recibido - type: {message.get('type')}, channel: {message.get('channel')}")
+
+                    if message and message.get("type") in ("message", "pmessage"):
+                        channel = message.get("channel")
+                        raw_data = message.get("data")
+
+                        if channel and raw_data:
+                            try:
+                                data = json.loads(raw_data)
+                                event_type = channel.split(":")[-1]
+                                yield f"event: {event_type}\n"
+                                yield f"data: {json.dumps(data)}\n\n"
+                                logger.debug(f"[generate_quick_write_stream] Evento enviado: {event_type}")
+                                last_keep_alive = time.time()
+                            except json.JSONDecodeError:
+                                logger.error(f"Invalid JSON: {raw_data}")
+                    else:
+                        now = time.time()
+                        if now - last_keep_alive > 30:
+                            yield ": keep-alive\n\n"
+                            last_keep_alive = now
+                        else:
+                            await asyncio.sleep(0.2)
+
+                except Exception as e:
+                    logger.error(f"[generate_quick_write_stream] Error en generador: {e}")
+                    yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+                    break
+
+        except GeneratorExit:
+            logger.debug(f"[generate_quick_write_stream] Cliente desconectado")
+        finally:
+            try:
+                pubsub.close()
+            except:
+                pass
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.get("", response_model=QuickWriteListResponse)
