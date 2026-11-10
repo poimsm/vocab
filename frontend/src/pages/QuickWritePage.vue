@@ -493,6 +493,11 @@ const revealWord = (word: string, e: Event) => {
         <div class="empty-state">
           <Icon icon="fluent-emoji:smiling-face" width="48" />
           <p>Nothing here yet. Generate some to get started!</p>
+          <transition name="fade">
+            <div v-if="isGenerating" class="progress-bar-container">
+              <div class="progress-bar"></div>
+            </div>
+          </transition>
           <button @click="generateMoreExercises" class="generate-btn" :disabled="isGenerating">
             <span v-if="isGenerating">Generating...</span>
             <span v-else>Generate</span>
@@ -904,6 +909,34 @@ const revealWord = (word: string, e: Event) => {
   font-size: 16px;
   color: #9c99ab;
   margin: 0;
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 8px 0;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #a78bfa, #c4b5fd, #a78bfa);
+  border-radius: 2px;
+  animation: progressAnimation 1.5s ease-in-out infinite;
+}
+
+@keyframes progressAnimation {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
 }
 
 .generate-btn {
