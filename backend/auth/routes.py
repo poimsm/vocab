@@ -35,6 +35,9 @@ def assign_default_words(user_id: int, db: Session):
     """Assign default words from seed_user_words.py to new user"""
     try:
         import json
+        from core.learning_path.models import LearningPathQueue
+        from core.learning_path.enums import LearningPathQueueStatus
+
         seed_file = Path(__file__).parent.parent / "seeds" / "seed_user_words.py"
 
         if not seed_file.exists():
@@ -73,7 +76,7 @@ def assign_default_words(user_id: int, db: Session):
                 )
                 db.add(word_stats)
 
-            # Create examples for this word
+            # Create examples for this word and add to learning path queue
             examples_list = word_data.get("examples", [])
 
             for idx, example_text in enumerate(examples_list):
@@ -90,11 +93,28 @@ def assign_default_words(user_id: int, db: Session):
                     word_id=word.id
                 )
                 db.add(example)
+                db.flush()  # Flush to get example ID
+
+                # Add example to learning path queue for EXAMPLE content type
+                queue_item = LearningPathQueue(
+                    content_id=example.id,
+                    content_type=ContentType.EXAMPLE,
+                    word_id=word.id,
+                    user_id=user_id,
+                    status=LearningPathQueueStatus.PENDING,
+                    priority=0.0
+                )
+                db.add(queue_item)
+                logger.debug(
+                    f"[assign_default_words] Added example {example.id} (word {word.id}) "
+                    f"to learning path queue for user {user_id}"
+                )
 
         db.commit()
-        logger.info(f"Default words and examples assigned to user {user_id}")
+        logger.info(f"Default words, examples and learning path queue items assigned to user {user_id}")
     except Exception as e:
-        logger.error(f"Error assigning default words to user {user_id}: {e}")
+        logger.error(f"Error assigning default words to user {user_id}: {e}", exc_info=True)
+        db.rollback()
         # Don't raise exception, continue with user creation
 
 

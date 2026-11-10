@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { Icon } from '@iconify/vue'
 import { quickWriteApi, type QuickWriteExercise } from '@/services/quickWriteApi'
 import { useActivityTracking } from '@/composables/useActivityTracking'
 
 const { trackButtonClick } = useActivityTracking()
+
+const writeMainRef = ref<HTMLElement | null>(null)
 
 interface LocalResponse {
   id: number
@@ -24,8 +26,21 @@ const isSaving = ref(false)
 const saveError = ref('')
 
 const selectedPromptId = ref<number | null>(null)
+
+// Scroll to top when opening a new prompt
+watch(selectedPromptId, async (newId) => {
+  if (newId !== null) {
+    window.scrollTo(0, 0)
+    await nextTick()
+    await new Promise(resolve => setTimeout(resolve, 100))
+    if (writeMainRef.value) {
+      writeMainRef.value.scrollTop = 0
+    }
+  }
+})
 const currentInput = ref('')
 const showError = ref(false)
+const manuallyDismissedError = ref(false)
 const revealedWords = ref<Set<string>>(new Set())
 const hideMaskingEnabled = ref(false)
 const isEditMode = ref(false)
@@ -208,6 +223,7 @@ const openPrompt = (promptId: number) => {
   selectedPromptId.value = promptId
   showError.value = false
   saveError.value = ''
+  manuallyDismissedError.value = false
   isEditMode.value = false
 }
 
@@ -216,7 +232,12 @@ const closeModal = () => {
   currentInput.value = ''
   showError.value = false
   saveError.value = ''
+  manuallyDismissedError.value = false
   revealedWords.value.clear()
+}
+
+const dismissError = () => {
+  manuallyDismissedError.value = true
 }
 
 const saveResponse = async () => {
@@ -226,6 +247,7 @@ const saveResponse = async () => {
 
   showError.value = false
   saveError.value = ''
+  manuallyDismissedError.value = false
 
   if (!currentInput.value.trim()) {
     showError.value = true
@@ -354,243 +376,178 @@ const revealWord = (word: string, e: Event) => {
 
 <template>
   <div class="quick-write-view">
-    <!-- Prompts Grid -->
-    <div class="prompts-container">
-      <div class="header-section">
-        <div class="header-left">
-          <h1 class="title">Quick Write</h1>
-          <p class="subtitle">{{ responses.size }}/{{ prompts.length }} completed</p>
+    <!-- List View (Grid of Prompts) -->
+    <template v-if="!selectedPromptId">
+      <div class="prompts-container">
+        <div class="header-section">
+          <div class="header-left">
+            <h1 class="title">Quick Write</h1>
+            <p class="subtitle">{{ responses.size }}/{{ prompts.length }} completed</p>
+          </div>
+          <div class="header-buttons">
+            <button class="generate-btn-header" @click="generateMoreExercises" :disabled="isGenerating" :title="isGenerating ? 'Generating...' : 'Generate more exercises'">
+              <Icon icon="solar:bolt-linear" width="20" />
+              <span v-if="!isGenerating">Generate</span>
+              <span v-else class="spinner-small"></span>
+            </button>
+            <button class="toggle-masking" :class="{ active: hideMaskingEnabled }" @click="hideMaskingEnabled = !hideMaskingEnabled" :title="hideMaskingEnabled ? 'Disable masking' : 'Enable masking'">
+              <Icon :icon="hideMaskingEnabled ? 'solar:eye-closed-linear' : 'solar:eye-linear'" width="20" />
+              <span class="toggle-label">{{ hideMaskingEnabled ? 'Hidden' : 'Visible' }}</span>
+            </button>
+          </div>
         </div>
-        <div class="header-buttons">
-          <button class="generate-btn-header" @click="generateMoreExercises" :disabled="isGenerating" :title="isGenerating ? 'Generating...' : 'Generate more exercises'">
-            <Icon icon="solar:bolt-linear" width="20" />
-            <span v-if="!isGenerating">Generate</span>
-            <span v-else class="spinner-small"></span>
-          </button>
-          <button class="toggle-masking" :class="{ active: hideMaskingEnabled }" @click="hideMaskingEnabled = !hideMaskingEnabled" :title="hideMaskingEnabled ? 'Disable masking' : 'Enable masking'">
-            <Icon :icon="hideMaskingEnabled ? 'solar:eye-closed-linear' : 'solar:eye-linear'" width="20" />
-            <span class="toggle-label">{{ hideMaskingEnabled ? 'Hidden' : 'Visible' }}</span>
+
+        <!-- Generate Error Alert -->
+        <div v-if="generateError" class="generate-error-alert">
+          <p>{{ generateError }}</p>
+          <button @click="generateError = null" class="close-alert">
+            <Icon icon="solar:close-linear" width="16" />
           </button>
         </div>
-      </div>
 
-      <!-- Generate Error Alert -->
-      <div v-if="generateError" class="generate-error-alert">
-        <p>{{ generateError }}</p>
-        <button @click="generateError = null" class="close-alert">
-          <Icon icon="solar:close-linear" width="16" />
-        </button>
-      </div>
+        <!-- Filter -->
+        <div class="filter-section">
+          <button
+            class="filter-toggle"
+            :class="{ active: showOnlyCompleted }"
+            @click="toggleFilter"
+            :title="showOnlyCompleted ? 'Showing completed exercises' : 'Showing all exercises'"
+          >
+            <Icon icon="solar:star-bold" width="16" />
+            <span>{{ showOnlyCompleted ? 'Done' : 'Done' }}</span>
+          </button>
+        </div>
 
-      <!-- Filter -->
-      <div class="filter-section">
-        <button
-          class="filter-toggle"
-          :class="{ active: showOnlyCompleted }"
-          @click="toggleFilter"
-          :title="showOnlyCompleted ? 'Showing completed exercises' : 'Showing all exercises'"
-        >
-          <Icon icon="solar:star-bold" width="16" />
-          <span>{{ showOnlyCompleted ? 'Done' : 'Done' }}</span>
-        </button>
-      </div>
+        <div class="progress-indicator" style="display:none">
+          <div v-for="prompt in prompts" :key="prompt.id" class="progress-dot" :class="{ done: responses.has(prompt.id) }"></div>
+        </div>
 
-      <div class="progress-indicator" style="display:none">
-        <div v-for="prompt in prompts" :key="prompt.id" class="progress-dot" :class="{ done: responses.has(prompt.id) }"></div>
-      </div>
+        <div class="prompts-grid">
+          <div
+            v-for="prompt in prompts"
+            :key="prompt.id"
+            class="prompt-card"
+            :class="{ completed: responses.has(prompt.id) }"
+            @click="openPrompt(prompt.id)"
+          >
+            <div class="card-top">
+              <div class="emoji-badge">{{ prompt.emoji }}</div>
+              <transition name="check">
+                <Icon v-if="responses.has(prompt.id)" icon="solar:check-circle-bold" width="24" class="check-icon" />
+              </transition>
+            </div>
 
-      <div class="prompts-grid">
-        <div
-          v-for="prompt in prompts"
-          :key="prompt.id"
-          class="prompt-card"
-          :class="{ completed: responses.has(prompt.id) }"
-          @click="openPrompt(prompt.id)"
-        >
-          <div class="card-top">
-            <div class="emoji-badge">{{ prompt.emoji }}</div>
-            <transition name="check">
-              <Icon v-if="responses.has(prompt.id)" icon="solar:check-circle-bold" width="24" class="check-icon" />
+            <p class="card-text">{{ prompt.prompt }}</p>
+
+            <div v-if="prompt.words && prompt.words.length > 0" class="words-chips">
+              <div v-for="word in prompt.words" :key="word" class="chip-wrapper">
+                <span class="chip">{{ maskWord(word) }}</span>
+                <button v-if="hideMaskingEnabled && !revealedWords.has(word)" class="reveal-btn" @click="revealWord(word, $event)" style="display:none">
+                  <Icon icon="solar:lightbulb-linear" width="14" />
+                </button>
+                <span v-else-if="hideMaskingEnabled && revealedWords.has(word)" class="revealed-indicator">✓</span>
+              </div>
+            </div>
+
+            <div v-if="responses.has(prompt.id)" class="card-preview">
+              {{ getPromptResponse(prompt.id).substring(0, 60) }}...
+            </div>
+          </div>
+
+          <!-- Loading More Indicator -->
+          <div v-if="isLoadingMore" class="loading-more">
+            <div class="spinner-small"></div>
+            <p>Loading more...</p>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Fullscreen Writing View -->
+    <transition name="fade">
+      <div v-if="selectedPromptId" class="fullscreen-write-view">
+        <!-- Header with close button -->
+        <div class="write-header">
+          <div class="write-emoji">{{ selectedPrompt?.emoji }}</div>
+          <button class="write-close" @click="closeModal" title="Go back">
+            <Icon icon="solar:arrow-left-linear" width="24" />
+          </button>
+        </div>
+
+        <!-- Main content area -->
+        <div class="write-main" ref="writeMainRef">
+          <!-- Prompt title -->
+          <h2 class="write-prompt-title">{{ selectedPrompt?.prompt }}</h2>
+
+          <!-- Words to use -->
+          <div v-if="selectedPrompt?.words && selectedPrompt.words.length > 0" class="write-words">
+            <p class="write-words-label">👉 Must use these words:</p>
+            <div class="write-words-list">
+              <div v-for="word in selectedPrompt.words" :key="word" class="write-word-badge">
+                <span>{{ maskWord(word) }}</span>
+                <button v-if="hideMaskingEnabled && !revealedWords.has(word)" class="reveal-btn-write" @click="revealWord(word, $event)" title="Reveal">
+                  <Icon icon="solar:lightbulb-linear" width="16" />
+                </button>
+                <span v-else-if="hideMaskingEnabled && revealedWords.has(word)" class="revealed-check">✓</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- AI Feedback Section (if corrections exist) -->
+          <div v-if="hasCorrected && !isEditMode" class="ai-feedback-section">
+            <div class="feedback-header">
+              <Icon icon="solar:bulb-bold" width="18" />
+              <span>AI Feedback</span>
+            </div>
+
+            <div class="feedback-before">
+              <p class="feedback-label">Your response:</p>
+              <p class="feedback-text original-text">{{ currentInput }}</p>
+            </div>
+
+            <div class="feedback-arrow">
+              <Icon icon="solar:arrow-down-linear" width="20" />
+            </div>
+
+            <div class="feedback-after">
+              <p class="feedback-label">Improved:</p>
+              <p class="feedback-text improved-text">{{ corrections.get(selectedPromptId) }}</p>
+            </div>
+
+            <button class="edit-btn-write" @click="startEdit">
+              <Icon icon="solar:pen-2-linear" width="18" />
+              Edit Response
+            </button>
+          </div>
+
+          <!-- Writing area -->
+          <div v-if="!hasCorrected || isEditMode" class="write-textarea-wrapper">
+            <textarea
+              v-model="currentInput"
+              class="write-textarea"
+              placeholder="Start writing..."
+              @keydown="handleKeydown"
+              :disabled="isSaving"
+            ></textarea>
+
+          </div>
+
+          <!-- Floating Action Button -->
+          <div class="floating-fab-container">
+            <!-- Error notification -->
+            <transition name="fade">
+              <div v-if="(showError || saveError) && !manuallyDismissedError" class="fab-error-badge">
+                <Icon icon="solar:info-circle-linear" width="16" />
+                <span>{{ saveError || 'Use at least one word above' }}</span>
+                <button class="fab-error-close" @click="dismissError" type="button" title="Dismiss">
+                  <Icon icon="solar:close-circle-linear" width="16" />
+                </button>
+              </div>
             </transition>
-          </div>
 
-          <p class="card-text">{{ prompt.prompt }}</p>
-
-          <div v-if="prompt.words && prompt.words.length > 0" class="words-chips">
-            <div v-for="word in prompt.words" :key="word" class="chip-wrapper">
-              <span class="chip">{{ maskWord(word) }}</span>
-              <button v-if="hideMaskingEnabled && !revealedWords.has(word)" class="reveal-btn" @click="revealWord(word, $event)" style="display:none">
-                <Icon icon="solar:lightbulb-linear" width="14" />
-              </button>
-              <span v-else-if="hideMaskingEnabled && revealedWords.has(word)" class="revealed-indicator">✓</span>
-            </div>
-          </div>
-
-          <div v-if="responses.has(prompt.id)" class="card-preview">
-            {{ getPromptResponse(prompt.id).substring(0, 60) }}...
-          </div>
-        </div>
-
-        <!-- Loading More Indicator -->
-        <div v-if="isLoadingMore" class="loading-more">
-          <div class="spinner-small"></div>
-          <p>Loading more...</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Mobile Fullscreen View -->
-    <transition name="slide-up">
-      <div v-if="isMobile && selectedPromptId" class="mobile-fullscreen">
-        <div class="mobile-header">
-          <div class="mobile-emoji">{{ selectedPrompt?.emoji }}</div>
-          <button class="mobile-close" @click="closeModal">
-            <Icon icon="solar:close-circle-linear" width="28" />
-          </button>
-        </div>
-
-        <div class="mobile-content">
-          <h3 class="mobile-title">{{ selectedPrompt?.prompt }}</h3>
-
-          <div v-if="selectedPrompt?.words && selectedPrompt.words.length > 0" class="mobile-words">
-            <div v-for="word in selectedPrompt.words" :key="word" class="word-badge-wrapper" style="margin-right: 5px;">
-              <span class="word-badge">{{ maskWord(word) }}</span>
-              <button v-if="hideMaskingEnabled && !revealedWords.has(word)" class="reveal-btn-modal" @click="revealWord(word, $event)">
-                <Icon icon="solar:lightbulb-linear" width="22" />
-              </button>
-              <span v-else-if="hideMaskingEnabled && revealedWords.has(word)" class="revealed-badge">✓</span>
-            </div>
-          </div>
-
-          <!-- AI Corrections Section -->
-          <div v-if="hasCorrected && !isEditMode" class="corrections-section">
-            <div class="corrections-header">
-              <Icon icon="solar:bulb-bold" width="18" />
-              <span>AI Feedback</span>
-            </div>
-
-            <div class="before-after">
-              <div class="text-block">
-                <p class="label">Your response:</p>
-                <p class="text original">{{ currentInput }}</p>
-              </div>
-
-              <div class="arrow">
-                <Icon icon="solar:arrow-down-linear" width="20" />
-              </div>
-
-              <div class="text-block">
-                <p class="label">Improved:</p>
-                <p class="text improved">{{ corrections.get(selectedPromptId) }}</p>
-              </div>
-            </div>
-
-            <button class="edit-btn" @click="startEdit">
-              <Icon icon="solar:pen-2-linear" width="18" />
-              Edit Response
-            </button>
-          </div>
-
-          <!-- Write/Edit Section -->
-          <div v-if="!hasCorrected || isEditMode" class="write-section">
-            <textarea
-              v-model="currentInput"
-              class="mobile-input"
-              placeholder="Write your response..."
-              @keydown="handleKeydown"
-              rows="4"
-              :disabled="isSaving"
-            ></textarea>
-
-            <div v-if="showError" class="error-msg">
-              Use at least one word above
-            </div>
-
-            <div v-if="saveError" class="error-msg">
-              {{ saveError }}
-            </div>
-
-            <button class="save-btn" @click="saveResponse" :disabled="!currentInput.trim() || isSaving">
-              {{ isSaving ? 'Saving...' : 'Save Response' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-    <!-- Modal (Desktop) -->
-    <transition name="modal">
-      <div v-if="!isMobile && selectedPromptId" class="modal-overlay" @mousedown.self="closeModal">
-        <div class="modal-card" @mousedown.stop @mouseup.stop>
-          <div class="modal-header">
-            <div class="modal-emoji">{{ selectedPrompt?.emoji }}</div>
-            <button class="modal-close" @click="closeModal">
-              <Icon icon="solar:close-circle-linear" width="24" />
-            </button>
-          </div>
-
-          <h3 class="modal-title">{{ selectedPrompt?.prompt }}</h3>
-
-          <div v-if="selectedPrompt?.words && selectedPrompt.words.length > 0" class="modal-words">
-            <div v-for="word in selectedPrompt.words" :key="word" class="word-badge-wrapper">
-              <span class="word-badge">{{ maskWord(word) }}</span>
-              <button v-if="hideMaskingEnabled && !revealedWords.has(word)" class="reveal-btn-modal" @click="revealWord(word, $event)">
-                <Icon icon="solar:lightbulb-linear" width="16" />
-              </button>
-              <span v-else-if="hideMaskingEnabled && revealedWords.has(word)" class="revealed-badge">✓</span>
-            </div>
-          </div>
-
-          <!-- AI Corrections Section -->
-          <div v-if="hasCorrected && !isEditMode" class="corrections-section">
-            <div class="corrections-header">
-              <Icon icon="solar:bulb-bold" width="18" />
-              <span>AI Feedback</span>
-            </div>
-
-            <div class="before-after">
-              <div class="text-block">
-                <p class="label">Your response:</p>
-                <p class="text original">{{ currentInput }}</p>
-              </div>
-
-              <div class="arrow">
-                <Icon icon="solar:arrow-down-linear" width="20" />
-              </div>
-
-              <div class="text-block">
-                <p class="label">Improved:</p>
-                <p class="text improved">{{ corrections.get(selectedPromptId) }}</p>
-              </div>
-            </div>
-
-            <button class="edit-btn" @click="startEdit">
-              <Icon icon="solar:pen-2-linear" width="18" />
-              Edit Response
-            </button>
-          </div>
-
-          <!-- Write/Edit Section -->
-          <div v-if="!hasCorrected || isEditMode" class="write-section">
-            <textarea
-              v-model="currentInput"
-              class="modal-input"
-              placeholder="Write your response..."
-              @keydown="handleKeydown"
-              rows="4"
-              :disabled="isSaving"
-            ></textarea>
-
-            <div v-if="showError" class="error-msg">
-              Use at least one word above
-            </div>
-
-            <div v-if="saveError" class="error-msg">
-              {{ saveError }}
-            </div>
-
-            <button class="save-btn" @click="saveResponse" :disabled="!currentInput.trim() || isSaving">
-              {{ isSaving ? 'Saving...' : 'Save Response' }}
+            <button v-if="!hasCorrected || isEditMode" class="floating-action-btn" @click="saveResponse" :disabled="!currentInput.trim() || isSaving" :title="isSaving ? 'Checking with AI...' : 'Check with AI'">
+              <Icon v-if="!isSaving" icon="solar:check-circle-bold" width="28" />
+              <span v-else class="spinner-fab"></span>
             </button>
           </div>
         </div>
@@ -965,117 +922,122 @@ const revealWord = (word: string, e: Event) => {
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* ─── Modal ─── */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 20px;
-  backdrop-filter: blur(4px);
-}
-
-.modal-card {
-  background: #36324a;
-  border-radius: 16px;
-  max-width: 500px;
+/* ─── Fullscreen Writing View ─── */
+.fullscreen-write-view {
   width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  max-height: 90vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 0;
+  background: inherit;
 }
 
-.modal-card::-webkit-scrollbar {
-  width: 5px;
-}
-
-.modal-card::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.modal-card::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 3px;
-}
-
-.modal-header {
+.write-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 16px;
-  padding: 28px 28px 16px 28px;
-  background: #36324a;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  flex-shrink: 0;
-  /* margin: -28px -28px 16px -28px; */
+  align-items: center;
+  padding: 20px 30px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
+  background: inherit;
+  z-index: 10;
 }
 
-.modal-emoji {
-  font-size: 40px;
+.write-emoji {
+  font-size: 36px;
 }
 
-.modal-close {
+.write-close {
   background: transparent;
   border: none;
   color: #9c99ab;
   cursor: pointer;
   transition: all 0.2s ease;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.modal-close:hover {
+.write-close:hover {
   color: #e2e0e8;
+  transform: scale(1.1);
 }
 
-.modal-title {
-  font-size: 20px;
+.write-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 40px 30px;
+  gap: 28px;
+}
+
+.write-main::-webkit-scrollbar {
+  width: 6px;
+}
+
+.write-main::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.write-main::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+
+.write-prompt-title {
+  font-size: 32px;
   font-weight: 600;
   color: #e2e0e8;
-  margin: 0 0 16px 0;
-  padding: 0 28px;
-  margin-top: 20px;
+  margin: 0;
+  line-height: 1.4;
+  max-width: 600px;
 }
 
-.modal-words {
+.write-words {
   display: flex;
-  gap: 6px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-  padding: 0 28px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.word-badge-wrapper {
+.write-words-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #9c99ab;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.write-words-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.write-word-badge {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.word-badge {
-  padding: 6px 12px;
+  padding: 8px 14px;
   background: rgba(124, 58, 237, 0.15);
-  color: #c4b5fd;
-  font-size: 13px;
+  color: #a78bfa;
+  font-size: 15px;
   font-weight: 600;
-  border-radius: 6px;
-  border: 1px solid rgba(124, 58, 237, 0.25);
+  border-radius: 8px;
   font-family: 'Courier New', monospace;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
+  border: 1px solid rgba(124, 58, 237, 0.3);
   cursor: default;
   user-select: none;
 }
 
-.reveal-btn-modal {
-  width: 22px;
-  height: 22px;
+.reveal-btn-write {
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1089,110 +1051,199 @@ const revealWord = (word: string, e: Event) => {
   flex-shrink: 0;
 }
 
-.reveal-btn-modal:hover {
+.reveal-btn-write:hover {
   background: rgba(124, 58, 237, 0.25);
   border-color: rgba(124, 58, 237, 0.5);
-  transform: scale(1.15);
+  transform: scale(1.1);
 }
 
-.revealed-badge {
-  font-size: 13px;
+.revealed-check {
+  font-size: 14px;
   color: #22c55e;
   font-weight: 700;
 }
 
-.write-section {
+/* Textarea wrapper and styling */
+.write-textarea-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 0 28px 28px 28px;
+  flex: 1;
+  gap: 16px;
 }
 
-.modal-input {
-  width: 100%;
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+.write-textarea {
+  flex: 1;
+  padding: 0;
+  background: transparent;
   color: #e2e0e8;
-  font-size: 14.5px;
+  font-size: 17px;
   font-family: inherit;
-  resize: none;
-  box-sizing: border-box;
+  border: none;
   outline: none;
-  transition: all 0.2s ease;
+  resize: none;
+  font-weight: 400;
+  line-height: 1.6;
+  min-height: 300px;
+  overflow-y: auto;
+  scrollbar-width: none;
 }
 
-.modal-input:focus {
-  border-color: rgba(124, 58, 237, 0.4);
-  background: rgba(255, 255, 255, 0.06);
+.write-textarea::-webkit-scrollbar {
+  display: none;
 }
 
-.modal-input::placeholder {
-  color: #9c99ab;
+.write-textarea::placeholder {
+  color: rgba(156, 153, 171, 0.5);
 }
 
-.error-msg {
-  font-size: 12px;
+.write-textarea:focus {
+  outline: none;
+}
+
+.write-error {
+  font-size: 13px;
   color: #f87171;
+  margin: 0;
+  padding: 8px 0;
 }
 
-.save-btn {
-  width: 100%;
-  padding: 12px;
+/* Floating Action Button */
+.floating-fab-container {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.fab-error-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 10px 14px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
   border-radius: 8px;
+  color: #fca5a5;
+  font-size: 13px;
+  font-weight: 500;
+  animation: slideInUp 0.3s ease;
+}
+
+.fab-error-badge svg {
+  flex-shrink: 0;
+}
+
+.fab-error-close {
+  background: transparent;
+  border: none;
+  color: #fca5a5;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.fab-error-close:hover {
+  color: #ff8a80;
+  transform: scale(1.15);
+}
+
+.fab-error-close:active {
+  transform: scale(0.9);
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.floating-action-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
   border: none;
   background: #7c3aed;
   color: white;
-  font-size: 14px;
-  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4); */
 }
 
-.save-btn:hover:not(:disabled) {
+.floating-action-btn:hover:not(:disabled) {
   background: #6d28d9;
+  transform: scale(1.1);
+  /* box-shadow: 0 12px 32px rgba(124, 58, 237, 0.6); */
 }
 
-.save-btn:disabled {
-  opacity: 0.5;
+.floating-action-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.floating-action-btn:disabled {
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
-/* ─── Corrections ─── */
-.corrections-section {
+.spinner-fab {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  display: inline-block;
+}
+
+/* AI Feedback Section */
+.ai-feedback-section {
   background: rgba(34, 197, 94, 0.08);
   border: 1px solid rgba(34, 197, 94, 0.2);
-  border-radius: 8px;
-  padding: 16px;
-  margin: 0 28px 16px 28px;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 12px 0;
 }
 
-.corrections-header {
+.feedback-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: 8px;
   color: #22c55e;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
 }
 
-.before-after {
+.feedback-before,
+.feedback-after {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
-.text-block {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.label {
-  font-size: 11px;
+.feedback-label {
+  font-size: 12px;
   color: #9c99ab;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1200,34 +1251,34 @@ const revealWord = (word: string, e: Event) => {
   font-weight: 600;
 }
 
-.text {
-  padding: 10px;
-  border-radius: 6px;
-  font-size: 13px;
-  line-height: 1.5;
+.feedback-text {
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.6;
   margin: 0;
 }
 
-.text.original {
+.original-text {
   background: rgba(239, 68, 68, 0.1);
   color: #fca5a5;
   border: 1px solid rgba(239, 68, 68, 0.2);
 }
 
-.text.improved {
+.improved-text {
   background: rgba(34, 197, 94, 0.1);
   color: #86efac;
   border: 1px solid rgba(34, 197, 94, 0.2);
 }
 
-.arrow {
+.feedback-arrow {
   display: flex;
   justify-content: center;
   color: #22c55e;
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
-.edit-btn {
+.edit-btn-write {
   width: 100%;
   padding: 12px;
   border-radius: 8px;
@@ -1241,240 +1292,29 @@ const revealWord = (word: string, e: Event) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  margin-top: 12px;
+  gap: 8px;
+  margin-top: 8px;
 }
 
-.edit-btn:hover {
+.edit-btn-write:hover {
   background: #6d28d9;
 }
 
-/* ─── Complete Screen ─── */
-.complete-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 999;
-  padding: 20px;
-  backdrop-filter: blur(4px);
-}
-
-.complete-card {
-  background: #36324a;
-  border-radius: 16px;
-  padding: 32px;
-  max-width: 600px;
-  width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
-.complete-header {
-  text-align: center;
-  margin-bottom: 28px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  color: #fbbf24;
-}
-
-.complete-header h2 {
-  font-size: 28px;
-  font-weight: 700;
-  color: #e2e0e8;
-  margin: 0;
-}
-
-.responses-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-.response-card {
-  padding: 14px;
-  background: rgba(124, 58, 237, 0.08);
-  border-radius: 8px;
-  border: 1px solid rgba(124, 58, 237, 0.15);
-}
-
-.card-emoji {
-  font-size: 24px;
-  margin-bottom: 6px;
-}
-
-.card-prompt {
-  font-size: 12px;
-  font-weight: 600;
-  color: #a78bfa;
-  margin: 0 0 6px 0;
-}
-
-.card-response {
-  font-size: 12px;
-  color: #b8b5c8;
-  margin: 0;
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.restart-btn {
-  width: 100%;
-  padding: 12px;
-  border-radius: 8px;
-  border: none;
-  background: #7c3aed;
-  color: white;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: all 0.2s ease;
-}
-
-.restart-btn:hover {
-  background: #6d28d9;
-}
-
-/* ─── Mobile Fullscreen ─── */
-.mobile-fullscreen {
-  position: fixed;
-  inset: 0;
-  background: #1f1b2e;
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-.mobile-header {
-  position: sticky;
-  top: 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 20px 20px;
-  background: #1f1b2e;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  z-index: 10;
-  gap: 12px;
-}
-
-.mobile-emoji {
-  font-size: 44px;
-  flex-shrink: 0;
-}
-
-.mobile-close {
-  background: transparent;
-  border: none;
-  color: #9c99ab;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.mobile-close:active {
-  color: #e2e0e8;
-  transform: scale(0.9);
-}
-
-.mobile-content {
-  flex: 1;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  overflow-y: auto;
-}
-
-.mobile-title {
-  font-size: 22px;
-  font-weight: 600;
-  color: #e2e0e8;
-  margin: 0;
-  line-height: 1.4;
-}
-
-.mobile-words {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.mobile-input {
-  width: 100%;
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  color: #e2e0e8;
-  font-size: 15px;
-  font-family: inherit;
-  resize: none;
-  box-sizing: border-box;
-  outline: none;
-  transition: all 0.2s ease;
-}
-
-.mobile-input:focus {
-  border-color: rgba(124, 58, 237, 0.4);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.mobile-input::placeholder {
+.modal-input::placeholder {
   color: #9c99ab;
 }
+
+
 
 /* ─── Transitions ─── */
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.slide-up-enter-active,
-.slide-up-leave-active {
-  transition: all 0.3s ease;
-}
-
-.slide-up-enter-from,
-.slide-up-leave-to {
-  opacity: 0;
-  transform: translateY(100%);
+  transition: opacity 0.3s ease;
 }
 
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
-}
-
-.modal-enter-active,
-.modal-leave-active {
-  transition: all 0.2s ease;
-}
-
-.modal-enter-from,
-.modal-leave-to {
-  opacity: 0;
-  transform: scale(0.95);
 }
 
 .check-enter-active {
@@ -1499,24 +1339,31 @@ const revealWord = (word: string, e: Event) => {
     grid-template-columns: 1fr;
   }
 
-  .responses-grid {
-    grid-template-columns: 1fr;
+  .write-main {
+    padding: 20px 16px;
+    gap: 20px;
+    overflow-y: auto;
   }
 
-  .modal-card {
-    padding: 20px;
+  .write-prompt-title {
+    font-size: 26px;
   }
 
-  .complete-card {
-    padding: 20px;
+  .write-header {
+    padding: 16px 16px;
   }
 
-  .label {
-    font-size: 16px;
+  .write-emoji {
+    font-size: 32px;
   }
 
-  .text {
-    font-size: 18.7px;
+  .write-words-label {
+    font-size: 13px;
+  }
+
+  .write-word-badge {
+    font-size: 15px;
+    padding: 8px 12px;
   }
 
   .card-text {
@@ -1531,33 +1378,37 @@ const revealWord = (word: string, e: Event) => {
     font-size: 18px;
   }
 
-  .mobile-input {
-    font-size: 19px;
+  .write-textarea {
+    font-size: 17px;
+    min-height: 350px;
   }
 
-  .word-badge {
-    font-size: 18px;
+  .floating-fab-container {
+    bottom: 20px;
+    right: 20px;
   }
 
-  .save-btn {
-    font-size: 17.5px;
+  .floating-action-btn {
+    width: 52px;
+    height: 52px;
   }
 
-  .edit-btn {
-    font-size: 17.5px;
+  .fab-error-badge {
+    font-size: 12px;
+    padding: 10px 8px 10px 12px;
+    gap: 6px;
   }
 
-  .reveal-btn-modal {
-    width: auto;
-    height: auto;
+  .fab-error-close {
+    padding: 6px;
   }
 
-  .write-section {
-    padding: 0;
+  .feedback-text {
+    font-size: 14px;
   }
 
-  .corrections-section {
-    margin: 0;
+  .feedback-label {
+    font-size: 12px;
   }
 }
 </style>

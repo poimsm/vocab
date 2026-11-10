@@ -60,8 +60,13 @@ class DeliveryRepository:
         )
         return list(self.session.exec(statement).all())
 
-    def mark_multiple_as_dispatched(self, buffer_ids: list) -> int:
-        """Marca múltiples contenidos como despachados."""
+    def mark_multiple_as_dispatched(self, buffer_ids: list, user_id: int = None) -> int:
+        """Marca múltiples contenidos como despachados.
+
+        Args:
+            buffer_ids: Lista de IDs de DeliveryBuffer a marcar
+            user_id: ID del usuario propietario (recomendado para validación de seguridad)
+        """
         if not buffer_ids:
             return 0
 
@@ -72,6 +77,11 @@ class DeliveryRepository:
                 DeliveryBuffer.status == DeliveryStatus.PENDING,
             )
         )
+
+        # Agregar filtro de user_id si se proporciona (validación de seguridad)
+        if user_id is not None:
+            statement = statement.where(DeliveryBuffer.user_id == user_id)
+
         items = self.session.exec(statement).all()
 
         for item in items:

@@ -186,7 +186,7 @@ class DeliveryService:
                             consumed_item_ids.add(delivery_item.id)
 
                             # Marcar item como DISPATCHED inmediatamente para no reiterarlo
-                            self.repo.mark_multiple_as_dispatched([delivery_item.id])
+                            self.repo.mark_multiple_as_dispatched([delivery_item.id], user_id=user_id)
 
                             # Marcar nodo como READY
                             self.wheel_manager.update_node_status(
@@ -231,7 +231,7 @@ class DeliveryService:
                                     self.session.commit()
 
                                     # Marcar item como DISPATCHED inmediatamente para no reiterarlo
-                                    self.repo.mark_multiple_as_dispatched([delivery_item.id])
+                                    self.repo.mark_multiple_as_dispatched([delivery_item.id], user_id=user_id)
 
                                     # Marcar nodo como READY
                                     self.wheel_manager.update_node_status(
@@ -304,7 +304,7 @@ class DeliveryService:
                             found_item = True
 
                             # Marcar item como DISPATCHED inmediatamente para no reiterarlo
-                            self.repo.mark_multiple_as_dispatched([item.id])
+                            self.repo.mark_multiple_as_dispatched([item.id], user_id=user_id)
 
                             # Marcar nodo como READY
                             self.wheel_manager.update_node_status(
