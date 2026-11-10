@@ -73,3 +73,5 @@ logs/
 /backend/revisar_console.txt
 
 /media
+/ssl
+/pki-validation
