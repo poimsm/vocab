@@ -21,15 +21,28 @@ fi
 
 echo "🚀 Iniciando build efímero del Frontend con Node 20..."
 
-# Cargar variables del .env raíz si existen
+# Cargar NODE_ENV del .env
+if [ -f "$DIR/../.env" ]; then
+    NODE_ENV=$(grep '^NODE_ENV=' "$DIR/../.env" | cut -d '=' -f2)
+fi
+
+NODE_ENV="${NODE_ENV:-development}"
+echo "📦 Modo: $NODE_ENV"
+
+# Cargar todas las variables VITE_* del .env
 if [ -f "$DIR/../.env" ]; then
     export $(cat "$DIR/../.env" | grep -v '^#' | grep VITE_ | xargs)
 fi
 
-# Asignar un valor por defecto si la variable no viene del entorno o de un .env
+# Usar la variable del .env o valor por defecto según el modo
 VITE_API_BASE_VALUE="${VITE_API_BASE}"
 if [ -z "$VITE_API_BASE_VALUE" ]; then
-    VITE_API_BASE_VALUE="/api"
+    # Si NODE_ENV es development pero no hay VITE_API_BASE, usar /api
+    if [ "$NODE_ENV" = "development" ]; then
+        VITE_API_BASE_VALUE="/api"
+    else
+        VITE_API_BASE_VALUE="http://localhost/api"
+    fi
 fi
 
 # Desactivar la conversión de rutas SOLO si estamos en Windows

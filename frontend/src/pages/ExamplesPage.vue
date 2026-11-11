@@ -19,7 +19,7 @@ const authStore = useAuthStore()
 const { trackButtonClick } = useActivityTracking()
 
 // API base URL from environment
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost/api'
+const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
 interface TargetWord {
   id: number
@@ -76,7 +76,8 @@ function startSSE() {
 
   // Construir URL del SSE con token en query param
   // EventSource no soporta headers Authorization, así que pasamos el token como parámetro
-  const sseUrl = new URL(`${API_BASE}/examples/explore-stream`)
+  const baseUrl = API_BASE.startsWith('http') ? API_BASE : `${window.location.origin}${API_BASE}`
+  const sseUrl = new URL(`${baseUrl}/examples/explore-stream`)
   if (authStore.token) {
     sseUrl.searchParams.append('token', authStore.token)
   }
