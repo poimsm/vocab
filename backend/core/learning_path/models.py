@@ -71,6 +71,9 @@ class LearningPathCursor(SQLModel, table=True):
     current_segment: int = Field(default=1)
     current_position: int = Field(default=0)
 
+    # Último word_id seleccionado para rotación entre palabras
+    last_selected_word_id: Optional[int] = Field(default=None, index=True)
+
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
@@ -131,6 +134,77 @@ class LearningPathAnomaly(SQLModel, table=True):
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class RecentWordHistory(SQLModel, table=True):
+    """
+    Tracks recently shown words for a user in a given content type.
+    Used for band-pass filtering to prevent immediate word repetition.
+
+    Each record represents one word selection. Older records are automatically
+    pruned to maintain a sliding window of N most recent selections.
+    Example: With window_size=3, keeps the 3 most recent word selections.
+    """
+    __tablename__: str = "recent_word_history"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    user_id: int = Field(
+        foreign_key="users.id",
+        index=True,
+        nullable=False
+    )
+
+    type: ContentType = Field(index=True, nullable=False)
+
+    # Word ID that was shown
+    word_id: int = Field(index=True, nullable=False)
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        index=True
+    )
+
+
+class BandPassConfig(SQLModel, table=True):
+    """
+    Configuration for band-pass filtering in learning path.
+    Controls how many recent words to track and how much to penalize them.
+
+    Allows fine-tuning of word repetition prevention:
+    - window_size: How many recent words to track (default 3, can be 4, 5, etc.)
+    - inflation_factor: How much to reduce priority of recent words (default 0.2, reduces priority by 20%)
+    """
+    __tablename__: str = "band_pass_config"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    user_id: int = Field(
+        foreign_key="users.id",
+        index=True,
+        nullable=False
+    )
+
+    type: ContentType = Field(index=True, nullable=False)
+
+    # Window size for tracking recent words (e.g., 3 means track last 3 words)
+    # Default is 3, but can be adjusted to 4, 5, etc. for stronger prevention
+    window_size: int = Field(default=3, ge=1, le=10)
+
+    # Inflation factor applied to penalize recent words
+    # E.g., 0.2 means reduce priority by 20%, 0.5 means reduce by 50%
+    # Applied as: new_priority = original_priority * (1 - inflation_factor)
+    inflation_factor: float = Field(default=0.2, ge=0.0, le=1.0)
+
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        index=True
+    )
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        index=True
+    )
 
 
 class PathRepairLog(SQLModel, table=True):

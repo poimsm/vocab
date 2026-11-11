@@ -255,8 +255,22 @@ class ExploreActions:
                 buffer_position = restored_position
                 was_session_restored = True
             else:
-                logger.info(f"[action_resume] No saved session found")
-                return "ok", [], 0
+                logger.info(f"[action_resume] No saved session found, loading fresh content")
+                # Load fresh content instead of returning empty
+                new_buffer_ids = self.explore_buffer_service.load_next_batch(
+                    current_user.id, content_type, limit
+                )
+
+                if new_buffer_ids:
+                    logger.info(f"[action_resume] Loaded {len(new_buffer_ids)} fresh items")
+                    self.explore_repo.mark_delivery_item_as_visited(current_user.id, new_buffer_ids[0], content_type.value)
+                    self.explore_repo.update_session(current_user.id, new_buffer_ids, 0, content_type.value)
+                    return "ok", new_buffer_ids, 0
+                else:
+                    logger.warning(f"[action_resume] No fresh content available, checking mixed content")
+                    result = self.delivery_service.get_mixed_content(current_user.id, content_type, limit)
+                    status = result["status"]
+                    return status, [], 0
 
         # PASO 1.5: Si sesión fue restaurada, retornarla directamente
         if was_session_restored:

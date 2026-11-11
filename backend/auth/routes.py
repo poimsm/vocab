@@ -6,7 +6,7 @@ from auth.models import User
 from features.words.models import Word, WordStatistics
 from features.examples.models import Example, ExampleType
 from core.learning_path.models import LearningState
-from core.enums import ContentType
+from core.enums import ContentType, ContentSourceType
 from auth.repository import hash_password, verify_password, create_access_token
 from pydantic import BaseModel, EmailStr
 from logging_client import logger
@@ -32,34 +32,50 @@ class Token(BaseModel):
 
 
 def assign_default_words(user_id: int, db: Session):
-    """Assign default words from seed_user_words.py to new user"""
+    """Assign default words, examples and best_options from new_user_data.json to new user"""
     try:
         import json
-        from core.learning_path.models import LearningPathQueue
+        from core.learning_path.models import LearningPathQueue, LearningPath, LearningPathCursor
         from core.learning_path.enums import LearningPathQueueStatus
+        from features.best_options.models import BestOption
 
-        seed_file = Path(__file__).parent.parent / "seeds" / "seed_user_words.py"
+        data_file = Path(__file__).parent.parent / "data" / "new_user_data.json"
 
-        if not seed_file.exists():
-            logger.warning(f"Seed file not found: {seed_file}")
+        if not data_file.exists():
+            logger.warning(f"Data file not found: {data_file}")
             return
 
-        with open(seed_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-            words_data = json.loads(content)
+        with open(data_file, 'r', encoding='utf-8') as f:
+            user_data_list = json.load(f)
 
-        # Reverse the order so last word in seed is created first
-        for word_data in reversed(words_data):
+        # Create learning path cursors for both content types if they don't exist
+        for content_type in [ContentType.EXAMPLE, ContentType.BEST_OPTIONS]:
+            cursor = db.exec(
+                select(LearningPathCursor).where(
+                    (LearningPathCursor.user_id == user_id) &
+                    (LearningPathCursor.type == content_type)
+                )
+            ).first()
+            if not cursor:
+                cursor = LearningPathCursor(
+                    user_id=user_id,
+                    type=content_type,
+                    current_segment=1,
+                    current_position=0,
+                )
+                db.add(cursor)
+
+        # Process words in reverse order (last word in JSON is created first)
+        position_by_type = {ContentType.EXAMPLE: 0, ContentType.BEST_OPTIONS: 0}
+        for word_data in reversed(user_data_list):
             word = Word(
-                main=word_data.get("main"),
-                meaning=word_data.get("meaning"),
-                synonyms=word_data.get("synonyms"),
-                type=word_data.get("type"),
-                frequency=word_data.get("frequency"),
-                level=word_data.get("level", 1),
-                context=word_data.get("context"),
-                source_text=word_data.get("source_text"),
-                explanation=word_data.get("explanation"),
+                main=word_data.get("word", {}).get("main"),
+                meaning=word_data.get("word", {}).get("meaning"),
+                synonyms=word_data.get("word", {}).get("synonyms"),
+                type=word_data.get("word", {}).get("type"),
+                frequency=word_data.get("word", {}).get("frequency"),
+                level=word_data.get("word", {}).get("level", 1),
+                context=word_data.get("word", {}).get("context"),
                 user_id=user_id
             )
             db.add(word)
@@ -76,15 +92,25 @@ def assign_default_words(user_id: int, db: Session):
                 )
                 db.add(word_stats)
 
-            # Create examples for this word and add to learning path queue
-            examples_list = word_data.get("examples", [])
+            # Add word to learning path (normal learning path, not boosted)
+            for content_type in [ContentType.EXAMPLE, ContentType.BEST_OPTIONS]:
+                learning_path_entry = LearningPath(
+                    type=content_type,
+                    word_id=word.id,
+                    user_id=user_id,
+                    segment=1,
+                    position=position_by_type[content_type],
+                )
+                db.add(learning_path_entry)
+                position_by_type[content_type] += 1
 
-            for idx, example_text in enumerate(examples_list):
+            # Create examples for this word (10 examples from JSON)
+            examples_list = word_data.get("examples", [])
+            for idx, example_data in enumerate(examples_list):
                 # First 3 are INITIAL, rest are EXPLORE
                 example_type = ExampleType.INITIAL if idx < 3 else ExampleType.EXPLORE
-
-                # Get text_form
-                text_form = approximate_text_form(example_text, word.main)
+                example_text = example_data.get("text", "")
+                text_form = example_data.get("text_form", approximate_text_form(example_text, word.main))
 
                 example = Example(
                     type=example_type,
@@ -95,23 +121,48 @@ def assign_default_words(user_id: int, db: Session):
                 db.add(example)
                 db.flush()  # Flush to get example ID
 
-                # Add example to learning path queue for EXAMPLE content type
+                # Create LearningPathQueue item for this example
                 queue_item = LearningPathQueue(
                     content_id=example.id,
                     content_type=ContentType.EXAMPLE,
                     word_id=word.id,
                     user_id=user_id,
                     status=LearningPathQueueStatus.PENDING,
-                    priority=0.0
                 )
                 db.add(queue_item)
-                logger.debug(
-                    f"[assign_default_words] Added example {example.id} (word {word.id}) "
-                    f"to learning path queue for user {user_id}"
+                db.flush()
+
+            # Create best_options for this word (10 best_options from JSON)
+            best_options_list = word_data.get("best_options", [])
+            for idx, bo_data in enumerate(best_options_list, start=1):
+                # Convert options list to semicolon-separated string
+                options_list = bo_data.get("options", [])
+                options_str = ";".join(options_list) if isinstance(options_list, list) else options_list
+
+                best_option = BestOption(
+                    word_id=word.id,
+                    question=bo_data.get("question", f"Question {idx} for {word.main}"),
+                    options=options_str,
+                    correct_option=bo_data.get("correct_option", 0),
+                    sequence=idx,
+                    enqueued=False,
                 )
+                db.add(best_option)
+                db.flush()
+
+                # Create LearningPathQueue item for this best_option
+                queue_item = LearningPathQueue(
+                    content_id=best_option.id,
+                    content_type=ContentType.BEST_OPTIONS,
+                    word_id=word.id,
+                    user_id=user_id,
+                    status=LearningPathQueueStatus.PENDING,
+                )
+                db.add(queue_item)
+                db.flush()
 
         db.commit()
-        logger.info(f"Default words, examples and learning path queue items assigned to user {user_id}")
+        logger.info(f"Default words, examples and best_options assigned to user {user_id}")
     except Exception as e:
         logger.error(f"Error assigning default words to user {user_id}: {e}", exc_info=True)
         db.rollback()

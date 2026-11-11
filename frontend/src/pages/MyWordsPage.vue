@@ -242,7 +242,8 @@ function startSSE() {
   sseActive.value = true
 
   // Construir URL del SSE con token en query param
-  const sseUrl = new URL(`${API_BASE}/words/create-stream`)
+  const baseUrl = API_BASE.startsWith('http') ? API_BASE : `${window.location.origin}${API_BASE}`
+  const sseUrl = new URL(`${baseUrl}/words/create-stream`)
   if (authStore.token) {
     sseUrl.searchParams.append('token', authStore.token)
   }

@@ -1,0 +1,1947 @@
+[
+  {
+    "word": {
+      "main": "zombie",
+      "meaning": "a dead person brought back to life mysteriously",
+      "synonyms": [
+        "undead",
+        "corpse",
+        "monster"
+      ],
+      "type": "noun",
+      "frequency": "common",
+      "level": 1,
+      "context": "horror"
+    },
+    "examples": [
+      {
+        "text": "The zombie walked through the empty street.",
+        "text_form": "zombie"
+      },
+      {
+        "text": "He wore a scary zombie costume today.",
+        "text_form": "zombie"
+      },
+      {
+        "text": "The movie features a terrifying zombie outbreak.",
+        "text_form": "zombie"
+      },
+      {
+        "text": "I felt like a zombie this morning.",
+        "text_form": "zombie"
+      },
+      {
+        "text": "A hidden zombie waited behind the door.",
+        "text_form": "zombie"
+      },
+      {
+        "text": "Fight off the hungry zombie right now.",
+        "text_form": "zombie"
+      },
+      {
+        "text": "She loves reading classic zombie horror books.",
+        "text_form": "zombie"
+      },
+      {
+        "text": "The actor turned into a creepy zombie.",
+        "text_form": "zombie"
+      },
+      {
+        "text": "They locked the doors to stop the zombie.",
+        "text_form": "zombie"
+      },
+      {
+        "text": "The groaning zombie scared the entire group.",
+        "text_form": "zombie"
+      }
+    ],
+    "best_options": [
+      {
+        "question": "A zombie is often depicted as...",
+        "options": [
+          "A superhero",
+          "A friendly ghost",
+          "A reanimated corpse"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "Which scenario typically involves zombies?",
+        "options": [
+          "A nature documentary",
+          "A horror movie",
+          "A romantic comedy"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Zombies are often associated with...",
+        "options": [
+          "Brains and a craving for flesh",
+          "Dancing",
+          "Cooking"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "What would you likely see in a zombie story?",
+        "options": [
+          "A terrifying apocalypse",
+          "A peaceful garden",
+          "A happy family reunion"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "If someone is acting like a zombie, they might be...",
+        "options": [
+          "Dancing joyfully",
+          "Moving slowly and aimlessly",
+          "Full of energy"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "A zombie is often depicted as...",
+        "options": [
+          "A superhero",
+          "A friendly ghost",
+          "A reanimated corpse"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "Which scenario typically involves zombies?",
+        "options": [
+          "A nature documentary",
+          "A horror movie",
+          "A romantic comedy"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Zombies are often associated with...",
+        "options": [
+          "Brains and a craving for flesh",
+          "Dancing",
+          "Cooking"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "What would you likely see in a zombie story?",
+        "options": [
+          "A terrifying apocalypse",
+          "A peaceful garden",
+          "A happy family reunion"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "If someone is acting like a zombie, they might be...",
+        "options": [
+          "Dancing joyfully",
+          "Moving slowly and aimlessly",
+          "Full of energy"
+        ],
+        "correct_option": 1
+      }
+    ]
+  },
+  {
+    "word": {
+      "main": "tiger",
+      "meaning": "a large wild cat with stripes",
+      "synonyms": [
+        "feline",
+        "predator",
+        "cat"
+      ],
+      "type": "noun",
+      "frequency": "common",
+      "level": 1,
+      "context": "animals"
+    },
+    "examples": [
+      {
+        "text": "The wild tiger hunted in the grass.",
+        "text_form": "tiger"
+      },
+      {
+        "text": "We saw a giant tiger yesterday afternoon.",
+        "text_form": "tiger"
+      },
+      {
+        "text": "A tiger has sharp claws and teeth.",
+        "text_form": "tiger"
+      },
+      {
+        "text": "Bright stripes cover the strong tiger body.",
+        "text_form": "tiger"
+      },
+      {
+        "text": "The mother tiger protects her young cubs.",
+        "text_form": "tiger"
+      },
+      {
+        "text": "A loud tiger roar echoed through forest.",
+        "text_form": "tiger"
+      },
+      {
+        "text": "Conservationists work to save the wild tiger.",
+        "text_form": "tiger"
+      },
+      {
+        "text": "The tiger moved silently across the river.",
+        "text_form": "tiger"
+      },
+      {
+        "text": "That sleepy tiger rests under the tree.",
+        "text_form": "tiger"
+      },
+      {
+        "text": "Feed the hungry tiger some fresh meat.",
+        "text_form": "tiger"
+      }
+    ],
+    "best_options": [
+      {
+        "question": "A tiger is a...",
+        "options": [
+          "Small pet",
+          "Large wild cat",
+          "Type of fish"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Tigers are known for their...",
+        "options": [
+          "Strength and power",
+          "Ability to fly",
+          "Gentle nature"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "Where would you typically find a tiger?",
+        "options": [
+          "In a zoo or the wild",
+          "In a house",
+          "In a garden"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "Tigers have distinct...",
+        "options": [
+          "Wings",
+          "Colors and patterns",
+          "Feathers"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Which characteristic is common in tigers?",
+        "options": [
+          "They are herbivores",
+          "They are nocturnal",
+          "They have stripes"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "A tiger is a...",
+        "options": [
+          "Small pet",
+          "Large wild cat",
+          "Type of fish"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Tigers are known for their...",
+        "options": [
+          "Strength and power",
+          "Ability to fly",
+          "Gentle nature"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "Where would you typically find a tiger?",
+        "options": [
+          "In a zoo or the wild",
+          "In a house",
+          "In a garden"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "Tigers have distinct...",
+        "options": [
+          "Wings",
+          "Colors and patterns",
+          "Feathers"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Which characteristic is common in tigers?",
+        "options": [
+          "They are herbivores",
+          "They are nocturnal",
+          "They have stripes"
+        ],
+        "correct_option": 2
+      }
+    ]
+  },
+  {
+    "word": {
+      "main": "wander",
+      "meaning": "to walk around without a particular destination",
+      "synonyms": [
+        "roam",
+        "drift",
+        "stroll"
+      ],
+      "type": "verb",
+      "frequency": "common",
+      "level": 2,
+      "context": "movement"
+    },
+    "examples": [
+      {
+        "text": "We like to wander through old streets.",
+        "text_form": "wander"
+      },
+      {
+        "text": "Do not wander off without your shoes.",
+        "text_form": "wander"
+      },
+      {
+        "text": "Tourists wander around the famous museum today.",
+        "text_form": "wander"
+      },
+      {
+        "text": "They wander in the woods for hours.",
+        "text_form": "wander"
+      },
+      {
+        "text": "My thoughts wander during long boring lectures.",
+        "text_form": "wander"
+      },
+      {
+        "text": "We will wander along the quiet beach.",
+        "text_form": "wander"
+      },
+      {
+        "text": "Children love to wander in big parks.",
+        "text_form": "wander"
+      },
+      {
+        "text": "Never wander away from your group here.",
+        "text_form": "wander"
+      },
+      {
+        "text": "The cows wander across the open field.",
+        "text_form": "wander"
+      },
+      {
+        "text": "I often wander through local book shops.",
+        "text_form": "wander"
+      }
+    ],
+    "best_options": [
+      {
+        "question": "To wander means to...",
+        "options": [
+          "Move around without a fixed course",
+          "Run very fast",
+          "Stay in one place"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "When you wander, you might...",
+        "options": [
+          "Sit quietly",
+          "Explore new places",
+          "Complete a task"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Wandering often implies...",
+        "options": [
+          "Aimlessness or curiosity",
+          "A sense of purpose",
+          "Strict planning"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "Which activity is an example of wandering?",
+        "options": [
+          "Taking a walk without a destination",
+          "Making a schedule",
+          "Following a map"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "To wander can also mean to...",
+        "options": [
+          "Stay put",
+          "Drift or roam",
+          "Focus intently"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "To wander means to...",
+        "options": [
+          "Move around without a fixed course",
+          "Run very fast",
+          "Stay in one place"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "When you wander, you might...",
+        "options": [
+          "Sit quietly",
+          "Explore new places",
+          "Complete a task"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Wandering often implies...",
+        "options": [
+          "Aimlessness or curiosity",
+          "A sense of purpose",
+          "Strict planning"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "Which activity is an example of wandering?",
+        "options": [
+          "Taking a walk without a destination",
+          "Making a schedule",
+          "Following a map"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "To wander can also mean to...",
+        "options": [
+          "Stay put",
+          "Drift or roam",
+          "Focus intently"
+        ],
+        "correct_option": 1
+      }
+    ]
+  },
+  {
+    "word": {
+      "main": "stumble",
+      "meaning": "to almost fall while walking or moving",
+      "synonyms": [
+        "trip",
+        "stagger",
+        "falter"
+      ],
+      "type": "verb",
+      "frequency": "common",
+      "level": 2,
+      "context": "movement"
+    },
+    "examples": [
+      {
+        "text": "Do not stumble on the wet steps.",
+        "text_form": "stumble"
+      },
+      {
+        "text": "He might stumble over his long shoes.",
+        "text_form": "stumble"
+      },
+      {
+        "text": "I saw her stumble on the rock.",
+        "text_form": "stumble"
+      },
+      {
+        "text": "The tired runner began to stumble slowly.",
+        "text_form": "stumble"
+      },
+      {
+        "text": "You could stumble in this dark room.",
+        "text_form": "stumble"
+      },
+      {
+        "text": "Speak clearly so you do not stumble.",
+        "text_form": "stumble"
+      },
+      {
+        "text": "I might stumble upon a good book.",
+        "text_form": "stumble"
+      },
+      {
+        "text": "Watch out or you will stumble now.",
+        "text_form": "stumble"
+      },
+      {
+        "text": "The sleepy kid started to stumble forward.",
+        "text_form": "stumble"
+      },
+      {
+        "text": "Do not let small obstacles make you stumble.",
+        "text_form": "stumble"
+      }
+    ],
+    "best_options": [
+      {
+        "question": "To stumble means to...",
+        "options": [
+          "Run quickly",
+          "Dance gracefully",
+          "Fall over or trip"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "If someone stumbles while walking, they are likely...",
+        "options": [
+          "Walking steadily",
+          "Moving carefully",
+          "Tripping or losing balance"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "Stumbling can happen when you are...",
+        "options": [
+          "Distracted or not paying attention",
+          "Calm and relaxed",
+          "Focused and alert"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "Which situation might involve stumbling?",
+        "options": [
+          "Running a marathon",
+          "Walking on a flat surface",
+          "Walking on an uneven path"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "If you stumble upon something, you...",
+        "options": [
+          "Find it unexpectedly",
+          "Lose it quickly",
+          "Forget about it"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "To stumble means to...",
+        "options": [
+          "Run quickly",
+          "Dance gracefully",
+          "Fall over or trip"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "If someone stumbles while walking, they are likely...",
+        "options": [
+          "Walking steadily",
+          "Moving carefully",
+          "Tripping or losing balance"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "Stumbling can happen when you are...",
+        "options": [
+          "Distracted or not paying attention",
+          "Calm and relaxed",
+          "Focused and alert"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "Which situation might involve stumbling?",
+        "options": [
+          "Running a marathon",
+          "Walking on a flat surface",
+          "Walking on an uneven path"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "If you stumble upon something, you...",
+        "options": [
+          "Find it unexpectedly",
+          "Lose it quickly",
+          "Forget about it"
+        ],
+        "correct_option": 0
+      }
+    ]
+  },
+  {
+    "word": {
+      "main": "carve out",
+      "meaning": "to create something through effort or persistence",
+      "synonyms": [
+        "create",
+        "establish",
+        "build",
+        "forge"
+      ],
+      "type": "phrasal_verb",
+      "frequency": "common",
+      "level": 3,
+      "context": "achievement"
+    },
+    "examples": [
+      {
+        "text": "She will carve out a great career.",
+        "text_form": "carve out"
+      },
+      {
+        "text": "Please carve out time for our meeting.",
+        "text_form": "carve out"
+      },
+      {
+        "text": "Rivers carve out deep valleys over time.",
+        "text_form": "carve out"
+      },
+      {
+        "text": "He tried to carve out his path.",
+        "text_form": "carve out"
+      },
+      {
+        "text": "We can carve out a small garden.",
+        "text_form": "carve out"
+      },
+      {
+        "text": "They want to carve out new markets.",
+        "text_form": "carve out"
+      },
+      {
+        "text": "You must carve out an hour daily.",
+        "text_form": "carve out"
+      },
+      {
+        "text": "She managed to carve out her spot.",
+        "text_form": "carve out"
+      },
+      {
+        "text": "Artists carve out shapes from solid stone.",
+        "text_form": "carve out"
+      },
+      {
+        "text": "We need to carve out more space.",
+        "text_form": "carve out"
+      }
+    ],
+    "best_options": [
+      {
+        "question": "To carve out means to...",
+        "options": [
+          "Draw a picture",
+          "Hide something away",
+          "Create or shape something by cutting"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "Which of the following is an example of carving out?",
+        "options": [
+          "Baking a cake",
+          "Sculpting a statue",
+          "Reading a book"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "If you carve out time for yourself, you are...",
+        "options": [
+          "Ignoring your needs",
+          "Avoiding responsibilities",
+          "Making time for yourself"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "Carving out a niche means...",
+        "options": [
+          "Creating a mess",
+          "Destroying something",
+          "Finding a special role or place for yourself"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "To carve out can also mean to...",
+        "options": [
+          "Cover something up",
+          "Create a path or space",
+          "Make something disappear"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "To carve out means to...",
+        "options": [
+          "Draw a picture",
+          "Hide something away",
+          "Create or shape something by cutting"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "Which of the following is an example of carving out?",
+        "options": [
+          "Baking a cake",
+          "Sculpting a statue",
+          "Reading a book"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "If you carve out time for yourself, you are...",
+        "options": [
+          "Ignoring your needs",
+          "Avoiding responsibilities",
+          "Making time for yourself"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "Carving out a niche means...",
+        "options": [
+          "Creating a mess",
+          "Destroying something",
+          "Finding a special role or place for yourself"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "To carve out can also mean to...",
+        "options": [
+          "Cover something up",
+          "Create a path or space",
+          "Make something disappear"
+        ],
+        "correct_option": 1
+      }
+    ]
+  },
+  {
+    "word": {
+      "main": "spring out",
+      "meaning": "to suddenly move or appear from somewhere",
+      "synonyms": [
+        "emerge",
+        "burst",
+        "jump",
+        "leap"
+      ],
+      "type": "phrasal_verb",
+      "frequency": "uncommon",
+      "level": 2,
+      "context": "movement"
+    },
+    "examples": [
+      {
+        "text": "A wild cat will spring out suddenly.",
+        "text_form": "spring out"
+      },
+      {
+        "text": "Bright flowers spring out every single spring.",
+        "text_form": "spring out"
+      },
+      {
+        "text": "Secrets can spring out when you talk.",
+        "text_form": "spring out"
+      },
+      {
+        "text": "The hidden trap might spring out now.",
+        "text_form": "spring out"
+      },
+      {
+        "text": "Fresh water will spring out from rocks.",
+        "text_form": "spring out"
+      },
+      {
+        "text": "Rabbits spring out from the tall grass.",
+        "text_form": "spring out"
+      },
+      {
+        "text": "New ideas spring out during our meetings.",
+        "text_form": "spring out"
+      },
+      {
+        "text": "Toys spring out of the surprise box.",
+        "text_form": "spring out"
+      },
+      {
+        "text": "He saw a frog spring out quickly.",
+        "text_form": "spring out"
+      },
+      {
+        "text": "We watched the dog spring out outside.",
+        "text_form": "spring out"
+      }
+    ],
+    "best_options": [
+      {
+        "question": "To spring out means to...",
+        "options": [
+          "Hide away",
+          "Move suddenly and quickly",
+          "Sit down slowly"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "If someone springs out from behind a door, they are likely...",
+        "options": [
+          "Falling down",
+          "Sitting quietly",
+          "Surprising someone"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "A cat might spring out from...",
+        "options": [
+          "Under the bed",
+          "A sunny window",
+          "A cozy blanket"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "If you spring out of bed, you are...",
+        "options": [
+          "Sleeping soundly",
+          "Getting up quickly",
+          "Staying in bed"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Springing out can also mean to...",
+        "options": [
+          "Walk slowly",
+          "Move stealthily",
+          "Jump or leap suddenly"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "To spring out means to...",
+        "options": [
+          "Hide away",
+          "Move suddenly and quickly",
+          "Sit down slowly"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "If someone springs out from behind a door, they are likely...",
+        "options": [
+          "Falling down",
+          "Sitting quietly",
+          "Surprising someone"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "A cat might spring out from...",
+        "options": [
+          "Under the bed",
+          "A sunny window",
+          "A cozy blanket"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "If you spring out of bed, you are...",
+        "options": [
+          "Sleeping soundly",
+          "Getting up quickly",
+          "Staying in bed"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Springing out can also mean to...",
+        "options": [
+          "Walk slowly",
+          "Move stealthily",
+          "Jump or leap suddenly"
+        ],
+        "correct_option": 2
+      }
+    ]
+  },
+  {
+    "word": {
+      "main": "loom",
+      "meaning": "to appear large and threatening nearby suddenly",
+      "synonyms": [
+        "tower",
+        "emerge",
+        "threaten",
+        "overhang"
+      ],
+      "type": "verb",
+      "frequency": "uncommon",
+      "level": 3,
+      "context": "appearance"
+    },
+    "examples": [
+      {
+        "text": "Dark clouds loom over the blue sky.",
+        "text_form": "loom"
+      },
+      {
+        "text": "Tall mountains loom in the cold distance.",
+        "text_form": "loom"
+      },
+      {
+        "text": "Hard exams loom ahead for all students.",
+        "text_form": "loom"
+      },
+      {
+        "text": "Giant shadows loom against the old wall.",
+        "text_form": "loom"
+      },
+      {
+        "text": "Big troubles loom if we act late.",
+        "text_form": "loom"
+      },
+      {
+        "text": "Monster figures loom through the thick fog.",
+        "text_form": "loom"
+      },
+      {
+        "text": "High cliffs loom above the stormy ocean.",
+        "text_form": "loom"
+      },
+      {
+        "text": "New dangers loom near the dark forest.",
+        "text_form": "loom"
+      },
+      {
+        "text": "Tough choices loom before the young team.",
+        "text_form": "loom"
+      },
+      {
+        "text": "Strange shapes loom inside the quiet room.",
+        "text_form": "loom"
+      }
+    ],
+    "best_options": [
+      {
+        "question": "To loom means to...",
+        "options": [
+          "Dance joyfully",
+          "Appear large and threatening",
+          "Disappear suddenly"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "What might loom over a city?",
+        "options": [
+          "A tall mountain",
+          "A friendly cloud",
+          "A giant monster"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "If a deadline looms, it means...",
+        "options": [
+          "It is approaching quickly",
+          "It is far away",
+          "It has been canceled"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "Which situation could describe something looming?",
+        "options": [
+          "An approaching storm",
+          "A calm evening",
+          "A sunny day at the beach"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "To loom can also mean to...",
+        "options": [
+          "Come into view in a threatening way",
+          "Become less visible",
+          "Be cheerful"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "To loom means to...",
+        "options": [
+          "Dance joyfully",
+          "Appear large and threatening",
+          "Disappear suddenly"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "What might loom over a city?",
+        "options": [
+          "A tall mountain",
+          "A friendly cloud",
+          "A giant monster"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "If a deadline looms, it means...",
+        "options": [
+          "It is approaching quickly",
+          "It is far away",
+          "It has been canceled"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "Which situation could describe something looming?",
+        "options": [
+          "An approaching storm",
+          "A calm evening",
+          "A sunny day at the beach"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "To loom can also mean to...",
+        "options": [
+          "Come into view in a threatening way",
+          "Become less visible",
+          "Be cheerful"
+        ],
+        "correct_option": 0
+      }
+    ]
+  },
+  {
+    "word": {
+      "main": "ominous",
+      "meaning": "suggesting that something bad may happen soon",
+      "synonyms": [
+        "threatening",
+        "menacing",
+        "foreboding",
+        "sinister"
+      ],
+      "type": "adjective",
+      "frequency": "uncommon",
+      "level": 3,
+      "context": "atmosphere"
+    },
+    "examples": [
+      {
+        "text": "The sky turned an ominous dark color.",
+        "text_form": "ominous"
+      },
+      {
+        "text": "We heard an ominous noise last night.",
+        "text_form": "ominous"
+      },
+      {
+        "text": "An ominous sign appeared on the road.",
+        "text_form": "ominous"
+      },
+      {
+        "text": "His cold voice sounded very ominous today.",
+        "text_form": "ominous"
+      },
+      {
+        "text": "The dark clouds look ominous right now.",
+        "text_form": "ominous"
+      },
+      {
+        "text": "She felt an ominous presence behind her.",
+        "text_form": "ominous"
+      },
+      {
+        "text": "That silence in the house was ominous.",
+        "text_form": "ominous"
+      },
+      {
+        "text": "An ominous warning came from the chief.",
+        "text_form": "ominous"
+      },
+      {
+        "text": "The ruined castle had an ominous vibe.",
+        "text_form": "ominous"
+      },
+      {
+        "text": "Heavy rain brought an ominous dark storm.",
+        "text_form": "ominous"
+      }
+    ],
+    "best_options": [
+      {
+        "question": "Ominous refers to something that is...",
+        "options": [
+          "Innocent",
+          "Threatening or foreboding",
+          "Cheerful"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "An ominous sign might suggest...",
+        "options": [
+          "Good luck",
+          "A positive outcome",
+          "Something bad may happen"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "Which of these could be described as ominous?",
+        "options": [
+          "A sunny day",
+          "Dark storm clouds",
+          "A bright rainbow"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Feeling ominous about the future means you are...",
+        "options": [
+          "Worried",
+          "Hopeful",
+          "Excited"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "An ominous atmosphere can create a sense of...",
+        "options": [
+          "Calm",
+          "Joy",
+          "Dread"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "Ominous refers to something that is...",
+        "options": [
+          "Innocent",
+          "Threatening or foreboding",
+          "Cheerful"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "An ominous sign might suggest...",
+        "options": [
+          "Good luck",
+          "A positive outcome",
+          "Something bad may happen"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "Which of these could be described as ominous?",
+        "options": [
+          "A sunny day",
+          "Dark storm clouds",
+          "A bright rainbow"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Feeling ominous about the future means you are...",
+        "options": [
+          "Worried",
+          "Hopeful",
+          "Excited"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "An ominous atmosphere can create a sense of...",
+        "options": [
+          "Calm",
+          "Joy",
+          "Dread"
+        ],
+        "correct_option": 2
+      }
+    ]
+  },
+  {
+    "word": {
+      "main": "peril",
+      "meaning": "serious danger or risk of harm",
+      "synonyms": [
+        "danger",
+        "hazard",
+        "risk",
+        "jeopardy"
+      ],
+      "type": "noun",
+      "frequency": "rare",
+      "level": 3,
+      "context": "danger"
+    },
+    "examples": [
+      {
+        "text": "They faced great peril in the jungle.",
+        "text_form": "peril"
+      },
+      {
+        "text": "The brave hero escaped from extreme peril.",
+        "text_form": "peril"
+      },
+      {
+        "text": "Driving fast puts your life in peril.",
+        "text_form": "peril"
+      },
+      {
+        "text": "Wild animals face serious peril every day.",
+        "text_form": "peril"
+      },
+      {
+        "text": "The old bridge is a great peril.",
+        "text_form": "peril"
+      },
+      {
+        "text": "We must save the ship from peril.",
+        "text_form": "peril"
+      },
+      {
+        "text": "The lost Hiker was in deep peril.",
+        "text_form": "peril"
+      },
+      {
+        "text": "Ignoring the rules leads to real peril.",
+        "text_form": "peril"
+      },
+      {
+        "text": "High winds create peril for small boats.",
+        "text_form": "peril"
+      },
+      {
+        "text": "They walked into peril without knowing it.",
+        "text_form": "peril"
+      }
+    ],
+    "best_options": [
+      {
+        "question": "Peril means...",
+        "options": [
+          "A state of danger",
+          "A feeling of joy",
+          "A type of food"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "In a situation of peril, one is likely to feel...",
+        "options": [
+          "Safe",
+          "Fearful",
+          "Excited"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Which of the following could represent peril?",
+        "options": [
+          "A raging storm",
+          "A picnic",
+          "A calm lake"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "Peril is often associated with...",
+        "options": [
+          "Adventure",
+          "Safety",
+          "Risk"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "What should you do in a situation of peril?",
+        "options": [
+          "Ignore it",
+          "Take caution",
+          "Celebrate"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Peril means...",
+        "options": [
+          "A state of danger",
+          "A feeling of joy",
+          "A type of food"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "In a situation of peril, one is likely to feel...",
+        "options": [
+          "Safe",
+          "Fearful",
+          "Excited"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Which of the following could represent peril?",
+        "options": [
+          "A raging storm",
+          "A picnic",
+          "A calm lake"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "Peril is often associated with...",
+        "options": [
+          "Adventure",
+          "Safety",
+          "Risk"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "What should you do in a situation of peril?",
+        "options": [
+          "Ignore it",
+          "Take caution",
+          "Celebrate"
+        ],
+        "correct_option": 1
+      }
+    ]
+  },
+  {
+    "word": {
+      "main": "eerie",
+      "meaning": "strange and frightening in a mysterious way",
+      "synonyms": [
+        "creepy",
+        "spooky",
+        "unheimlich",
+        "uncanny"
+      ],
+      "type": "adjective",
+      "frequency": "uncommon",
+      "level": 2,
+      "context": "atmosphere"
+    },
+    "examples": [
+      {
+        "text": "An eerie light shined through the window.",
+        "text_form": "eerie"
+      },
+      {
+        "text": "The empty street felt completely eerie tonight.",
+        "text_form": "eerie"
+      },
+      {
+        "text": "We heard an eerie sound outdoors late.",
+        "text_form": "eerie"
+      },
+      {
+        "text": "A quiet lake can look very eerie.",
+        "text_form": "eerie"
+      },
+      {
+        "text": "She sang an eerie song about ghosts.",
+        "text_form": "eerie"
+      },
+      {
+        "text": "That old house gives an eerie feeling.",
+        "text_form": "eerie"
+      },
+      {
+        "text": "An eerie silence filled the entire cave.",
+        "text_form": "eerie"
+      },
+      {
+        "text": "The foggy forest looked eerie at night.",
+        "text_form": "eerie"
+      },
+      {
+        "text": "He gave an eerie smile to everyone.",
+        "text_form": "eerie"
+      },
+      {
+        "text": "Green glowing eyes look very eerie here.",
+        "text_form": "eerie"
+      }
+    ],
+    "best_options": [
+      {
+        "question": "Eerie is used to describe something that is...",
+        "options": [
+          "Delightful",
+          "Comforting",
+          "Strange and frightening"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "Which scenario might feel eerie?",
+        "options": [
+          "A warm sunny day",
+          "A dark and empty house",
+          "A crowded festival"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "An eerie silence might suggest...",
+        "options": [
+          "Everyone is happy",
+          "Something unusual is occurring",
+          "A party is happening"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Which of these could be described as eerie?",
+        "options": [
+          "A foggy graveyard",
+          "A busy street",
+          "A sunny garden"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "Eerie feelings can often be related to...",
+        "options": [
+          "Joyful events",
+          "Mysterious situations",
+          "Holiday celebrations"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Eerie is used to describe something that is...",
+        "options": [
+          "Delightful",
+          "Comforting",
+          "Strange and frightening"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "Which scenario might feel eerie?",
+        "options": [
+          "A warm sunny day",
+          "A dark and empty house",
+          "A crowded festival"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "An eerie silence might suggest...",
+        "options": [
+          "Everyone is happy",
+          "Something unusual is occurring",
+          "A party is happening"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Which of these could be described as eerie?",
+        "options": [
+          "A foggy graveyard",
+          "A busy street",
+          "A sunny garden"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "Eerie feelings can often be related to...",
+        "options": [
+          "Joyful events",
+          "Mysterious situations",
+          "Holiday celebrations"
+        ],
+        "correct_option": 1
+      }
+    ]
+  },
+  {
+    "word": {
+      "main": "ghost",
+      "meaning": "the spirit of a dead person that appears to the living",
+      "synonyms": [
+        "phantom",
+        "spirit",
+        "specter",
+        "wraith"
+      ],
+      "type": "noun",
+      "frequency": "common",
+      "level": 1,
+      "context": "horror"
+    },
+    "examples": [
+      {
+        "text": "A scary ghost lived in that castle.",
+        "text_form": "ghost"
+      },
+      {
+        "text": "I saw a pale ghost last night.",
+        "text_form": "ghost"
+      },
+      {
+        "text": "She told a famous ghost story tonight.",
+        "text_form": "ghost"
+      },
+      {
+        "text": "The friendly ghost helped the young kids.",
+        "text_form": "ghost"
+      },
+      {
+        "text": "Nobody believes in a real ghost nowadays.",
+        "text_form": "ghost"
+      },
+      {
+        "text": "The phantom looked like a white ghost.",
+        "text_form": "ghost"
+      },
+      {
+        "text": "A small ghost appeared in the mirror.",
+        "text_form": "ghost"
+      },
+      {
+        "text": "He was as quiet as a ghost.",
+        "text_form": "ghost"
+      },
+      {
+        "text": "That camera caught a mysterious ghost image.",
+        "text_form": "ghost"
+      },
+      {
+        "text": "The old legend features a crying ghost.",
+        "text_form": "ghost"
+      }
+    ],
+    "best_options": [
+      {
+        "question": "What is commonly believed about ghosts?",
+        "options": [
+          "They are imaginary",
+          "They are pets",
+          "They are spirits of the deceased"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "If you see a ghost, you might feel...",
+        "options": [
+          "Excited",
+          "Fearful",
+          "Happy"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "In stories, ghosts often appear in...",
+        "options": [
+          "Romantic comedies",
+          "Nature documentaries",
+          "Horror films"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "What might you associate with a ghost?",
+        "options": [
+          "A sunny day",
+          "A picnic",
+          "A haunted house"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "Ghosts are often depicted as...",
+        "options": [
+          "Friendly creatures",
+          "Mysterious and spooky entities",
+          "Everyday people"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "What is commonly believed about ghosts?",
+        "options": [
+          "They are imaginary",
+          "They are pets",
+          "They are spirits of the deceased"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "If you see a ghost, you might feel...",
+        "options": [
+          "Excited",
+          "Fearful",
+          "Happy"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "In stories, ghosts often appear in...",
+        "options": [
+          "Romantic comedies",
+          "Nature documentaries",
+          "Horror films"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "What might you associate with a ghost?",
+        "options": [
+          "A sunny day",
+          "A picnic",
+          "A haunted house"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "Ghosts are often depicted as...",
+        "options": [
+          "Friendly creatures",
+          "Mysterious and spooky entities",
+          "Everyday people"
+        ],
+        "correct_option": 1
+      }
+    ]
+  },
+  {
+    "word": {
+      "main": "ambush",
+      "meaning": "a surprise attack from a hidden position",
+      "synonyms": [
+        "trap",
+        "surprise attack",
+        "waylay"
+      ],
+      "type": "noun",
+      "frequency": "uncommon",
+      "level": 3,
+      "context": "combat"
+    },
+    "examples": [
+      {
+        "text": "The soldiers planned a sudden ambush today.",
+        "text_form": "ambush"
+      },
+      {
+        "text": "Enemies set a dangerous ambush in darkness.",
+        "text_form": "ambush"
+      },
+      {
+        "text": "The tiger waited to ambush its prey.",
+        "text_form": "ambush"
+      },
+      {
+        "text": "They walked straight into a hidden ambush.",
+        "text_form": "ambush"
+      },
+      {
+        "text": "Our squad survived the terrible enemy ambush.",
+        "text_form": "ambush"
+      },
+      {
+        "text": "The police foiled a planned street ambush.",
+        "text_form": "ambush"
+      },
+      {
+        "text": "Shadows hid the squad for an ambush.",
+        "text_form": "ambush"
+      },
+      {
+        "text": "A surprise ambush caught them off guard.",
+        "text_form": "ambush"
+      },
+      {
+        "text": "Wolves set an ambush near the river.",
+        "text_form": "ambush"
+      },
+      {
+        "text": "Never march blindly into a fatal ambush.",
+        "text_form": "ambush"
+      }
+    ],
+    "best_options": [
+      {
+        "question": "An ambush typically involves...",
+        "options": [
+          "A friendly meeting",
+          "A surprise attack",
+          "A formal announcement"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Which scenario best describes an ambush?",
+        "options": [
+          "Going for a walk",
+          "Having a picnic in the park",
+          "Waiting quietly before attacking"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "If soldiers are planning an ambush, they are likely...",
+        "options": [
+          "Setting up a surprise attack",
+          "Building a house",
+          "Playing a game"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "Ambush tactics are commonly used in...",
+        "options": [
+          "Military operations",
+          "Sports competitions",
+          "Cooking"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "What is a common goal of an ambush?",
+        "options": [
+          "To gather information",
+          "To celebrate",
+          "To catch the enemy off guard"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "An ambush typically involves...",
+        "options": [
+          "A friendly meeting",
+          "A surprise attack",
+          "A formal announcement"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Which scenario best describes an ambush?",
+        "options": [
+          "Going for a walk",
+          "Having a picnic in the park",
+          "Waiting quietly before attacking"
+        ],
+        "correct_option": 2
+      },
+      {
+        "question": "If soldiers are planning an ambush, they are likely...",
+        "options": [
+          "Setting up a surprise attack",
+          "Building a house",
+          "Playing a game"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "Ambush tactics are commonly used in...",
+        "options": [
+          "Military operations",
+          "Sports competitions",
+          "Cooking"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "What is a common goal of an ambush?",
+        "options": [
+          "To gather information",
+          "To celebrate",
+          "To catch the enemy off guard"
+        ],
+        "correct_option": 2
+      }
+    ]
+  },
+  {
+    "word": {
+      "main": "relentless",
+      "meaning": "continuing without stopping or showing mercy",
+      "synonyms": [
+        "unforgiving",
+        "persistent",
+        "unyielding",
+        "ruthless"
+      ],
+      "type": "adjective",
+      "frequency": "common",
+      "level": 3,
+      "context": "behavior"
+    },
+    "examples": [
+      {
+        "text": "The relentless rain flooded the entire town.",
+        "text_form": "relentless"
+      },
+      {
+        "text": "She is relentless in reaching her goals.",
+        "text_form": "relentless"
+      },
+      {
+        "text": "The army faced a relentless enemy attack.",
+        "text_form": "relentless"
+      },
+      {
+        "text": "He works with relentless focus every day.",
+        "text_form": "relentless"
+      },
+      {
+        "text": "The summer heat was totally relentless today.",
+        "text_form": "relentless"
+      },
+      {
+        "text": "Relentless waves crashed against the high cliffs.",
+        "text_form": "Relentless"
+      },
+      {
+        "text": "Their relentless effort finally brought great success.",
+        "text_form": "relentless"
+      },
+      {
+        "text": "A relentless wind blew all night long.",
+        "text_form": "relentless"
+      },
+      {
+        "text": "The detective maintained a relentless search here.",
+        "text_form": "relentless"
+      },
+      {
+        "text": "She showed relentless courage during hard times.",
+        "text_form": "relentless"
+      }
+    ],
+    "best_options": [
+      {
+        "question": "What does it mean if someone is relentless?",
+        "options": [
+          "They are persistent and unyielding",
+          "They give up easily",
+          "They are cheerful and happy"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "A relentless pursuit is characterized by...",
+        "options": [
+          "A lack of interest",
+          "Frequent breaks",
+          "Constant effort and determination"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Relentless can best describe a...",
+        "options": [
+          "Gentle breeze",
+          "Harsh winter storm",
+          "Calm sea"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Which of the following could be described as relentless?",
+        "options": [
+          "A quiet night",
+          "A nagging headache",
+          "A soft whisper"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "If someone is relentless in their efforts, they are...",
+        "options": [
+          "Unwavering in their determination",
+          "Easily discouraged",
+          "Quick to change their mind"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "What does it mean if someone is relentless?",
+        "options": [
+          "They are persistent and unyielding",
+          "They give up easily",
+          "They are cheerful and happy"
+        ],
+        "correct_option": 0
+      },
+      {
+        "question": "A relentless pursuit is characterized by...",
+        "options": [
+          "A lack of interest",
+          "Frequent breaks",
+          "Constant effort and determination"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Relentless can best describe a...",
+        "options": [
+          "Gentle breeze",
+          "Harsh winter storm",
+          "Calm sea"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "Which of the following could be described as relentless?",
+        "options": [
+          "A quiet night",
+          "A nagging headache",
+          "A soft whisper"
+        ],
+        "correct_option": 1
+      },
+      {
+        "question": "If someone is relentless in their efforts, they are...",
+        "options": [
+          "Unwavering in their determination",
+          "Easily discouraged",
+          "Quick to change their mind"
+        ],
+        "correct_option": 0
+      }
+    ]
+  }
+]

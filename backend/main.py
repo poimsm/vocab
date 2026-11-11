@@ -46,7 +46,7 @@ from features.quick_write.routes import router as quick_write_router
 from features.collocations.routes import router as collocation_router
 from features.vocab_imgs.routes import router as vocab_imgs_router
 from auth import routes as auth
-from test import routes as test
+from lab import routes as lab
 from activity import activity_routes as activity
 
 app = FastAPI(redirect_slashes=False)
@@ -72,7 +72,7 @@ app.include_router(quick_write_router, prefix="/quick-write", tags=["quick_write
 app.include_router(collocation_router, prefix="/collocations", tags=["collocations"])
 app.include_router(vocab_imgs_router, prefix="/vocab-imgs", tags=["vocab_imgs"])
 app.include_router(activity.router)
-app.include_router(test.router, prefix="/test", tags=["test"])
+app.include_router(lab.router, prefix="/lab", tags=["lab"])
 
 @app.on_event("startup")
 def startup():

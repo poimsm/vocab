@@ -35,7 +35,6 @@ class LearningPathService:
         self.queue_mgr = ContentQueue(db, content_repo)
         self.content_repo = content_repo
         self.priority_engine = PriorityEngine()
-        self._last_selected_word_by_user = {}  # Track last word selected per user for rotation
 
     def prepare_content_or_generate(
         self,
@@ -196,17 +195,21 @@ class LearningPathService:
         content_type: ContentType = None,
     ) -> Optional[LearningPathQueue]:
         """
-        Obtiene 1 item priorizado del learning path.
+        Obtiene 1 item priorizado del learning path con distribución diversa.
 
         Estrategia de distribución:
-        1. Carga 8 items (1 por palabra, de las 8 primeras no-LEARNED)
+        1. Carga 16 items (1 por palabra, de las 16 primeras no-LEARNED)
         2. Calcula prioridades usando PriorityEngine
-        3. Ordena por prioridad
-        4. Devuelve el primer item, rotando entre palabras para evitar monopolio
+        3. Aplica band-pass filtering: penaliza últimas N palabras mostradas
+        4. Selecciona aleatoriamente con peso por prioridad (weighted random)
+        5. Actualiza RecentWordHistory con la palabra seleccionada
 
         Returns:
             Un LearningPathQueue item, o None si no hay contenido
         """
+        import random
+        from core.learning_path.models import LearningPathCursor, RecentWordHistory, BandPassConfig
+
         if content_type is None:
             content_type = ContentType.EXAMPLE
 
@@ -225,9 +228,9 @@ class LearningPathService:
             logger.debug(f"[get_prioritized_content] No available words for user {user_id}")
             return None
 
-        # 2. Cargar 1 item de cada palabra (balanceado)
+        # 2. Cargar 1 item de cada palabra (16 palabras para mayor diversidad)
         items_by_word = {}
-        for word_id in available_words[:8]:  # Máximo 8 palabras
+        for word_id in available_words[:16]:  # Aumentado de 8 a 16 palabras
             item = self.db.exec(
                 select(LearningPathQueue).where(
                     LearningPathQueue.user_id == user_id,
@@ -273,33 +276,119 @@ class LearningPathService:
             )
             word_priorities[word.id] = priority
 
-        # 4. Ordenar por prioridad (highest first)
-        sorted_by_priority = sorted(
-            items_by_word.items(),
-            key=lambda x: word_priorities.get(x[0], 0.0),
-            reverse=True,
-        )
+        # 4. Aplicar band-pass filtering: penalizar últimas N palabras mostradas
+        band_pass_config = self.db.exec(
+            select(BandPassConfig).where(
+                (BandPassConfig.user_id == user_id) &
+                (BandPassConfig.type == content_type)
+            )
+        ).first()
 
-        # 5. Rotar entre palabras para evitar monopolio
-        last_word = self._last_selected_word_by_user.get(user_id)
-        words_in_priority_order = [wid for wid, _ in sorted_by_priority]
+        # Usar config del usuario o defaults
+        window_size = band_pass_config.window_size if band_pass_config else 3
+        inflation_factor = band_pass_config.inflation_factor if band_pass_config else 0.2
 
-        # Si la última palabra está en la lista, rotar a partir de ella
-        if last_word and last_word in words_in_priority_order:
-            idx = words_in_priority_order.index(last_word)
-            words_in_priority_order = words_in_priority_order[idx+1:] + words_in_priority_order[:idx+1]
+        # Obtener las últimas N palabras en el histórico de band-pass
+        recent_word_records = self.db.exec(
+            select(RecentWordHistory).where(
+                (RecentWordHistory.user_id == user_id) &
+                (RecentWordHistory.type == content_type)
+            )
+            .order_by(RecentWordHistory.created_at.desc())
+            .limit(window_size)
+        ).all()
 
-        # 6. Devolver el primer item de la lista rotada
-        selected_word_id = words_in_priority_order[0]
+        # Recopilar word_ids del histórico
+        recent_word_ids = set(record.word_id for record in recent_word_records)
+
+        # Aplicar penalidad de banda: reducir prioridad de palabras recientes
+        # Penalty es más fuerte si hay pocas palabras disponibles (graceful degradation)
+        total_available = len(items_by_word)
+        for word_id in recent_word_ids:
+            if word_id in word_priorities:
+                original = word_priorities[word_id]
+                # Factor dinámico: más penalidad cuando hay pocas palabras
+                # Si quedan 3 palabras y todas están en histórico, aún así pueden ser seleccionadas
+                dynamic_penalty = inflation_factor * (1.0 + max(0, (float(window_size) - total_available) / float(window_size)))
+                word_priorities[word_id] = max(0.01, original * (1.0 - dynamic_penalty))
+                logger.debug(
+                    f"[get_prioritized_content] Band-pass penalty applied to word {word_id}: "
+                    f"{original:.3f} -> {word_priorities[word_id]:.3f} (factor={dynamic_penalty:.2f})"
+                )
+
+        # 5. Obtener último word_id seleccionado para rotación básica
+        cursor = self.db.exec(
+            select(LearningPathCursor).where(
+                (LearningPathCursor.user_id == user_id) &
+                (LearningPathCursor.type == content_type)
+            )
+        ).first()
+
+        last_word = cursor.last_selected_word_id if cursor else None
+
+        # 6. Selección ponderada aleatoria (weighted random selection)
+        # Excluir la última palabra seleccionada para evitar repetición inmediata
+        available_word_ids = [
+            wid for wid in items_by_word.keys()
+            if wid != last_word
+        ]
+
+        if not available_word_ids:
+            # Si solo hay una palabra o la última es la única, usar todas
+            available_word_ids = list(items_by_word.keys())
+
+        # Calcular pesos: mayor prioridad = mayor probabilidad de selección
+        weights = [max(0.01, word_priorities.get(wid, 0.0)) for wid in available_word_ids]
+
+        # Seleccionar aleatoriamente ponderado
+        selected_word_id = random.choices(available_word_ids, weights=weights, k=1)[0]
         selected_item = items_by_word[selected_word_id]
 
-        # Guardar para próxima rotación
-        self._last_selected_word_by_user[user_id] = selected_word_id
+        # 7. Actualizar RecentWordHistory: agregar nuevo registro y mantener window_size registros
+        # Insertar nuevo registro con la palabra seleccionada
+        new_history_record = RecentWordHistory(
+            user_id=user_id,
+            type=content_type,
+            word_id=selected_word_id,
+        )
+        self.db.add(new_history_record)
+        self.db.flush()
+
+        # Obtener todos los registros del usuario/tipo ordenados por fecha (más antiguos primero)
+        all_history_records = self.db.exec(
+            select(RecentWordHistory).where(
+                (RecentWordHistory.user_id == user_id) &
+                (RecentWordHistory.type == content_type)
+            )
+            .order_by(RecentWordHistory.created_at.asc())
+        ).all()
+
+        # Eliminar registros antiguos si superamos window_size
+        if len(all_history_records) > window_size:
+            records_to_delete = all_history_records[: len(all_history_records) - window_size]
+            for record in records_to_delete:
+                self.db.delete(record)
+
+        # 8. Guardar cursor para próxima rotación en la BD
+        if cursor:
+            cursor.last_selected_word_id = selected_word_id
+            self.db.add(cursor)
+        else:
+            new_cursor = LearningPathCursor(
+                user_id=user_id,
+                type=content_type,
+                current_segment=1,
+                current_position=0,
+                last_selected_word_id=selected_word_id,
+            )
+            self.db.add(new_cursor)
+
+        self.db.commit()
 
         logger.debug(
             f"[get_prioritized_content] Selected item (id={selected_item.id}, "
             f"word_id={selected_word_id}, priority={word_priorities.get(selected_word_id, 0.0):.2f}) "
-            f"for user {user_id}"
+            f"from {len(available_word_ids)} available words for user {user_id}"
         )
 
         return selected_item

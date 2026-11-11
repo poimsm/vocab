@@ -1,8 +1,8 @@
 """initial
 
-Revision ID: e9b979867c02
+Revision ID: a5b023fa063c
 Revises: 
-Create Date: 2026-10-08 03:38:47.566637
+Create Date: 2026-11-11 17:05:52.596412
 
 """
 from typing import Sequence, Union
@@ -13,7 +13,7 @@ import sqlmodel
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'e9b979867c02'
+revision: str = 'a5b023fa063c'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -104,6 +104,34 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
+    op.create_table('vocab_images',
+    sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('name', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False),
+    sa.Column('description', sqlmodel.sql.sqltypes.AutoString(length=500), nullable=True),
+    sa.Column('cover_image', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
+    sa.Column('main_image', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
+    sa.Column('updated_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_vocab_images_is_active'), 'vocab_images', ['is_active'], unique=False)
+    op.create_index(op.f('ix_vocab_images_name'), 'vocab_images', ['name'], unique=False)
+    op.create_table('band_pass_config',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('type', sa.Enum('EXAMPLE', 'BEST_OPTIONS', name='contenttype'), nullable=False),
+    sa.Column('window_size', sa.Integer(), nullable=False),
+    sa.Column('inflation_factor', sa.Float(), nullable=False),
+    sa.Column('updated_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
+    sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_band_pass_config_created_at'), 'band_pass_config', ['created_at'], unique=False)
+    op.create_index(op.f('ix_band_pass_config_type'), 'band_pass_config', ['type'], unique=False)
+    op.create_index(op.f('ix_band_pass_config_updated_at'), 'band_pass_config', ['updated_at'], unique=False)
+    op.create_index(op.f('ix_band_pass_config_user_id'), 'band_pass_config', ['user_id'], unique=False)
     op.create_table('explore_sessions',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
@@ -169,11 +197,13 @@ def upgrade() -> None:
     sa.Column('type', sa.Enum('EXAMPLE', 'BEST_OPTIONS', name='contenttype'), nullable=False),
     sa.Column('current_segment', sa.Integer(), nullable=False),
     sa.Column('current_position', sa.Integer(), nullable=False),
+    sa.Column('last_selected_word_id', sa.Integer(), nullable=True),
     sa.Column('updated_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
     sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_learning_path_cursor_last_selected_word_id'), 'learning_path_cursor', ['last_selected_word_id'], unique=False)
     op.create_index(op.f('ix_learning_path_cursor_type'), 'learning_path_cursor', ['type'], unique=False)
     op.create_index(op.f('ix_learning_path_cursor_user_id'), 'learning_path_cursor', ['user_id'], unique=False)
     op.create_table('learning_path_generation_history',
@@ -247,6 +277,19 @@ def upgrade() -> None:
     op.create_index(op.f('ix_quick_write_created_at'), 'quick_write', ['created_at'], unique=False)
     op.create_index(op.f('ix_quick_write_is_active'), 'quick_write', ['is_active'], unique=False)
     op.create_index(op.f('ix_quick_write_user_id'), 'quick_write', ['user_id'], unique=False)
+    op.create_table('recent_word_history',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('type', sa.Enum('EXAMPLE', 'BEST_OPTIONS', name='contenttype'), nullable=False),
+    sa.Column('word_id', sa.Integer(), nullable=False),
+    sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_recent_word_history_created_at'), 'recent_word_history', ['created_at'], unique=False)
+    op.create_index(op.f('ix_recent_word_history_type'), 'recent_word_history', ['type'], unique=False)
+    op.create_index(op.f('ix_recent_word_history_user_id'), 'recent_word_history', ['user_id'], unique=False)
+    op.create_index(op.f('ix_recent_word_history_word_id'), 'recent_word_history', ['word_id'], unique=False)
     op.create_table('resolve_locks',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
@@ -299,6 +342,21 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_user_profiles_user_id'), 'user_profiles', ['user_id'], unique=True)
+    op.create_table('vocab_image_words',
+    sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('vocab_image_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('word', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False),
+    sa.Column('definition', sqlmodel.sql.sqltypes.AutoString(length=500), nullable=True),
+    sa.Column('category', sqlmodel.sql.sqltypes.AutoString(length=50), nullable=True),
+    sa.Column('word_order', sa.Integer(), nullable=True),
+    sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['vocab_image_id'], ['vocab_images.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_vocab_image_words_category'), 'vocab_image_words', ['category'], unique=False)
+    op.create_index(op.f('ix_vocab_image_words_vocab_image_id'), 'vocab_image_words', ['vocab_image_id'], unique=False)
+    op.create_index(op.f('ix_vocab_image_words_word'), 'vocab_image_words', ['word'], unique=False)
+    op.create_index(op.f('ix_vocab_image_words_word_order'), 'vocab_image_words', ['word_order'], unique=False)
     op.create_table('words',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('main', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False),
@@ -316,7 +374,11 @@ def upgrade() -> None:
     sa.Column('is_boosted', sa.Boolean(), nullable=False),
     sa.Column('boosted_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=True),
     sa.Column('explanation', sqlmodel.sql.sqltypes.AutoString(length=500), nullable=True),
+    sa.Column('target_word', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
+    sa.Column('target_synonym', sqlmodel.sql.sqltypes.AutoString(length=200), nullable=True),
+    sa.Column('target_explanation', sqlmodel.sql.sqltypes.AutoString(length=500), nullable=True),
     sa.Column('user_id', sa.Integer(), nullable=True),
+    sa.Column('vocab_image_word_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.Column('created_at', sqlmodel.sql.sqltypes.UTCDateTime(), nullable=False),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
@@ -324,6 +386,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_words_favorited_at'), 'words', ['favorited_at'], unique=False)
     op.create_index(op.f('ix_words_main'), 'words', ['main'], unique=False)
     op.create_index(op.f('ix_words_normalized'), 'words', ['normalized'], unique=False)
+    op.create_index(op.f('ix_words_vocab_image_word_id'), 'words', ['vocab_image_word_id'], unique=False)
     op.create_table('best_options',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('word_id', sa.Integer(), nullable=False),
@@ -503,16 +566,25 @@ def upgrade() -> None:
     op.create_index(op.f('ix_word_statistics_learning_state'), 'word_statistics', ['learning_state'], unique=False)
     op.create_index(op.f('ix_word_statistics_type'), 'word_statistics', ['type'], unique=False)
     op.create_index(op.f('ix_word_statistics_word_id'), 'word_statistics', ['word_id'], unique=False)
-    op.drop_index(op.f('ix_celery_tasksetmeta_date_done'), table_name='celery_tasksetmeta', if_exists=True)
-    op.drop_table('celery_tasksetmeta', if_exists=True)
-    op.drop_index(op.f('ix_celery_taskmeta_date_done'), table_name='celery_taskmeta', if_exists=True)
-    op.drop_table('celery_taskmeta', if_exists=True)
+    op.drop_index(op.f('ix_celery_taskmeta_date_done'), table_name='celery_taskmeta')
+    op.drop_table('celery_taskmeta')
+    op.drop_index(op.f('ix_celery_tasksetmeta_date_done'), table_name='celery_tasksetmeta')
+    op.drop_table('celery_tasksetmeta')
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
+    op.create_table('celery_tasksetmeta',
+    sa.Column('id', sa.INTEGER(), autoincrement=False, nullable=False),
+    sa.Column('taskset_id', sa.VARCHAR(length=155), autoincrement=False, nullable=True),
+    sa.Column('result', postgresql.BYTEA(), autoincrement=False, nullable=True),
+    sa.Column('date_done', postgresql.TIMESTAMP(), autoincrement=False, nullable=True),
+    sa.PrimaryKeyConstraint('id', name=op.f('celery_tasksetmeta_pkey')),
+    sa.UniqueConstraint('taskset_id', name=op.f('celery_tasksetmeta_taskset_id_key'))
+    )
+    op.create_index(op.f('ix_celery_tasksetmeta_date_done'), 'celery_tasksetmeta', ['date_done'], unique=False)
     op.create_table('celery_taskmeta',
     sa.Column('id', sa.INTEGER(), autoincrement=False, nullable=False),
     sa.Column('task_id', sa.VARCHAR(length=155), autoincrement=False, nullable=True),
@@ -530,15 +602,6 @@ def downgrade() -> None:
     sa.UniqueConstraint('task_id', name=op.f('celery_taskmeta_task_id_key'))
     )
     op.create_index(op.f('ix_celery_taskmeta_date_done'), 'celery_taskmeta', ['date_done'], unique=False)
-    op.create_table('celery_tasksetmeta',
-    sa.Column('id', sa.INTEGER(), autoincrement=False, nullable=False),
-    sa.Column('taskset_id', sa.VARCHAR(length=155), autoincrement=False, nullable=True),
-    sa.Column('result', postgresql.BYTEA(), autoincrement=False, nullable=True),
-    sa.Column('date_done', postgresql.TIMESTAMP(), autoincrement=False, nullable=True),
-    sa.PrimaryKeyConstraint('id', name=op.f('celery_tasksetmeta_pkey')),
-    sa.UniqueConstraint('taskset_id', name=op.f('celery_tasksetmeta_taskset_id_key'))
-    )
-    op.create_index(op.f('ix_celery_tasksetmeta_date_done'), 'celery_tasksetmeta', ['date_done'], unique=False)
     op.drop_index(op.f('ix_word_statistics_word_id'), table_name='word_statistics')
     op.drop_index(op.f('ix_word_statistics_type'), table_name='word_statistics')
     op.drop_index(op.f('ix_word_statistics_learning_state'), table_name='word_statistics')
@@ -600,10 +663,16 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_best_options_normalized'), table_name='best_options')
     op.drop_index(op.f('ix_best_options_enqueued'), table_name='best_options')
     op.drop_table('best_options')
+    op.drop_index(op.f('ix_words_vocab_image_word_id'), table_name='words')
     op.drop_index(op.f('ix_words_normalized'), table_name='words')
     op.drop_index(op.f('ix_words_main'), table_name='words')
     op.drop_index(op.f('ix_words_favorited_at'), table_name='words')
     op.drop_table('words')
+    op.drop_index(op.f('ix_vocab_image_words_word_order'), table_name='vocab_image_words')
+    op.drop_index(op.f('ix_vocab_image_words_word'), table_name='vocab_image_words')
+    op.drop_index(op.f('ix_vocab_image_words_vocab_image_id'), table_name='vocab_image_words')
+    op.drop_index(op.f('ix_vocab_image_words_category'), table_name='vocab_image_words')
+    op.drop_table('vocab_image_words')
     op.drop_index(op.f('ix_user_profiles_user_id'), table_name='user_profiles')
     op.drop_table('user_profiles')
     op.drop_index(op.f('ix_user_configurations_user_id'), table_name='user_configurations')
@@ -616,6 +685,11 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_resolve_locks_queue_item_id'), table_name='resolve_locks')
     op.drop_index(op.f('ix_resolve_locks_locked_at'), table_name='resolve_locks')
     op.drop_table('resolve_locks')
+    op.drop_index(op.f('ix_recent_word_history_word_id'), table_name='recent_word_history')
+    op.drop_index(op.f('ix_recent_word_history_user_id'), table_name='recent_word_history')
+    op.drop_index(op.f('ix_recent_word_history_type'), table_name='recent_word_history')
+    op.drop_index(op.f('ix_recent_word_history_created_at'), table_name='recent_word_history')
+    op.drop_table('recent_word_history')
     op.drop_index(op.f('ix_quick_write_user_id'), table_name='quick_write')
     op.drop_index(op.f('ix_quick_write_is_active'), table_name='quick_write')
     op.drop_index(op.f('ix_quick_write_created_at'), table_name='quick_write')
@@ -640,6 +714,7 @@ def downgrade() -> None:
     op.drop_table('learning_path_generation_history')
     op.drop_index(op.f('ix_learning_path_cursor_user_id'), table_name='learning_path_cursor')
     op.drop_index(op.f('ix_learning_path_cursor_type'), table_name='learning_path_cursor')
+    op.drop_index(op.f('ix_learning_path_cursor_last_selected_word_id'), table_name='learning_path_cursor')
     op.drop_table('learning_path_cursor')
     op.drop_index(op.f('ix_learning_path_anomalies_user_id'), table_name='learning_path_anomalies')
     op.drop_index(op.f('ix_learning_path_anomalies_type'), table_name='learning_path_anomalies')
@@ -659,6 +734,14 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_explore_sessions_created_at'), table_name='explore_sessions')
     op.drop_index(op.f('ix_explore_sessions_content_type'), table_name='explore_sessions')
     op.drop_table('explore_sessions')
+    op.drop_index(op.f('ix_band_pass_config_user_id'), table_name='band_pass_config')
+    op.drop_index(op.f('ix_band_pass_config_updated_at'), table_name='band_pass_config')
+    op.drop_index(op.f('ix_band_pass_config_type'), table_name='band_pass_config')
+    op.drop_index(op.f('ix_band_pass_config_created_at'), table_name='band_pass_config')
+    op.drop_table('band_pass_config')
+    op.drop_index(op.f('ix_vocab_images_name'), table_name='vocab_images')
+    op.drop_index(op.f('ix_vocab_images_is_active'), table_name='vocab_images')
+    op.drop_table('vocab_images')
     op.drop_index(op.f('ix_users_email'), table_name='users')
     op.drop_table('users')
     op.drop_index(op.f('ix_round_robin_wheel_word_id'), table_name='round_robin_wheel')
