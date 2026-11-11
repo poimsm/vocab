@@ -765,4 +765,15 @@ def downgrade() -> None:
     op.drop_table('central_queue')
     op.drop_index(op.f('ix_central_lock_state_state'), table_name='central_lock_state')
     op.drop_table('central_lock_state')
+
+    # Drop ENUM types
+    op.execute('DROP TYPE IF EXISTS contenttype')
+    op.execute('DROP TYPE IF EXISTS exampletype')
+    op.execute('DROP TYPE IF EXISTS learningpathqueuestatus')
+    op.execute('DROP TYPE IF EXISTS pathanomalytype')
+    op.execute('DROP TYPE IF EXISTS deliverystatus')
+    op.execute('DROP TYPE IF EXISTS contentsourcetype')
+    op.execute('DROP TYPE IF EXISTS generationaistatus')
+    op.execute('DROP TYPE IF EXISTS learningpathgenerationmonitorstatus')
+    op.execute('DROP TYPE IF EXISTS roundrobinwheelnodestatus')
     # ### end Alembic commands ###
