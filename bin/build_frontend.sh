@@ -21,6 +21,11 @@ fi
 
 echo "🚀 Iniciando build efímero del Frontend con Node 20..."
 
+# Cargar variables del .env raíz si existen
+if [ -f "$DIR/../.env" ]; then
+    export $(cat "$DIR/../.env" | grep VITE_ | xargs)
+fi
+
 # Asignar un valor por defecto si la variable no viene del entorno o de un .env
 VITE_API_BASE_VALUE="${VITE_API_BASE}"
 if [ -z "$VITE_API_BASE_VALUE" ]; then
