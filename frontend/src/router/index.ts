@@ -1,22 +1,24 @@
 // frontend/src/router/index.ts
 import { createRouter, createWebHistory } from 'vue-router'
+import { defineAsyncComponent } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import ExamplesPage from '@/pages/ExamplesPage.vue'
-import ExampleFavoritesPage from '@/pages/ExampleFavoritesPage.vue'
-import MyWordsPage from '@/pages/MyWordsPage.vue'
-import LoginPage from '@/pages/LoginPage.vue'
-import SignupPage from '@/pages/SignupPage.vue'
-// import HomePage from '@/pages/HomePage.vue'
-import BestOptionsPage from '@/pages/BestOptionsPage.vue'
-import RandomizerPage from '@/pages/RandomizerPage.vue'
-import GameStoryPage from '@/pages/GameStoryPage.vue'
-import QuickWritePage from '@/pages/QuickWritePage.vue'
-import CollocationsPage from '@/pages/CollocationsPage.vue'
-import WordDetailPage from '@/pages/WordDetailPage.vue'
-import AtlasPage from '@/pages/AtlasPage.vue'
-import StorePage from '@/pages/StorePage.vue'
-import LandingPage from '@/pages/LandingPage.vue'
-import VocabImagePage from '@/pages/VocabImagePage.vue'
+
+// Lazy load all pages for better performance
+const ExamplesPage = defineAsyncComponent(() => import('@/pages/ExamplesPage.vue'))
+const ExampleFavoritesPage = defineAsyncComponent(() => import('@/pages/ExampleFavoritesPage.vue'))
+const MyWordsPage = defineAsyncComponent(() => import('@/pages/MyWordsPage.vue'))
+const LoginPage = defineAsyncComponent(() => import('@/pages/LoginPage.vue'))
+const SignupPage = defineAsyncComponent(() => import('@/pages/SignupPage.vue'))
+const BestOptionsPage = defineAsyncComponent(() => import('@/pages/BestOptionsPage.vue'))
+const RandomizerPage = defineAsyncComponent(() => import('@/pages/RandomizerPage.vue'))
+const GameStoryPage = defineAsyncComponent(() => import('@/pages/GameStoryPage.vue'))
+const QuickWritePage = defineAsyncComponent(() => import('@/pages/QuickWritePage.vue'))
+const CollocationsPage = defineAsyncComponent(() => import('@/pages/CollocationsPage.vue'))
+const WordDetailPage = defineAsyncComponent(() => import('@/pages/WordDetailPage.vue'))
+const AtlasPage = defineAsyncComponent(() => import('@/pages/AtlasPage.vue'))
+const StorePage = defineAsyncComponent(() => import('@/pages/StorePage.vue'))
+const LandingPage = defineAsyncComponent(() => import('@/pages/LandingPage.vue'))
+const VocabImagePage = defineAsyncComponent(() => import('@/pages/VocabImagePage.vue'))
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
