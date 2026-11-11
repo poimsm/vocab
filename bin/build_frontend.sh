@@ -29,19 +29,29 @@ fi
 NODE_ENV="${NODE_ENV:-development}"
 echo "📦 Modo: $NODE_ENV"
 
-# Cargar todas las variables VITE_* del .env
+# Cargar variables del .env (sin prefijo VITE_)
 if [ -f "$DIR/../.env" ]; then
-    export $(cat "$DIR/../.env" | grep -v '^#' | grep VITE_ | xargs)
+    export $(cat "$DIR/../.env" | grep -v '^#' | grep -E '^(SITE_URL|API_BASE)=' | xargs)
 fi
 
-# Usar la variable del .env o valor por defecto según el modo
-VITE_API_BASE_VALUE="${VITE_API_BASE}"
-if [ -z "$VITE_API_BASE_VALUE" ]; then
-    # Si NODE_ENV es development pero no hay VITE_API_BASE, usar /api
+# Usar las variables del .env o valores por defecto según el modo
+API_BASE_VALUE="${API_BASE}"
+if [ -z "$API_BASE_VALUE" ]; then
+    # Si NODE_ENV es development pero no hay API_BASE, usar /api
     if [ "$NODE_ENV" = "development" ]; then
-        VITE_API_BASE_VALUE="/api"
+        API_BASE_VALUE="/api"
     else
-        VITE_API_BASE_VALUE="http://localhost/api"
+        API_BASE_VALUE="http://localhost/api"
+    fi
+fi
+
+SITE_URL_VALUE="${SITE_URL}"
+if [ -z "$SITE_URL_VALUE" ]; then
+    # Si NODE_ENV es development pero no hay SITE_URL, usar localhost
+    if [ "$NODE_ENV" = "development" ]; then
+        SITE_URL_VALUE="http://localhost"
+    else
+        SITE_URL_VALUE="http://localhost"
     fi
 fi
 
@@ -65,7 +75,8 @@ echo "🏗️  Compilando el proyecto..."
 docker run --rm \
   -v "${ROOT_DIR}/frontend:/app" \
   -w /app \
-  -e VITE_API_BASE="$VITE_API_BASE_VALUE" \
+  -e VITE_API_BASE="$API_BASE_VALUE" \
+  -e VITE_SITE_URL="$SITE_URL_VALUE" \
   node:20-alpine \
   npm run build
 
