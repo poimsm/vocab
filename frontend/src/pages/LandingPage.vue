@@ -2,7 +2,6 @@
 import { Icon } from '@iconify/vue';
 import { useRouter } from 'vue-router';
 import { useAssetUrl } from '@/composables/useAssetUrl';
-import { landingCards } from '@/data/landing';
 
 const { buildAssetUrl } = useAssetUrl();
 const router = useRouter();
@@ -33,9 +32,6 @@ function toLogin() {
         <!-- <br>Make them stick. -->
       </h1>
 
-      <div class="divider">
-        <img :src="buildAssetUrl('media/landing/sparkles.svg')" alt="divider" class="divider-icon" />
-      </div>
 
       <p class="subtitle">
         See words from every angle. Understand them deeply.<br>
@@ -109,32 +105,6 @@ function toLogin() {
         </div>
       </div>
 
-      <div class="hook-message" style="display:none">
-        <!-- <p>Don't just know what a word means.<br>Know when to use it, how it feels, and how it fits.</p> -->
-        Gather rare words in one spot and make them stick.
-      </div>
-
-      <div class="features" style="display:none">
-        <div class="feature">
-          <div class="feature-icon">
-            <Icon icon="fluent-emoji:eyes" width="32" height="32" />
-          </div>
-          <p class="feature-text">Spot interesting words</p>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">
-            <Icon icon="fluent-emoji:floppy-disk" width="32" height="32" />
-          </div>
-          <p class="feature-text">Save them instantly</p>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">
-            <Icon icon="fluent-emoji:brain" width="32" height="32" />
-          </div>
-          <p class="feature-text">Make them yours</p>
-        </div>
-      </div>
-
       <div class="actions">
         <button class="btn btn-primary" @click="toSignUp">
           <Icon icon="fluent-emoji:sparkles" width="18" height="18" />
@@ -143,32 +113,6 @@ function toLogin() {
         <button class="btn btn-secondary" @click="toLogin">
           Already collecting? Log in
         </button>
-      </div>
-
-      <!-- Features Cards Grid -->
-      <div class="cards-grid" style="display:none">
-        <div v-for="card in landingCards" :key="card.id" class="feature-card">
-          <div class="card-top">
-            <div class="card-header">
-
-              <div style="display:flex;align-items: center;justify-content: flex-start;">
-                 <img :src="buildAssetUrl(card.icon)" :alt="card.title" class="card-icon" />
-                <h3 class="card-title">{{ card.title }}</h3>
-              </div>
-              <Icon :icon="card.badge" width="24" height="24" class="card-badge" />
-            </div>
-          </div>
-          <div class="card-image" :style="{ marginTop: card.image_margin_top }">
-            <img
-              :src="buildAssetUrl(card.image)"
-              :alt="card.title"
-              :style="{ height: card.image_height, width: card.image_width }"
-            />
-          </div>
-          <button class="card-arrow">
-            <Icon icon="mdi:arrow-right" width="24" height="24" />
-          </button>
-        </div>
       </div>
 
     </div>
@@ -251,33 +195,6 @@ function toLogin() {
   /* letter-spacing: -0.5px; */
 }
 
-.divider {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  width: 100%;
-  max-width: 300px;
-  margin: 12px 0;
-  color: #c4b5fd;
-  display: none;
-}
-
-.divider::before,
-.divider::after {
-  content: '';
-  flex: 1;
-  height: 1.5px;
-  background: rgba(196, 181, 253, 0.3);
-}
-
-.divider-icon {
-  width: 32px;
-  height: 32px;
-  object-fit: contain;
-  flex-shrink: 0;
-  opacity: 0.8;
-}
 
 .subtitle {
   margin: 0;
@@ -288,24 +205,6 @@ function toLogin() {
   color: #a5a0b8;
 }
 
-.hook-message {
-  margin: 8px 0 0 0;
-  padding: 24px 32px;
-  background: rgba(196, 181, 253, 0.08);
-  border: 1.5px solid rgba(196, 181, 253, 0.25);
-  border-radius: 14px;
-  max-width: 600px;
-}
-
-.hook-message p {
-  margin: 0;
-  font-family: 'Fredoka', sans-serif;
-  font-weight: 600;
-  font-size: clamp(17px, 2.5vw, 21px);
-  line-height: 1.6;
-  color: #e8e4f0;
-  letter-spacing: -0.2px;
-}
 
 .explanation-section {
   display: flex;
@@ -373,40 +272,6 @@ function toLogin() {
   color: #a5a0b8;
 }
 
-.features {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-  width: 100%;
-  margin: 8px 0;
-}
-
-.feature {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
-
-.feature-icon {
-  width: 56px;
-  height: 56px;
-  background: rgba(124, 58, 237, 0.08);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(196, 181, 253, 0.2);
-}
-
-.feature-text {
-  margin: 0;
-  font-family: 'Nunito', sans-serif;
-  font-weight: 500;
-  font-size: 13px;
-  color: #a5a0b8;
-  line-height: 1.4;
-}
 
 .actions {
   display: flex;
@@ -416,115 +281,6 @@ function toLogin() {
   margin: 16px auto 0;
 }
 
-.cards-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  width: 100%;
-  margin-top: 50px;
-}
-
-.feature-card {
-  padding: 28px 24px;
-  background: #302b43;
-  border: 1.5px solid #443d5f;
-  border-radius: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  transition: all 0.3s ease;
-  cursor: pointer;
-  position: relative;
-  width: 250px;
-  /* min-height: 380px; */
-}
-
-.feature-card:hover {
-  background: #32265485;
-  border-color: #6a5f8f78;
-  transform: translateY(-6px);
-}
-
-.card-top {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.card-icon {
-  width: 55px;
-  height: 55px;
-  object-fit: contain;
-  flex-shrink: 0;
-}
-
-.card-title {
-  margin: 0;
-  font-family: 'Fredoka', sans-serif;
-  font-weight: 700;
-  font-size: 18.5px;
-  color: #e8e4f0;
-  text-align: left;
-  line-height: 1.3;
-}
-
-.card-badge {
-  /* color: #fbbf24d4; */
-  color: transparent;
-  flex-shrink: 0;
-}
-
-.card-image {
-  /* width: 180px; */
-  /* height: 180px; */
-  border-radius: 14px;
-  overflow: hidden;
-  /* background: #1f1535; */
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.98;
-  /* padding: 12px; */
-}
-
-.card-image img {
-  /* width: 100%; */
-  height: 60px;
-  /* width: 180px; */
-  object-fit: contain;
-}
-
-.card-arrow {
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  width: 48px;
-  height: 48px;
-  background: #493c74;
-  border: 1px solid #5a4d7f6b;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  color: #c4b5fd;
-  padding: 0;
-}
-
-.card-arrow:hover {
-  background: #4a3d7f;
-  border-color: #7a6d9f;
-  transform: translate(4px, -4px);
-}
 
 .btn {
   display: flex;
@@ -652,14 +408,6 @@ function toLogin() {
     font-size: 17px;
   }
 
-  .hook-message {
-    padding: 20px 24px;
-    margin: 8px 0 0 0;
-  }
-
-  .hook-message p {
-    font-size: 16px;
-  }
 
   .explanation-section {
     padding: 28px 20px;
@@ -697,53 +445,5 @@ function toLogin() {
     font-size: 17px;
   }
 
-  .features {
-    grid-template-columns: 1fr;
-    gap: 16px;
-    margin: 16px 0;
-  }
-
-  .feature-icon {
-    width: 48px;
-    height: 48px;
-  }
-
-  .feature-text {
-    font-size: 14px;
-  }
-
-  .cards-grid {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-    margin-top: 40px;
-  }
-
-  .feature-card {
-    padding: 24px 20px;
-    gap: 18px;
-    min-height: 360px;
-  }
-
-  .card-top {
-    gap: 12px;
-  }
-
-  .card-icon {
-    width: 32px;
-    height: 32px;
-  }
-
-  .card-title {
-    font-size: 16px;
-  }
-
-  .card-image {
-    height: 160px;    
-  }
-
-  .card-arrow {
-    width: 42px;
-    height: 42px;
-  }
 }
 </style>
