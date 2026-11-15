@@ -3,20 +3,66 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueJsx from '@vitejs/plugin-vue-jsx'
-import vueDevTools from 'vite-plugin-vue-devtools'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     vue(),
     vueJsx(),
-    vueDevTools(),
   ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
+  build: {
+    // Target modern browsers for smaller output
+    target: 'esnext',
+
+    // Minify with terser for better compression than esbuild
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+      },
+      format: {
+        comments: false,
+      },
+    },
+
+    // Code splitting for better caching
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          // Extract vendor libraries into separate chunks
+          if (id.includes('node_modules/vue') && !id.includes('node_modules/vue-router')) {
+            return 'vue-core'
+          }
+          if (id.includes('node_modules/vue-router') || id.includes('node_modules/pinia')) {
+            return 'vue-core'
+          }
+          if (id.includes('node_modules/@iconify')) {
+            return 'iconify'
+          }
+          if (id.includes('node_modules/axios')) {
+            return 'axios'
+          }
+        }
+      },
+      onwarn(warning, warn) {
+        if (warning.code === 'THIS_IS_UNDEFINED') return
+        warn(warning)
+      }
+    },
+
+    // Reduce chunk size warnings
+    chunkSizeWarningLimit: 800,
+
+    // Report compressed size for accurate metrics
+    reportCompressedSize: true,
+  },
+
   server: {
     proxy: {
       '/api': {
@@ -24,5 +70,12 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+    // Enable compression in dev server
+    middlewareMode: false,
+  },
+
+  // Optimize dependencies
+  optimizeDeps: {
+    include: ['vue', 'vue-router', 'pinia', 'axios', '@iconify/vue'],
   },
 })
