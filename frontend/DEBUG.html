@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug - Vocab App</title>
+    <style>
+        body { font-family: monospace; background: #2d2a3e; color: #e2e0e8; padding: 20px; }
+        .info { background: #1a1724; padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .ok { color: #10b981; }
+        .error { color: #ef4444; }
+        .warn { color: #f59e0b; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Vocab App Debug Info</h1>
+
+    <div class="info">
+        <h3>Browser Info</h3>
+        <p><strong>User Agent:</strong> <span id="ua"></span></p>
+        <p><strong>Timestamp:</strong> <span id="time"></span></p>
+    </div>
+
+    <div class="info">
+        <h3>Network Tests</h3>
+        <p id="api-test">Testing API connection...</p>
+        <p id="assets-test">Testing assets...</p>
+    </div>
+
+    <div class="info">
+        <h3>Console Output</h3>
+        <pre id="console-output"></pre>
+    </div>
+
+    <script>
+        // Browser info
+        document.getElementById('ua').textContent = navigator.userAgent;
+        document.getElementById('time').textContent = new Date().toISOString();
+
+        // Capture console
+        const logs = [];
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+
+        console.log = (...args) => {
+            logs.push('[LOG] ' + args.join(' '));
+            originalLog(...args);
+        };
+
+        console.error = (...args) => {
+            logs.push('[ERROR] ' + args.join(' '));
+            originalError(...args);
+        };
+
+        console.warn = (...args) => {
+            logs.push('[WARN] ' + args.join(' '));
+            originalWarn(...args);
+        };
+
+        // Test API
+        console.log('Starting tests...');
+
+        // Test main index.js
+        fetch('/dist/assets/index-BzvIUzkO.js')
+            .then(r => {
+                const status = r.ok ? '<span class="ok">✓ 200 OK</span>' : `<span class="error">✗ ${r.status}</span>`;
+                document.getElementById('assets-test').innerHTML = `index-BzvIUzkO.js: ${status}`;
+            })
+            .catch(e => {
+                document.getElementById('assets-test').innerHTML = `<span class="error">✗ FAILED: ${e.message}</span>`;
+            });
+
+        // Test API endpoint
+        fetch('/api/health', { credentials: 'include' })
+            .then(r => {
+                const status = r.ok ? '<span class="ok">✓ 200 OK</span>' : `<span class="warn">⚠ ${r.status}</span>`;
+                document.getElementById('api-test').innerHTML = `/api/health: ${status}`;
+                console.log('API response:', r.status);
+            })
+            .catch(e => {
+                document.getElementById('api-test').innerHTML = `<span class="error">✗ FAILED: ${e.message}</span>`;
+                console.error('API error:', e);
+            });
+
+        // Update console output every 1s
+        setInterval(() => {
+            document.getElementById('console-output').textContent = logs.slice(-20).join('\n');
+        }, 1000);
+
+        console.log('Debug page loaded');
+    </script>
+</body>
+</html>

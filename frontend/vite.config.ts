@@ -35,18 +35,14 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: (id) => {
-          // Extract vendor libraries into separate chunks
-          if (id.includes('node_modules/vue') && !id.includes('node_modules/vue-router')) {
+          if (id.includes('node_modules/vue') || id.includes('node_modules/vue-router') || id.includes('node_modules/pinia')) {
             return 'vue-core'
-          }
-          if (id.includes('node_modules/vue-router') || id.includes('node_modules/pinia')) {
-            return 'vue-core'
-          }
-          if (id.includes('node_modules/@iconify')) {
-            return 'iconify'
           }
           if (id.includes('node_modules/axios')) {
             return 'axios'
+          }
+          if (id.includes('node_modules/@iconify')) {
+            return 'iconify'
           }
         }
       },

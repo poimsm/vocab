@@ -138,11 +138,18 @@ router.beforeEach((to, from) => {
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return { name: 'login' }
   }
-  // 2. If user is authenticated but tries to access guest-only routes
+
+  // 2. If user is authenticated but tries to access guest-only routes (login, signup, landing)
   if (to.meta.requiresGuest && authStore.isAuthenticated) {
-    return { name: 'home' }
+    return { name: 'my-words' }  // Redirect to dashboard, not home (which would loop)
   }
-  // 3. Otherwise, allow navigation
+
+  // 3. Special case: if authenticated user tries to access '/', redirect to my-words
+  if (to.path === '/' && authStore.isAuthenticated) {
+    return { name: 'my-words' }
+  }
+
+  // 4. Otherwise, allow navigation
   return true
 })
 
