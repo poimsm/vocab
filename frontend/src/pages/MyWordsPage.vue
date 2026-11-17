@@ -1009,351 +1009,17 @@ onUnmounted(() => {
       </div>
     </div> -->
 
-    <!-- Simple Banner -->
-    <transition name="slide-down">
-      <div v-if="showSimpleBanner" class="simple-banner">
-        <div class="banner-message">
-          <p>Add words from your books, movies, and real life to build your vocabulary</p>
-        </div>
-        <button class="banner-close" @click="showSimpleBanner = false" title="Dismiss">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-    </transition>
 
-    <!-- Variant Banner (Alternative) -->
-    <transition name="slide-down">
-      <div v-if="showVariantBanner" class="variant-banner">
-        <div class="variant-banner-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-          </svg>
-        </div>
-        <div class="variant-banner-content">
-          <h3 class="variant-banner-title">Expand Your Vocabulary</h3>
-          <p class="variant-banner-text">Add words from your favorite books, movies, and real-life conversations</p>
-        </div>
-        <div class="variant-banner-actions">
-          <button class="variant-banner-btn-action" @click="showVariantBanner = false">
-            Add Now
-          </button>
-          <button class="variant-banner-btn-close" @click="showVariantBanner = false">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-    </transition>
-
-    <!-- Tip Banner (Completely Different) -->
-    <transition name="slide-down">
-      <div v-if="showTipBanner" class="tip-banner">
-        <div class="tip-banner-left">
-          <div class="tip-badge">Word Collector</div>
-          <p class="tip-banner-message">Hear a fun word in a movie or book? Put it in your list so you don't forget to practice it later!</p>
-        </div>
-        <button class="tip-banner-dismiss" @click="showTipBanner = false">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-    </transition>
-
-    <!-- Header -->
-    <header class="words-header">
-      <div class="header-left">
+    <!-- Header - Minimal -->
+    <header class="words-header-new">
+      <div class="header-content">
         <h1 class="words-title">My Words</h1>
-        <p class="words-subtitle">{{ totalWords }} words saved</p>
-      </div>
-      <div class="header-actions">
-        <button class="relearn-btn" @click="openRelearnDialog" :disabled="loading" title="Randomly relearn some words">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-4.95M20.49 15a9 9 0 01-14.85 4.95"/>
-          </svg>
-          <span>Relearn</span>
-        </button>
-        <button class="add-btn" @click="openAdd" :disabled="loading">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
-          </svg>
-          <span>Add Word</span>
+        <button class="action-btn primary" @click="openAdd" :disabled="loading" title="Add a new word">
+          <span class="btn-icon">➕</span>
         </button>
       </div>
     </header>
 
-    <!-- Search & Filter Toolbar -->
-    <div class="words-toolbar">
-      <div class="search-box">
-        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Search your words..."
-          class="search-input"
-        />
-      </div>
-
-      <!-- Toolbar Controls (Right side) -->
-      <div class="toolbar-controls">
-        <!-- Filter Dropdown -->
-        <div class="filter-dropdown-wrap">
-          <button class="filter-dropdown-toggle" @click="showFilterDropdown = !showFilterDropdown">
-            {{ filterMode === 'favorites' ? 'Favorites' : showBoostedOnly ? 'Boosted' : 'All Words' }}
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-          <transition name="fade">
-            <div v-if="showFilterDropdown" class="filter-dropdown-content" @click="showFilterDropdown = false">
-              <button class="dropdown-item" :class="{ active: filterMode === 'all' && !showBoostedOnly }" @click="setFilterModeAll()">
-                All Words
-              </button>
-              <button class="dropdown-item" :class="{ active: filterMode === 'favorites' }" @click="setFilterModeFavorites()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                </svg>
-                Favorites <span v-if="totalFavorites > 0" class="badge">{{ totalFavorites }}</span>
-              </button>
-              <button class="dropdown-item" :class="{ active: showBoostedOnly }" @click="setFilterBoosted()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-                </svg>
-                Boosted <span v-if="totalBoosted > 0" class="badge">{{ totalBoosted }}</span>
-              </button>
-            </div>
-          </transition>
-        </div>
-        <!-- View Mode Buttons (Desktop) -->
-        <div class="view-mode-desktop">
-          <button class="view-mode-btn" :class="{ active: viewMode === 'list' }" @click="setViewModeList" title="List view">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-            </svg>
-          </button>
-          <button class="view-mode-btn" :class="{ active: viewMode === 'grid' }" @click="setViewModeGrid" title="Grid view">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-            </svg>
-          </button>
-        </div>
-
-        <!-- More Controls Dropdown -->
-        <div class="more-controls-wrap">
-        <button class="more-controls-toggle" @click="showMoreControls = !showMoreControls" title="More options">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
-          </svg>
-        </button>
-        <transition name="fade">
-          <div v-if="showMoreControls" class="more-controls-content">
-            <div class="controls-section">
-              <div class="section-label">Learning State</div>
-              <button class="control-btn" :class="{ active: learningStateFilter === 'all' }" @click="setLearningStateAll(); showMoreControls = false">
-                All
-              </button>
-              <button class="control-btn" :class="{ active: learningStateFilter === 'new' }" @click="setLearningStateNew(); showMoreControls = false">
-                New
-              </button>
-              <button class="control-btn" :class="{ active: learningStateFilter === 'learning' }" @click="setLearningStateLearning(); showMoreControls = false">
-                In Progress
-              </button>
-              <button class="control-btn" :class="{ active: learningStateFilter === 'mastered' }" @click="setLearningStateMastered(); showMoreControls = false">
-                Learned
-              </button>
-            </div>
-            <div class="controls-divider"></div>
-            <button class="control-btn relearn-option" @click="openRelearnDialog(); showMoreControls = false" :disabled="loading">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-4.95M20.49 15a9 9 0 01-14.85 4.95"/>
-              </svg>
-              Relearn
-            </button>
-          </div>
-        </transition>
-      </div>
-      </div>
-
-      <!-- Mobile Search Button -->
-      <button class="mobile-search-btn" @click="toggleSearchMobile">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-      </button>
-      <!-- Mobile Favorites Button -->
-      <button class="mobile-favorites-btn" :class="{ active: filterMode === 'favorites' }" @click="toggleFavoritesFilter">
-        <svg v-if="filterMode === 'favorites'" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-        </svg>
-        <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-        </svg>
-        <span v-if="totalFavorites > 0" class="mobile-fav-badge">{{ totalFavorites }}</span>
-      </button>
-      <!-- Mobile Boosted Button -->
-      <button class="mobile-boosted-btn" :class="{ active: showBoostedOnly }" @click="toggleBoostedFilter" title="Show only boosted words">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-        </svg>
-        <span v-if="totalBoosted > 0" class="boosted-count">{{ totalBoosted }}</span>
-      </button>
-      <!-- Mobile Filter Button -->
-      <button class="mobile-filter-btn" :class="{ active: learningStateFilter !== 'all' }" @click="toggleFilterMenu">
-        <Icon icon="solar:filter-outline" width="18" />
-      </button>
-    </div>
-
-    <!-- Active Filter Banner -->
-    <transition name="slide-down">
-      <div v-if="showBoostedOnly" class="active-filter-banner">
-        <div class="banner-content">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-          </svg>
-          <span class="banner-text">
-            Filtering <strong>{{ words.length }}</strong> of <strong>{{ totalBoosted }}</strong> boosted word{{ totalBoosted !== 1 ? 's' : '' }}
-          </span>
-          <button class="banner-close" @click="toggleBoostedFilter" title="Clear filter">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-    </transition>
-
-    <!-- Learning State Filter -->
-    <div class="learning-state-filter" :class="{ disabled: filterMode === 'favorites' }">
-      <button
-        class="state-tab"
-        :class="{ active: learningStateFilter === 'all' }"
-        :disabled="filterMode === 'favorites'"
-        @click="setLearningStateAll"
-      >
-        All
-      </button>
-      <button
-        class="state-tab"
-        :class="{ active: learningStateFilter === 'new' }"
-        :disabled="filterMode === 'favorites'"
-        @click="setLearningStateNew"
-      >
-        New
-      </button>
-      <button
-        class="state-tab"
-        :class="{ active: learningStateFilter === 'learning' }"
-        :disabled="filterMode === 'favorites'"
-        @click="setLearningStateLearning"
-      >
-        In Progress
-      </button>
-      <button
-        class="state-tab"
-        :class="{ active: learningStateFilter === 'mastered' }"
-        :disabled="filterMode === 'favorites'"
-        @click="setLearningStateMastered"
-      >
-        Learned
-      </button>
-
-      <!-- View Mode Toggle -->
-      <div class="view-mode-toggle">
-        <button
-          class="view-mode-btn"
-          :class="{ active: viewMode === 'list' }"
-          @click="setViewModeList"
-          title="List view"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-          </svg>
-        </button>
-        <button
-          class="view-mode-btn"
-          :class="{ active: viewMode === 'grid' }"
-          @click="setViewModeGrid"
-          title="Grid view"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-          </svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- Mobile Search Panel -->
-    <transition name="slide-down">
-      <div v-if="showSearchMobile" class="mobile-search-panel">
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Search your words..."
-          class="mobile-search-input"
-          autofocus
-          @keydown.escape="showSearchMobile = false"
-        />
-        <button class="mobile-search-close" @click="clearSearch">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-          </svg>
-        </button>
-      </div>
-    </transition>
-
-    <!-- Mobile Filter Menu -->
-    <transition name="fade">
-      <div v-if="showFilterMenu" class="mobile-filter-backdrop" @click="closeFilterMenu"></div>
-    </transition>
-    <transition name="slide-down">
-      <div v-if="showFilterMenu" class="mobile-filter-menu">
-        <button
-          class="filter-menu-item"
-          :class="{ active: learningStateFilter === 'all' }"
-          @click="setLearningStateAll(); closeFilterMenu()"
-        >
-          <span>All</span>
-          <svg v-if="learningStateFilter === 'all'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-        </button>
-        <button
-          class="filter-menu-item"
-          :class="{ active: learningStateFilter === 'new' }"
-          @click="setLearningStateNew(); closeFilterMenu()"
-        >
-          <span>New</span>
-          <svg v-if="learningStateFilter === 'new'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-        </button>
-        <button
-          class="filter-menu-item"
-          :class="{ active: learningStateFilter === 'learning' }"
-          @click="setLearningStateLearning(); closeFilterMenu()"
-        >
-          <span>In Progress</span>
-          <svg v-if="learningStateFilter === 'learning'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-        </button>
-        <button
-          class="filter-menu-item"
-          :class="{ active: learningStateFilter === 'mastered' }"
-          @click="setLearningStateMastered(); closeFilterMenu()"
-        >
-          <span>Learned</span>
-          <svg v-if="learningStateFilter === 'mastered'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-        </button>
-      </div>
-    </transition>
 
     <!-- Loading -->
     <div v-if="loading" class="loading-state">
@@ -2399,38 +2065,140 @@ onUnmounted(() => {
   transform: scale(1.1);
 }
 
-/* ─── Header ─── */
-.words-header {
+/* ─── NEW Header Design ─── */
+.words-header-new {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.1) 0%, rgba(167, 139, 250, 0.05) 100%);
+  border-radius: 16px;
+  padding: 28px 24px;
+  margin-bottom: 28px;
+  border: 1px solid rgba(167, 139, 250, 0.15);
+  animation: slideDown 0.4s ease-out;
+}
+
+.header-content {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 28px;
+  align-items: center;
+  gap: 20px;
 }
 
 .header-left {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 16px;
+  flex: 1;
 }
 
 .words-title {
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 32px;
+  font-weight: 800;
   color: #e2e0e8;
   margin: 0;
-  letter-spacing: -0.5px;
+  letter-spacing: -1px;
+}
+
+.header-stats {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 16px;
+  background: rgba(var(--stat-color-rgb, 167, 139, 250), 0.1);
+  border-radius: 12px;
+  border: 1px solid rgba(var(--stat-color-rgb, 167, 139, 250), 0.2);
+  transition: all 0.3s ease;
+}
+
+.stat-item:hover {
+  background: rgba(var(--stat-color-rgb, 167, 139, 250), 0.15);
+  transform: translateY(-2px);
+}
+
+.stat-icon {
+  font-size: 20px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #9c99ab;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #e2e0e8;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 12px;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.action-btn.primary {
+  background: linear-gradient(135deg, #a78bfa 0%, #c4aaf1 100%);
+  color: white;
+}
+
+.action-btn.primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(167, 139, 250, 0.35);
+}
+
+.action-btn.secondary {
+  background: rgba(6, 182, 212, 0.1);
+  color: #06b6d4;
+  border: 1px solid rgba(6, 182, 212, 0.2);
+}
+
+.action-btn.secondary:hover:not(:disabled) {
+  background: rgba(6, 182, 212, 0.2);
+  transform: translateY(-2px);
+}
+
+.btn-icon {
+  font-size: 18px;
 }
 
 @media (max-width: 768px) {
   .words-title {
-    font-size: 32px;
+    font-size: 28px;
   }
-}
 
-.words-subtitle {
-  font-size: 14px;
-  color: #9c99ab;
-  margin: 0;
+  .header-content {
+    flex-direction: column;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .action-btn {
+    flex: 1;
+    justify-content: center;
+  }
 }
 
 @media (max-width: 768px) {
@@ -2527,25 +2295,19 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
-/* ─── Toolbar ─── */
-.words-toolbar {
+/* ─── NEW Toolbar Design ─── */
+.words-toolbar-new {
   display: flex;
-  gap: 12px;
+  gap: 16px;
   margin-bottom: 24px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
-.toolbar-controls {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-left: auto;
-}
-
-.search-box {
+.search-box-modern {
   flex: 1;
   position: relative;
-  max-width: 400px;
+  min-width: 250px;
 }
 
 .search-icon {
@@ -2557,31 +2319,198 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
-.search-input {
-  width: 80%;
+.search-input-modern {
+  width: 100%;
   padding: 12px 14px 12px 42px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
   color: #e2e0e8;
   font-size: 15px;
   outline: none;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
 }
 
-@media (max-width: 768px) {
-  .search-input {
-    font-size: 17px;
-  }
-}
-
-.search-input::placeholder {
+.search-input-modern::placeholder {
   color: #9c99ab;
 }
 
-.search-input:focus {
-  border-color: rgba(124, 58, 237, 0.4);
+.search-input-modern:focus {
+  border-color: rgba(124, 58, 237, 0.5);
+  background: rgba(124, 58, 237, 0.1);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+}
+
+.filter-chips-container {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  position: relative;
+}
+
+.filter-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
   background: rgba(255, 255, 255, 0.06);
+  color: #b0aac0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.filter-chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.filter-chip.active {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.25) 0%, rgba(167, 139, 250, 0.15) 100%);
+  border-color: rgba(167, 139, 250, 0.4);
+  color: #c4aaf1;
+}
+
+.filter-chip.secondary {
+  padding: 10px 12px;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 10px;
+  background: rgba(124, 58, 237, 0.3);
+  color: #c4aaf1;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.view-mode-chips {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.view-chip {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #9c99ab;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.view-chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e0e8;
+}
+
+.view-chip.active {
+  background: linear-gradient(135deg, #a78bfa 0%, #c4aaf1 100%);
+  color: white;
+}
+
+/* Learning State Dropdown Modern */
+.filter-dropdown-modern {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  min-width: 180px;
+  background: rgba(30, 27, 45, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  padding: 6px;
+  z-index: 100;
+  animation: slideDown 0.2s ease-out;
+}
+
+.dropdown-item-modern {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #b0aac0;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.dropdown-item-modern:hover {
+  background: rgba(167, 139, 250, 0.15);
+  color: #e2e0e8;
+}
+
+.dropdown-item-modern.active {
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.25) 0%, rgba(167, 139, 250, 0.1) 100%);
+  color: #c4aaf1;
+}
+
+.active-filter-badge-modern {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.1) 0%, rgba(8, 145, 178, 0.05) 100%);
+  border-radius: 12px;
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  animation: slideDown 0.3s ease-out;
+}
+
+.badge-text {
+  font-size: 13px;
+  color: #9c99ab;
+}
+
+.badge-text strong {
+  color: #06b6d4;
+  font-weight: 700;
+}
+
+.badge-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: rgba(6, 182, 212, 0.1);
+  color: #06b6d4;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.badge-close:hover {
+  background: rgba(6, 182, 212, 0.2);
 }
 
 /* ─── Filter Tabs ─── */
@@ -3314,21 +3243,25 @@ onUnmounted(() => {
   color: #9b8fb5;
 }
 
-/* ─── Loading / Error ─── */
+/* ─── Loading / Error (MODERN) ─── */
 .loading-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 80px 20px;
-  gap: 16px;
+  gap: 20px;
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.05) 0%, rgba(167, 139, 250, 0.02) 100%);
+  border-radius: 16px;
+  margin: 40px 0;
+  min-height: 300px;
 }
 
 .spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid rgba(124, 58, 237, 0.2);
-  border-top-color: #7c3aed;
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(124, 58, 237, 0.15);
+  border-top-color: #a78bfa;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -3338,9 +3271,11 @@ onUnmounted(() => {
 }
 
 .loading-state p {
-  color: #9c99ab;
-  font-size: 14px;
+  color: #b0aac0;
+  font-size: 15px;
   margin: 0;
+  font-weight: 500;
+  letter-spacing: 0.3px;
 }
 
 @media (max-width: 768px) {
@@ -3457,24 +3392,46 @@ onUnmounted(() => {
   animation: spin 0.8s linear infinite;
 }
 
-/* ─── Word Card ─── */
+/* ─── Word Card (MODERN) ─── */
 .word-card {
   padding: 16px 18px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.word-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.1) 0%, transparent 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
 }
 
 .word-card:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(167, 139, 250, 0.08);
+  border-color: rgba(167, 139, 250, 0.25);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(124, 58, 237, 0.15);
+}
+
+.word-card:hover::before {
+  opacity: 1;
 }
 
 .word-card.active {
-  background: rgba(124, 58, 237, 0.1);
-  border-color: rgba(124, 58, 237, 0.25);
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(167, 139, 250, 0.08) 100%);
+  border-color: rgba(167, 139, 250, 0.35);
+  box-shadow: 0 0 20px rgba(124, 58, 237, 0.2);
 }
 
 .word-card-main {
@@ -3498,15 +3455,19 @@ onUnmounted(() => {
 }
 
 .word-name {
-  font-size: 17.3px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   color: #e2e0e8;
   margin: 0;
+  background: linear-gradient(135deg, #e2e0e8 0%, #c4aaf1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 @media (max-width: 768px) {
   .word-name {
-    font-size: 19px;
+    font-size: 20px;
   }
 }
 
@@ -3514,34 +3475,37 @@ onUnmounted(() => {
   color: #f472b6;
   display: flex;
   align-items: center;
+  font-size: 14px;
 }
 
 .word-pending-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(96, 165, 250, 0.15);
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(96, 165, 250, 0.15) 0%, rgba(96, 165, 250, 0.08) 100%);
   color: #60a5fa;
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
   text-transform: uppercase;
+  border: 1px solid rgba(96, 165, 250, 0.2);
 }
 
 .word-existing-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(168, 85, 247, 0.15);
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(168, 85, 247, 0.08) 100%);
   color: #a855f7;
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
   text-transform: uppercase;
+  border: 1px solid rgba(168, 85, 247, 0.2);
 }
 
 @media (max-width: 768px) {
@@ -3552,20 +3516,20 @@ onUnmounted(() => {
 }
 
 .word-card.pending {
-  opacity: 0.85;
-  border-color: rgba(96, 165, 250, 0.2);
-  background: rgba(96, 165, 250, 0.05);
+  opacity: 0.9;
+  border-color: rgba(96, 165, 250, 0.3);
+  background: linear-gradient(135deg, rgba(96, 165, 250, 0.08) 0%, rgba(96, 165, 250, 0.04) 100%);
 }
 
 .word-card.pending:hover {
-  background: rgba(96, 165, 250, 0.08);
+  background: linear-gradient(135deg, rgba(96, 165, 250, 0.12) 0%, rgba(96, 165, 250, 0.06) 100%);
 }
 
 .word-definition {
-  font-size: 15px;
-  color: #9c99ab;
+  font-size: 14px;
+  color: #b0aac0;
   margin: 0;
-  line-height: 1.4;
+  line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -3574,34 +3538,38 @@ onUnmounted(() => {
 
 @media (max-width: 768px) {
   .word-definition {
-    font-size: 16px;
+    font-size: 15px;
   }
 }
 
 .fav-btn {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 10px;
   border: none;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.05);
   color: #9c99ab;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
 }
 
 .fav-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(244, 114, 182, 0.15);
+  color: #f472b6;
+  transform: scale(1.1);
 }
 
 .fav-btn.active {
   color: #f472b6;
+  background: linear-gradient(135deg, rgba(244, 114, 182, 0.2) 0%, rgba(244, 114, 182, 0.1) 100%);
+  box-shadow: 0 0 16px rgba(244, 114, 182, 0.25);
 }
 
-/* ─── Boost Button ─── */
+/* ─── Boost Button (MODERN) ─── */
 .word-card-actions {
   display: flex;
   gap: 8px;
@@ -3609,43 +3577,64 @@ onUnmounted(() => {
 }
 
 .boost-btn {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 10px;
   border: none;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.05);
   color: #9c99ab;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
 }
 
 .boost-btn:hover {
-  background: rgba(255, 193, 7, 0.1);
-  color: #ffc107;
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  transform: scale(1.1) rotate(10deg);
 }
 
 .boost-btn.active {
-  color: #ffc107;
-  background: rgba(255, 193, 7, 0.15);
-  box-shadow: 0 0 12px rgba(255, 193, 7, 0.3);
+  color: #fbbf24;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(251, 191, 36, 0.1) 100%);
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.35);
+  animation: pulse-boost 1.5s ease-in-out infinite;
 }
 
-/* ─── Meta Tags ─── */
+@keyframes pulse-boost {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(251, 191, 36, 0.5);
+  }
+}
+
+/* ─── Meta Tags (MODERN) ─── */
 .word-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
+  margin-top: 8px;
 }
 
 .meta-tag {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.5px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s ease;
+}
+
+.meta-tag:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 @media (max-width: 768px) {
@@ -4225,44 +4214,57 @@ onUnmounted(() => {
   }
 }
 
-/* ─── Empty State ─── */
+/* ─── Empty State (MODERN) ─── */
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 20px;
+  padding: 80px 20px;
   text-align: center;
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, rgba(167, 139, 250, 0.03) 100%);
+  border-radius: 16px;
+  border: 1px dashed rgba(167, 139, 250, 0.2);
+  min-height: 350px;
 }
 
 .empty-state svg {
   color: #9c99ab;
-  margin-bottom: 16px;
-  opacity: 0.5;
+  margin-bottom: 24px;
+  opacity: 0.6;
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
 }
 
 .empty-text {
-  font-size: 16px;
-  color: #9c99ab;
-  margin: 0 0 16px 0;
+  font-size: 17px;
+  color: #b0aac0;
+  margin: 0 0 24px 0;
+  font-weight: 500;
+  max-width: 300px;
+  line-height: 1.6;
 }
 
 @media (max-width: 768px) {
   .empty-text {
-    font-size: 19px;
+    font-size: 17px;
   }
 }
 
 .empty-add-btn {
-  padding: 12px 24px;
+  padding: 12px 28px;
   border-radius: 12px;
   border: none;
-  background: #7c3aed;
+  background: linear-gradient(135deg, #a78bfa 0%, #c4aaf1 100%);
   color: white;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
 }
 
 @media (max-width: 768px) {

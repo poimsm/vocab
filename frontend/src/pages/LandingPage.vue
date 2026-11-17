@@ -34,8 +34,11 @@ function toLogin() {
 
 
       <p class="subtitle">
-        See words from every angle. Understand them deeply.<br>
-        Watch them become part of you.
+        <!-- See words from every angle. Understand them deeply.<br> -->
+        <!-- Watch them become part of you. -->
+        <!-- Build your personal word list and unlock  <br> new ways to explore and remember. -->
+        <!-- Add words to your collection, and explore new ways to learn and remember -->
+         A personal space to collect, organize, revisit, and remember <br> the words you don't want to lose.
       </p>
 
       <div class="explanation-section">
@@ -51,7 +54,7 @@ function toLogin() {
               <p class="step-text">
                 <!-- Found an incredible word in a book? Heard a fun expression in a movie? Save it! -->
                 <!-- Found an incredible word in a book? Heard a fun expression in a movie? Add it to your list! -->
-                 Spotted a unreal word in a book or a movie? Add it to your list!
+                 Spotted an unreal word in a book or a movie? Add it to your list!
               </p>
             </div>
           </div>
