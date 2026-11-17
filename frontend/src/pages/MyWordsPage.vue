@@ -2062,16 +2062,15 @@ onUnmounted(() => {
 
 .tip-banner-dismiss:hover {
   background: rgba(255, 255, 255, 0.25);
-  transform: scale(1.1);
 }
 
 /* ─── NEW Header Design ─── */
 .words-header-new {
-  background: linear-gradient(135deg, rgba(124, 58, 237, 0.1) 0%, rgba(167, 139, 250, 0.05) 100%);
+  /* background: linear-gradient(135deg, rgba(124, 58, 237, 0.1) 0%, rgba(167, 139, 250, 0.05) 100%); */
   border-radius: 16px;
   padding: 28px 24px;
   margin-bottom: 28px;
-  border: 1px solid rgba(167, 139, 250, 0.15);
+  /* border: 1px solid rgba(167, 139, 250, 0.15); */
   animation: slideDown 0.4s ease-out;
 }
 
@@ -3411,7 +3410,7 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, rgba(167, 139, 250, 0.1) 0%, transparent 100%);
+  /* background: linear-gradient(135deg, rgba(167, 139, 250, 0.1) 0%, transparent 100%); */
   opacity: 0;
   transition: opacity 0.3s ease;
   pointer-events: none;
@@ -3421,7 +3420,6 @@ onUnmounted(() => {
   background: rgba(167, 139, 250, 0.08);
   border-color: rgba(167, 139, 250, 0.25);
   transform: translateY(-4px);
-  box-shadow: 0 12px 24px rgba(124, 58, 237, 0.15);
 }
 
 .word-card:hover::before {
@@ -3429,9 +3427,10 @@ onUnmounted(() => {
 }
 
 .word-card.active {
-  background: linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(167, 139, 250, 0.08) 100%);
-  border-color: rgba(167, 139, 250, 0.35);
-  box-shadow: 0 0 20px rgba(124, 58, 237, 0.2);
+  /* background: linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(167, 139, 250, 0.08) 100%); */
+  /* border-color: rgba(167, 139, 250, 0.35); */
+  background: rgba(167, 139, 250, 0.08);
+  border-color: rgb(127 115 165 / 35%);  
 }
 
 .word-card-main {
@@ -3459,9 +3458,9 @@ onUnmounted(() => {
   font-weight: 700;
   color: #e2e0e8;
   margin: 0;
-  background: linear-gradient(135deg, #e2e0e8 0%, #c4aaf1 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  /* background: linear-gradient(135deg, #e2e0e8 0%, #c4aaf1 100%); */
+  /* -webkit-background-clip: text; */
+  /* -webkit-text-fill-color: transparent; */
   background-clip: text;
 }
 
@@ -3560,13 +3559,11 @@ onUnmounted(() => {
 .fav-btn:hover {
   background: rgba(244, 114, 182, 0.15);
   color: #f472b6;
-  transform: scale(1.1);
 }
 
 .fav-btn.active {
   color: #f472b6;
   background: linear-gradient(135deg, rgba(244, 114, 182, 0.2) 0%, rgba(244, 114, 182, 0.1) 100%);
-  box-shadow: 0 0 16px rgba(244, 114, 182, 0.25);
 }
 
 /* ─── Boost Button (MODERN) ─── */
@@ -3594,24 +3591,13 @@ onUnmounted(() => {
 .boost-btn:hover {
   background: rgba(251, 191, 36, 0.15);
   color: #fbbf24;
-  transform: scale(1.1) rotate(10deg);
 }
 
 .boost-btn.active {
   color: #fbbf24;
   background: linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(251, 191, 36, 0.1) 100%);
-  box-shadow: 0 0 20px rgba(251, 191, 36, 0.35);
-  animation: pulse-boost 1.5s ease-in-out infinite;
 }
 
-@keyframes pulse-boost {
-  0%, 100% {
-    box-shadow: 0 0 20px rgba(251, 191, 36, 0.35);
-  }
-  50% {
-    box-shadow: 0 0 30px rgba(251, 191, 36, 0.5);
-  }
-}
 
 /* ─── Meta Tags (MODERN) ─── */
 .word-meta {
@@ -3820,7 +3806,6 @@ onUnmounted(() => {
 .detail-boost-btn.active {
   color: #ffc107;
   background: rgba(255, 193, 7, 0.2);
-  box-shadow: 0 0 16px rgba(255, 193, 7, 0.4);
 }
 
 .detail-definition {
@@ -5240,7 +5225,6 @@ onUnmounted(() => {
 .mobile-boost-btn.active {
   color: #ffc107;
   background: rgba(255, 193, 7, 0.15);
-  box-shadow: 0 0 12px rgba(255, 193, 7, 0.3);
 }
 
 .mobile-detail-content {
