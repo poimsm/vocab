@@ -5,6 +5,7 @@ Proporciona una interfaz genérica para:
 - Crear streams SSE
 - Autenticación para SSE
 - Manejo de conexiones Redis para pubsub
+- Confirmación de que stream está listo (cliente escuchando)
 """
 
 import json
@@ -121,6 +122,15 @@ class SSEStreamService:
                 f"{self.logger_name} Suscrito a eventos de user {self.user_id} "
                 f"(patrón: {self.channel_pattern})"
             )
+
+            # ✅ Señalar que el stream está listo (cliente escuchando)
+            # Extrae el tipo de feature del patrón (ej: "best_options_explore" de "user:123:best_options_explore.*")
+            feature_type = self.channel_pattern.split(":")[-1].replace(".*", "")
+            stream_ready_key = f"user:{self.user_id}:stream_ready:{feature_type}"
+            r.setex(stream_ready_key, 60, "1")  # TTL de 60 segundos
+            logger.debug(
+                f"{self.logger_name} Marcado stream como ready: {stream_ready_key}"
+            )
         except Exception as e:
             logger.error(f"{self.logger_name} Redis connection error: {e}")
             return StreamingResponse(
@@ -180,3 +190,72 @@ class SSEStreamService:
                     pass
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+class StreamReadyWaiter:
+    """
+    Servicio para esperar a que un stream SSE esté listo (cliente escuchando).
+
+    Previene race condition donde eventos se publican antes de que el cliente
+    se suscriba al canal Redis.
+
+    Uso:
+        waiter = StreamReadyWaiter()
+        waiter.wait(user_id=123, feature_type="best_options_explore")
+        realtime_bus.publish(channel, data)  # Ahora seguro que cliente escucha
+    """
+
+    def __init__(self, redis_host: str = "redis", redis_port: int = 6379):
+        """
+        Args:
+            redis_host: Host del servidor Redis
+            redis_port: Puerto del servidor Redis
+        """
+        self.redis_host = redis_host
+        self.redis_port = redis_port
+
+    def wait(self, user_id: int, feature_type: str, max_wait_time: int = 10) -> bool:
+        """
+        Espera a que el stream SSE esté listo (cliente conectado y escuchando).
+
+        Args:
+            user_id: ID del usuario
+            feature_type: Tipo de feature ("best_options_explore", "examples_explore", etc)
+            max_wait_time: Máximo tiempo de espera en segundos (default: 10)
+
+        Returns:
+            bool: True si stream está ready, False si timeout
+        """
+        stream_ready_key = f"user:{user_id}:stream_ready:{feature_type}"
+
+        try:
+            r = redis.Redis(
+                host=self.redis_host,
+                port=self.redis_port,
+                db=0,
+                decode_responses=True,
+                socket_timeout=2,
+            )
+
+            # Chequear cada 100ms hasta que esté ready o se agote el tiempo
+            for attempt in range(int(max_wait_time / 0.1)):
+                if r.exists(stream_ready_key):
+                    logger.debug(
+                        f"[StreamReadyWaiter] Stream ready confirmed for user {user_id}/{feature_type}"
+                    )
+                    return True
+                time.sleep(0.1)
+
+            # Timeout: stream no se conectó a tiempo
+            logger.warning(
+                f"[StreamReadyWaiter] Stream ready timeout ({max_wait_time}s) for user {user_id}/{feature_type}. "
+                f"Publishing anyway (stream may not be listening)."
+            )
+            return False
+
+        except Exception as e:
+            logger.warning(
+                f"[StreamReadyWaiter] Error checking stream ready for user {user_id}/{feature_type}: {e}. "
+                f"Publishing anyway."
+            )
+            return False

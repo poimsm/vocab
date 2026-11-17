@@ -19,6 +19,7 @@ from core.event_bus import publish_event_background, subscribe_to_ai
 from core.generation_ai.enums import GenerationAIStatus
 from features.best_options.response_builder import BestOptionsResponseBuilder
 from core.delivery.service import DeliveryService
+from core.sse_service import StreamReadyWaiter
 
 
 def _shuffle_options_with_correct_index(options: list, correct_option_idx: int) -> tuple:
@@ -424,6 +425,11 @@ def explore_best_options_task(
                 except Exception as e:
                     logger.error(f"[explore_best_options_task] Error building best_options_data: {e}", exc_info=True)
                     best_options_data = []
+
+            # ✅ Esperar a que el stream SSE esté listo antes de publicar
+            # Previene race condition: evento se publica DESPUÉS de que cliente se suscriba
+            stream_waiter = StreamReadyWaiter()
+            stream_waiter.wait(user_id, "best_options_explore")
 
             # Publicar evento de completación con datos de best options
             try:

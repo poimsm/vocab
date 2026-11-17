@@ -18,6 +18,7 @@ from features.examples.models import Example, ExampleType
 from core.explore.explore_actions import ExploreActions
 from features.examples.explore_response_builder import ExploreResponseBuilder
 from core.delivery.service import DeliveryService
+from core.sse_service import StreamReadyWaiter
 
 
 @subscribe_to_ai('generation.content_requested')
@@ -469,6 +470,11 @@ def explore_examples_task(
                 except Exception as e:
                     logger.error(f"[explore_examples_task] Error building examples_data: {e}", exc_info=True)
                     examples_data = []
+
+            # ✅ Esperar a que el stream SSE esté listo antes de publicar
+            # Previene race condition: evento se publica DESPUÉS de que cliente se suscriba
+            stream_waiter = StreamReadyWaiter()
+            stream_waiter.wait(user_id, "examples_explore")
 
             # Publicar evento de completación con datos de ejemplos
             try:
