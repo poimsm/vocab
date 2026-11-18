@@ -167,13 +167,34 @@ const modules = [
 
       <!-- User Info en Escritorio -->
       <div class="sidebar-footer">
-        <button
-          class="user-footer-btn"
-          @click="toggleUserMenu"
-          :title="sidebarCollapsed ? (authStore.userEmail ?? '') : ''"
-        >
-          <UserProfile :compact="sidebarCollapsed" />
-        </button>
+        <div class="user-footer-container">
+          <div class="user-footer-left">
+            <button
+              class="user-footer-profile"
+              @click="sidebarCollapsed && toggleUserMenu()"
+              :title="sidebarCollapsed ? (authStore.userEmail ?? '') : ''"
+            >
+              <UserProfile :compact="true" />
+            </button>
+            <div v-if="!sidebarCollapsed" class="user-info-stats">
+              <div class="user-name">{{ authStore.userEmail?.split('@')[0] || 'User' }}</div>
+              <div class="user-stats" style="display: none">
+                <div class="user-level">Lvl 1</div>
+                <div class="user-streak">
+                  <Icon icon="solar:fire-linear" width="12" />
+                  <span>5</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <button
+            class="user-settings-btn"
+            @click="toggleUserMenu"
+            :title="sidebarCollapsed ? (authStore.userEmail ?? '') : 'Settings'"
+          >
+            <Icon icon="solar:settings-bold" width="18" />
+          </button>
+        </div>
 
         <!-- User Menu Overlay (close on click outside) -->
         <transition name="fade">
@@ -406,7 +427,7 @@ const modules = [
 }
 
 .sidebar-top :deep(.user-name) {
-  font-size: 14px;
+  font-size: 14.5px;
   font-weight: 600;
 }
 
@@ -514,20 +535,115 @@ const modules = [
   overflow: visible;
 }
 
-.user-footer-btn {
-  border: none;
-  background: transparent;
-  padding: 13px 0px;
-  margin: 0;
-  cursor: pointer;
+.user-footer-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
+  padding: 8px 0;
   border-radius: 8px;
   transition: background 0.2s ease;
-  text-align: left;
 }
 
-.user-footer-btn:hover {
-  background: rgba(155, 143, 181, 0.08);
+.user-footer-container:hover {
+  /* background: rgba(155, 143, 181, 0.08); */
+}
+
+.user-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.user-footer-profile {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  flex-shrink: 0;
+  transition: none;
+  cursor: default;
+}
+
+.user-footer-profile :deep(.user-profile) {
+  gap: 0;
+}
+
+.user-footer-profile :deep(.user-profile.compact:hover .avatar) {
+  transform: none;
+  box-shadow: none;
+}
+
+.user-info-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e0e8;
+  line-height: 1.2;
+  text-transform: capitalize;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.user-level {
+  font-size: 12px;
+  font-weight: 600;
+  color: #c4b5fd;
+  line-height: 1;
+  padding: 2px 6px;
+  background: rgba(196, 181, 253, 0.1);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.user-streak {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  color: #f87171;
+  line-height: 1;
+  padding: 2px 6px;
+  background: rgba(248, 113, 113, 0.1);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.user-settings-btn {
+  flex-shrink: 0;
+  border: none;
+  /* background: rgba(155, 143, 181, 0.08); */
+  background: transparent;
+  color: #9c99ab;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.user-settings-btn:hover {
+  background: rgba(155, 143, 181, 0.16);
+  color: #c4b5fd;
 }
 
 /* UserProfile styling in footer */
@@ -551,8 +667,25 @@ const modules = [
 }
 
 /* When collapsed, show only compact version */
-.layout.sidebar-collapsed .user-footer-btn {
-  padding: 0;
+.layout.sidebar-collapsed .user-footer-container {
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.layout.sidebar-collapsed .user-footer-left {
+  justify-content: center;
+}
+
+.layout.sidebar-collapsed .user-footer-profile {
+  cursor: pointer;
+}
+
+.layout.sidebar-collapsed .user-info-stats {
+  display: none;
+}
+
+.layout.sidebar-collapsed .user-settings-btn {
+  display: none;
 }
 
 .layout.sidebar-collapsed .sidebar-footer :deep(.user-profile) {
@@ -577,17 +710,16 @@ const modules = [
 
 .user-menu {
   position: absolute;
-  /* top: -16px; */
-  /* left: -8px; */
-  right: -200px;
+  bottom: 50%;
+  right: -220px;
   width: 220px;
-  transform: translateY(-100%);
+  margin-bottom: 8px;
   background: #3d3a52;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  /* border: 1px solid rgba(255, 255, 255, 0.08); */
   border-radius: 12px;
   overflow: hidden;
   z-index: 110;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  /* box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2); */
 }
 
 .user-menu-item {

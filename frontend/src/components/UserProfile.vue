@@ -46,7 +46,7 @@ const displayEmail = computed(() => {
   background: transparent;
   border: none;
   justify-content: flex-start;
-  cursor: pointer;
+  /* cursor: pointer; */
 }
 
 .user-profile.compact:hover .avatar {
