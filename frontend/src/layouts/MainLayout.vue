@@ -297,6 +297,11 @@ const modules = [
           <div class="drawer-user-section">
             <button class="drawer-user" @click="toggleUserMenu">
               <UserProfile class="drawer-profile" />
+              <Icon
+                :icon="userMenuOpen ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'"
+                width="18"
+                class="drawer-user-dropdown-icon"
+              />
             </button>
 
             <!-- User Menu Dropdown en Mobile -->
@@ -709,6 +714,7 @@ const modules = [
 }
 
 .user-menu {
+  padding-top: 10px;
   position: absolute;
   bottom: 50%;
   right: -220px;
@@ -919,10 +925,24 @@ const modules = [
     cursor: pointer;
     text-align: left;
     transition: background 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
   }
 
   .drawer-user:hover {
     background: rgba(155, 143, 181, 0.08);
+  }
+
+  .drawer-user-dropdown-icon {
+    color: #9c99ab;
+    flex-shrink: 0;
+    transition: color 0.2s ease;
+  }
+
+  .drawer-user:hover .drawer-user-dropdown-icon {
+    color: #c4b5fd;
   }
 
   .drawer-profile :deep(.user-profile) {
