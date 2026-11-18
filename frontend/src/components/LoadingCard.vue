@@ -17,16 +17,19 @@ defineProps<{
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  height: 100%;
   padding: 80px 20px;
   gap: 16px;
   min-height: 50vh;
 }
 
 .spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid rgba(124, 58, 237, 0.2);
-  border-top-color: #7c3aed;
+  width: 48px;
+  height: 48px;
+  border: 2.5px solid rgba(255, 255, 255, 0.12);
+  border-top-color: rgba(255, 255, 255, 0.5);
+  border-right-color: rgba(255, 255, 255, 0.3);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -38,9 +41,10 @@ defineProps<{
 }
 
 .message {
-  color: #9c99ab;
+  color: #b8b5c8;
   font-size: 14px;
   margin: 0;
+  letter-spacing: 0.5px;
 }
 
 @media (max-width: 768px) {
