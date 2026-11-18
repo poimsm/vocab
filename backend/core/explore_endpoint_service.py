@@ -9,15 +9,14 @@ Proporciona una interfaz genérica para:
 """
 
 import uuid
-import time
-from typing import List, Optional, Any, Dict
+from typing import Any, Dict
 from sqlmodel import Session
 from logging_client import logger
 from activity.user_activity_service import UserActivityService
-from core.realtime_event_bus import get_realtime_bus
 from auth.models import User
 from celery.app.task import Task
 from core.celery_queues import CeleryQueue
+from core.explore_task_redis_service import ExploreTaskRedisService
 
 
 class ExploreEndpointService:
@@ -98,15 +97,11 @@ class ExploreEndpointService:
             }
         )
 
-        # Publicar evento inicial de inicio de exploración
-        realtime_bus = get_realtime_bus()
-        realtime_bus.publish(
-            channel=f"user:{current_user.id}:{self.channel_prefix}.started",
-            data={
-                "request_id": request_id,
-                "actions": request_data['actions'],
-                "timestamp": time.time(),
-            }
+        # Guardar status inicial en Redis ANTES de encolar la tarea
+        # Esto asegura que el frontend pueda hacer polling inmediatamente
+        ExploreTaskRedisService.set_processing(request_id)
+        logger.debug(
+            f"[{self.logger_name}] Initial status saved to Redis: {request_id}"
         )
 
         # Encolar tarea de background para ejecutar acciones

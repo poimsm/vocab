@@ -18,7 +18,7 @@ from features.examples.models import Example, ExampleType
 from core.explore.explore_actions import ExploreActions
 from features.examples.explore_response_builder import ExploreResponseBuilder
 from core.delivery.service import DeliveryService
-from core.sse_service import StreamReadyWaiter
+from core.explore_task_redis_service import ExploreTaskRedisService
 
 
 @subscribe_to_ai('generation.content_requested')
@@ -379,19 +379,15 @@ def explore_examples_task(
     buffer_position: int = 0,
 ) -> None:
     """
-    Task de background que procesa acciones de explore y publica eventos en tiempo real.
+    Task de background que procesa acciones de explore y guarda resultados en Redis.
 
     Flujo:
     1. Recibe solicitud de explore con acciones
-    2. Ejecuta acciones usando ExploreActions
-    3. Publica eventos en RealtimeEventBus para transmitir al frontend vía SSE
-    4. Eventos: explore.started, explore.processing, explore.completed, explore.failed
-
-    Los datos se transmiten en tiempo real a través de /explore-stream (SSE).
+    2. Actualiza status a "processing" en Redis
+    3. Ejecuta acciones usando ExploreActions
+    4. Guarda resultados en Redis
+    5. Actualiza status a "completed" en Redis
     """
-    from core.realtime_event_bus import get_realtime_bus
-
-    realtime_bus = get_realtime_bus()
     buffer_delivery_ids = buffer_delivery_ids or []
 
     logger.info(
@@ -399,16 +395,10 @@ def explore_examples_task(
         f"request_id={request_id}, actions={actions}"
     )
 
-    try:
-        realtime_bus.publish(
-            channel=f"user:{user_id}:examples_explore.processing",
-            data={
-                "request_id": request_id,
-                "message": "Processing explore actions...",
-                "timestamp": time.time(),
-            }
-        )
+    # Marcar como procesando
+    ExploreTaskRedisService.set_processing(request_id)
 
+    try:
         with Session(engine) as db:
             # Preparar repositorios y validadores
             from features.content_repository import UnifiedContentRepository
@@ -445,7 +435,7 @@ def explore_examples_task(
                 f"status={status}, buffer_size={len(buffer_ids)}, position={buffer_pos}"
             )
 
-            # Construir datos de ejemplo (opcional, si quieres incluir detalles en el evento)
+            # Construir datos de ejemplo
             examples_data = []
             if buffer_ids:
                 logger.debug(f"[explore_examples_task] Building examples_data for buffer_ids: {buffer_ids}")
@@ -461,68 +451,28 @@ def explore_examples_task(
                         buffer_ids, delivery_item_map, user_id
                     )
                     logger.debug(f"[explore_examples_task] Built examples_data with {len(examples_data)} examples")
-
-                    # Log a sample of the data to verify structure
-                    if examples_data:
-                        import json as json_module
-                        sample = examples_data[0] if examples_data else {}
-                        logger.debug(f"[explore_examples_task] Sample example_data: {json_module.dumps(sample, default=str)}")
                 except Exception as e:
                     logger.error(f"[explore_examples_task] Error building examples_data: {e}", exc_info=True)
                     examples_data = []
 
-            # ✅ Esperar a que el stream SSE esté listo antes de publicar
-            # Previene race condition: evento se publica DESPUÉS de que cliente se suscriba
-            stream_waiter = StreamReadyWaiter()
-            stream_waiter.wait(user_id, "examples_explore")
+            # Guardar resultados en Redis
+            results_data = {
+                "status": status,
+                "buffer_delivery_ids": buffer_ids,
+                "buffer_position": buffer_pos,
+                "examples": examples_data,
+                "examples_count": len(examples_data),
+                "timestamp": time.time(),
+            }
 
-            # Publicar evento de completación con datos de ejemplos
-            try:
-                event_data = {
-                    "request_id": request_id,
-                    "status": status,
-                    "buffer_delivery_ids": buffer_ids,
-                    "buffer_position": buffer_pos,
-                    "examples": examples_data,  # Incluir datos completos de ejemplos
-                    "examples_count": len(examples_data),
-                    "timestamp": time.time(),
-                }
-                logger.info(
-                    f"[explore_examples_task] Event data before publishing: "
-                    f"buffer_ids={buffer_ids}, buffer_position={buffer_pos}, examples_count={len(examples_data)}, "
-                    f"status={status}, request_id={request_id}"
-                )
-                logger.debug(f"[explore_examples_task] Full event_data: {event_data}")
-                logger.debug(f"[explore_examples_task] Publishing explore.completed with {len(examples_data)} examples")
-                realtime_bus.publish(
-                    channel=f"user:{user_id}:examples_explore.completed",
-                    data=event_data
-                )
-            except Exception as e:
-                logger.error(f"[explore_examples_task] Error publishing explore.completed event: {e}", exc_info=True)
-                # Publish without examples if serialization fails
-                fallback_event_data = {
-                    "request_id": request_id,
-                    "status": status,
-                    "buffer_delivery_ids": buffer_ids,
-                    "buffer_position": buffer_pos,
-                    "examples_count": 0,
-                    "error": str(e),
-                    "timestamp": time.time(),
-                }
-                logger.info(
-                    f"[explore_examples_task] Fallback event data: "
-                    f"buffer_ids={buffer_ids}, buffer_position={buffer_pos}, status={status}"
-                )
-                realtime_bus.publish(
-                    channel=f"user:{user_id}:examples_explore.completed",
-                    data=fallback_event_data
-                )
-
+            ExploreTaskRedisService.set_results(request_id, results_data)
             logger.info(
-                f"[explore_examples_task] Evento completado publicado para user {user_id}: "
+                f"[explore_examples_task] Resultados guardados en Redis para user {user_id}: "
                 f"request_id={request_id}"
             )
+
+            # Marcar como completado
+            ExploreTaskRedisService.set_completed(request_id)
 
     except Exception as e:
         logger.error(
@@ -530,12 +480,5 @@ def explore_examples_task(
             exc_info=True,
         )
 
-        # Publicar evento de error
-        realtime_bus.publish(
-            channel=f"user:{user_id}:examples_explore.failed",
-            data={
-                "request_id": request_id,
-                "error": str(e),
-                "timestamp": time.time(),
-            }
-        )
+        # Marcar como fallido
+        ExploreTaskRedisService.set_failed(request_id, str(e))

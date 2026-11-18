@@ -5,8 +5,8 @@ import { Icon } from '@iconify/vue'
 import api from '@/utils/api'
 import { wordApi } from '@/services/wordApi'
 import { useExamplesStore } from '@/stores/examples'
-import { useAuthStore } from '@/stores/auth'
 import { useActivityTracking } from '@/composables/useActivityTracking'
+import { useExplorePolling } from '@/composables/useExplorePolling'
 import LoadingCard from '@/components/LoadingCard.vue'
 import FavoritesView from '@/components/FavoritesView.vue'
 import WordDetailPanel from '@/components/WordDetailPanel.vue'
@@ -15,11 +15,8 @@ import ExtractedWordsModal from '@/components/ExtractedWordsModal.vue'
 
 const router = useRouter()
 const examplesStore = useExamplesStore()
-const authStore = useAuthStore()
 const { trackButtonClick } = useActivityTracking()
-
-// API base URL from environment
-const API_BASE = import.meta.env.VITE_API_BASE || '/api'
+const { startPolling, stopPolling } = useExplorePolling()
 
 interface TargetWord {
   id: number
@@ -56,167 +53,6 @@ const isComponentMounted = ref(false)  // Track if component is mounted
 const BATCH_SIZE = 4
 const SPEECH_RATES = [0.9, 0.7]
 const currentSpeechRateIndex = ref(0)
-let sseEventSource: EventSource | null = null
-let sseActive = ref(false)
-
-// ─── SSE (Server-Sent Events) - RealtimeEventBus ───
-function startSSE() {
-  console.log('[startSSE] Starting SSE stream')
-  console.log('[startSSE] API_BASE:', API_BASE)
-  console.log('[startSSE] authStore.token exists:', !!authStore.token)
-
-  // Clean up any previous SSE connection
-  if (sseEventSource) {
-    console.log('[startSSE] Cleaning up previous EventSource')
-    sseEventSource.close()
-    sseEventSource = null
-  }
-
-  sseActive.value = true
-
-  // Construir URL del SSE con token en query param
-  // EventSource no soporta headers Authorization, así que pasamos el token como parámetro
-  const baseUrl = API_BASE.startsWith('http') ? API_BASE : `${window.location.origin}${API_BASE}`
-  const sseUrl = new URL(`${baseUrl}/examples/explore-stream`)
-  if (authStore.token) {
-    sseUrl.searchParams.append('token', authStore.token)
-  }
-
-  const fullUrl = sseUrl.toString()
-  console.log('[startSSE] Conectando a:', fullUrl)
-
-  try {
-    sseEventSource = new EventSource(fullUrl)
-
-    // ─── Evento: open (conexión establecida) ───
-    sseEventSource.addEventListener('open', () => {
-      console.log('[SSE:open] ✅ Conexión establecida con servidor')
-      examplesStore.setGenerating(true)
-    })
-
-    // ─── Evento: error ───
-    sseEventSource.addEventListener('error', (event: Event) => {
-      console.error('[SSE:error] Error en conexión:', event)
-      if (sseEventSource?.readyState === EventSource.CLOSED) {
-        console.log('[SSE:error] Conexión cerrada por servidor')
-      } else {
-        console.error('[SSE:error] Error inesperado en SSE')
-        examplesStore.setError('SSE Connection Error')
-      }
-    })
-
-    // ─── Evento: examples_explore.started ───
-    sseEventSource.addEventListener('examples_explore.started', (event: MessageEvent) => {
-      if (!sseActive.value) {
-        console.log('[SSE:examples_explore.started] Stream disabled, ignoring event')
-        return
-      }
-
-      try {
-        const data = JSON.parse(event.data)
-        console.log('[SSE:examples_explore.started] Exploración iniciada:', data.request_id)
-        examplesStore.setGenerating(true)
-      } catch (e) {
-        console.error('[SSE:examples_explore.started] Error parsing event:', e)
-      }
-    })
-
-    // ─── Evento: examples_explore.processing ───
-    sseEventSource.addEventListener('examples_explore.processing', (event: MessageEvent) => {
-      if (!sseActive.value) {
-        console.log('[SSE:examples_explore.processing] Stream disabled, ignoring event')
-        return
-      }
-
-      try {
-        const data = JSON.parse(event.data)
-        console.log('[SSE:examples_explore.processing] Procesando acciones...', data.message)
-        examplesStore.setGenerating(true)
-      } catch (e) {
-        console.error('[SSE:examples_explore.processing] Error parsing event:', e)
-      }
-    })
-
-    // ─── Evento: examples_explore.completed ───
-    sseEventSource.addEventListener('examples_explore.completed', (event: MessageEvent) => {
-      if (!sseActive.value) {
-        console.log('[SSE:examples_explore.completed] Stream disabled, ignoring event')
-        return
-      }
-
-      try {
-        const data = JSON.parse(event.data)
-        console.log('[SSE:examples_explore.completed] Exploración completada:', data)
-
-        // Actualizar store con datos recibidos
-        examplesStore.setGenerating(false)
-
-        // Si hay ejemplos, cargarlos
-        if (data.examples && data.examples.length > 0) {
-          console.log('[SSE:examples_explore.completed] Cargando', data.examples.length, 'ejemplos')
-          examplesStore.loadExamples(
-            data.examples,
-            data.buffer_delivery_ids,
-            data.buffer_position
-          )
-        } else if (data.examples_count > 0) {
-          // Fallback: solo IDs, sin datos de ejemplos
-          console.log('[SSE:examples_explore.completed] Actualizando buffer con IDs:', data.buffer_delivery_ids)
-          examplesStore.setBufferData(data.buffer_delivery_ids, data.buffer_position)
-        } else if (data.status === 'generating') {
-          console.log('[SSE:examples_explore.completed] Contenido aún se está generando...')
-          examplesStore.setGenerating(true)
-          return
-        } else if (data.status === 'no_words') {
-          console.log('[SSE:examples_explore.completed] No hay palabras disponibles')
-          examplesStore.setNoWords(true)
-        }
-
-        sseActive.value = false
-        sseEventSource?.close()
-      } catch (e) {
-        console.error('[SSE:examples_explore.completed] Error parsing event:', e)
-      }
-    })
-
-    // ─── Evento: examples_explore.failed ───
-    sseEventSource.addEventListener('examples_explore.failed', (event: MessageEvent) => {
-      if (!sseActive.value) {
-        console.log('[SSE:examples_explore.failed] Stream disabled, ignoring event')
-        return
-      }
-
-      try {
-        const data = JSON.parse(event.data)
-        console.error('[SSE:examples_explore.failed] Error en exploración:', data.error)
-        examplesStore.setGenerating(false)
-        examplesStore.setError(data.error || 'Failed to process explore action')
-        sseActive.value = false
-        sseEventSource?.close()
-      } catch (e) {
-        console.error('[SSE:examples_explore.failed] Error parsing event:', e)
-      }
-    })
-
-    sseEventSource.addEventListener('error', (event: Event) => {
-      console.error('[SSE] Connection error:', event)
-      if (sseEventSource?.readyState === EventSource.CLOSED) {
-        console.log('[SSE] Connection closed')
-        sseActive.value = false
-      } else {
-        console.error('[SSE] Unexpected error')
-        examplesStore.setGenerating(false)
-        examplesStore.setError('Connection error - please try again')
-        sseActive.value = false
-        sseEventSource?.close()
-      }
-    })
-  } catch (e) {
-    console.error('[startSSE] Error creating EventSource:', e)
-    examplesStore.setGenerating(false)
-    examplesStore.setError('Failed to connect to stream')
-  }
-}
 
 // ─── Text-to-Speech ───
 function speak(text: string) {
@@ -259,19 +95,6 @@ function speakExample() {
   }
 }
 
-function stopSSE() {
-  console.log('[stopSSE] Stopping SSE stream')
-  sseActive.value = false
-
-  if (sseEventSource) {
-    console.log('[stopSSE] Closing EventSource')
-    sseEventSource.close()
-    sseEventSource = null
-  }
-
-  console.log('[stopSSE] SSE stream stopped')
-}
-
 async function fetchExamples() {
   console.log('[fetchExamples] Loading new batch of examples')
 
@@ -281,20 +104,46 @@ async function fetchExamples() {
   }
 
   try {
-    console.log('[fetchExamples] Enviando POST /explore con acción "next"')
+    console.log('[fetchExamples] Sending POST /explore with action "next"')
+    examplesStore.setGenerating(true)
 
-    // Enviar POST /explore para notificar al backend
-    await api.post('/examples/explore', {
+    // Send POST /explore to backend
+    const response = await api.post('/examples/explore', {
       actions: ['next'],
       limit: BATCH_SIZE,
       buffer_delivery_ids: examplesStore.bufferIds,
       buffer_position: examplesStore.currentIndex,
     })
 
-    console.log('[fetchExamples] Request enqueued, starting SSE stream')
+    const requestId = response.data.request_id
+    console.log('[fetchExamples] Task enqueued, starting polling', { requestId })
 
-    // Iniciar SSE para escuchar eventos de progreso
-    startSSE()
+    // Start polling for task completion
+    startPolling(
+      requestId,
+      'examples',
+      (result) => {
+        console.log('[fetchExamples] Results received', result)
+        examplesStore.setGenerating(false)
+
+        if (result.examples && result.examples.length > 0) {
+          examplesStore.loadExamples(
+            result.examples,
+            result.buffer_delivery_ids,
+            result.buffer_position
+          )
+        } else if (result.buffer_delivery_ids && result.buffer_delivery_ids.length > 0) {
+          examplesStore.setBufferData(result.buffer_delivery_ids, result.buffer_position)
+        } else {
+          examplesStore.setNoWords(true)
+        }
+      },
+      (error) => {
+        console.error('[fetchExamples] Error:', error)
+        examplesStore.setGenerating(false)
+        examplesStore.setError(error || 'Failed to generate examples')
+      }
+    )
   } catch (e: any) {
     console.error('[fetchExamples] Error:', e)
     examplesStore.setGenerating(false)
@@ -392,28 +241,53 @@ async function handleToggleKnown() {
   console.log('[handleToggleKnown] Toggling learned status for word:', selectedWord.value.id)
 
   try {
-    // 1. Marcar palabra como aprendida
+    // 1. Mark word as learned
     await wordApi.toggleLearned(selectedWord.value.id, true)
     console.log('[handleToggleKnown] Word marked as learned')
 
     closeMobileDetail()
 
-    // 2. Notificar al backend: sync-buffer (revalidar buffer) + next (cargar nuevos)
+    // 2. Notify backend: sync-buffer + next
     console.log('[handleToggleKnown] Syncing buffer and fetching next batch...')
-    await api.post('/examples/explore', {
+    examplesStore.setGenerating(true)
+
+    const response = await api.post('/examples/explore', {
       actions: ['sync-buffer', 'next'],
       limit: BATCH_SIZE,
       buffer_delivery_ids: examplesStore.bufferIds,
       buffer_position: examplesStore.currentIndex,
     })
 
-    // 3. Iniciar SSE para escuchar generación
-    if (!sseActive.value) {
-      console.log('[handleToggleKnown] Starting SSE for generation progress')
-      startSSE()
-    }
+    const requestId = response.data.request_id
+    console.log('[handleToggleKnown] Task enqueued, starting polling', { requestId })
+
+    // 3. Start polling for generation progress
+    startPolling(
+      requestId,
+      'examples',
+      (result) => {
+        console.log('[handleToggleKnown] Results received', result)
+        examplesStore.setGenerating(false)
+
+        if (result.examples && result.examples.length > 0) {
+          examplesStore.loadExamples(
+            result.examples,
+            result.buffer_delivery_ids,
+            result.buffer_position
+          )
+        } else if (result.buffer_delivery_ids && result.buffer_delivery_ids.length > 0) {
+          examplesStore.setBufferData(result.buffer_delivery_ids, result.buffer_position)
+        }
+      },
+      (error) => {
+        console.error('[handleToggleKnown] Error:', error)
+        examplesStore.setGenerating(false)
+        examplesStore.setError(error)
+      }
+    )
   } catch (e: any) {
     console.error('[handleToggleKnown] Error:', e)
+    examplesStore.setGenerating(false)
     alert('Failed to mark word as learned')
   }
 }
@@ -442,14 +316,12 @@ async function refreshExample() {
 
   console.log('[refreshExample] Current index:', examplesStore.currentIndex, 'total:', examplesStore.examples.length)
 
-  const isLastItem = examplesStore.currentIndex >= examplesStore.examples.length - 1
-
   try {
     if (examplesStore.canGoNext) {
       console.log('[refreshExample] Can go next, resolving and syncing position')
-      examplesStore.nextExample()  // Update position FIRST
+      examplesStore.nextExample()
 
-      // Notificar al backend: resolve + sync
+      // Notify backend: resolve + sync
       await api.post('/examples/explore', {
         actions: ['resolve', 'sync'],
         resolve_queue_item_id: currentEx.queue_item_id,
@@ -466,8 +338,9 @@ async function refreshExample() {
 
     // At end of buffer, resolve + next to load new content
     console.log('[refreshExample] At end of buffer, resolving and loading next batch')
+    examplesStore.setGenerating(true)
 
-    await api.post('/examples/explore', {
+    const response = await api.post('/examples/explore', {
       actions: ['resolve', 'next'],
       resolve_queue_item_id: currentEx.queue_item_id,
       limit: BATCH_SIZE,
@@ -475,11 +348,33 @@ async function refreshExample() {
       buffer_position: examplesStore.currentIndex,
     })
 
-    // Iniciar SSE para escuchar eventos de generación
-    if (!sseActive.value) {
-      console.log('[refreshExample] Content generating, starting SSE stream')
-      startSSE()
-    }
+    const requestId = response.data.request_id
+    console.log('[refreshExample] Task enqueued, starting polling', { requestId })
+
+    // Start polling for content generation
+    startPolling(
+      requestId,
+      'examples',
+      (result) => {
+        console.log('[refreshExample] Results received', result)
+        examplesStore.setGenerating(false)
+
+        if (result.examples && result.examples.length > 0) {
+          examplesStore.loadExamples(
+            result.examples,
+            result.buffer_delivery_ids,
+            result.buffer_position
+          )
+        } else if (result.buffer_delivery_ids && result.buffer_delivery_ids.length > 0) {
+          examplesStore.setBufferData(result.buffer_delivery_ids, result.buffer_position)
+        }
+      },
+      (error) => {
+        console.error('[refreshExample] Error:', error)
+        examplesStore.setGenerating(false)
+        examplesStore.setError(error)
+      }
+    )
 
     selectedWord.value = null
     isMobileDetailOpen.value = false
@@ -690,38 +585,62 @@ onMounted(async () => {
   try {
     console.log('[ExamplesPage.onMounted] Starting...')
 
-    // Cargar el contador de favoritos sin marcar
+    // Load unmarked favorites count
     console.log('[ExamplesPage.onMounted] Fetching favorites count')
     await examplesStore.fetchUnmarkedFavoritesCount()
 
-    // Restaurar sesión guardada usando el nuevo flujo event-driven
-    // Acción: "resume" (restaura buffer, chequea visitados, carga nuevo si necesario)
-    console.log('[ExamplesPage.onMounted] Resuming session via explore endpoint with SSE')
-    console.log('[ExamplesPage.onMounted] authStore.token:', !!authStore.token)
+    // Resume session using polling
+    console.log('[ExamplesPage.onMounted] Resuming session via polling')
+    examplesStore.setGenerating(true)
 
-    // 1. Enviar POST /explore con acción "resume"
-    // Respuesta inmediata con request_id, procesamiento en background
+    // 1. Send POST /explore with "resume" action
     console.log('[ExamplesPage.onMounted] Sending POST /explore with resume action')
     const exploreResponse = await api.post('/examples/explore', {
       actions: ['resume'],
       limit: BATCH_SIZE,
-      buffer_delivery_ids: [],  // Empty - backend will restore from saved session
+      buffer_delivery_ids: [],
       buffer_position: 0,
     })
     console.log('[ExamplesPage.onMounted] POST /explore response:', exploreResponse.data)
 
-    // Check if component is still mounted before starting SSE
+    // Check if component is still mounted before starting polling
     if (!isComponentMounted.value) {
-      console.log('[ExamplesPage.onMounted] Component unmounted, ignoring SSE start')
+      console.log('[ExamplesPage.onMounted] Component unmounted, ignoring polling start')
       return
     }
 
-    console.log('[ExamplesPage.onMounted] POST /explore enqueued, starting SSE listener')
+    const requestId = exploreResponse.data.request_id
+    console.log('[ExamplesPage.onMounted] Starting polling', { requestId })
 
-    // 2. Iniciar SSE para escuchar eventos de progreso en tiempo real
-    // Los eventos nos dirán cuando esté listo el contenido
-    startSSE()
+    // 2. Start polling for results
+    startPolling(
+      requestId,
+      'examples',
+      (result) => {
+        console.log('[ExamplesPage.onMounted] Results loaded', result)
+        examplesStore.setGenerating(false)
 
+        if (result.examples && result.examples.length > 0) {
+          examplesStore.loadExamples(
+            result.examples,
+            result.buffer_delivery_ids,
+            result.buffer_position
+          )
+        } else if (result.buffer_delivery_ids && result.buffer_delivery_ids.length > 0) {
+          examplesStore.setBufferData(result.buffer_delivery_ids, result.buffer_position)
+        } else {
+          examplesStore.setNoWords(true)
+        }
+      },
+      (error) => {
+        console.error('[ExamplesPage.onMounted] Polling error:', error)
+        if (isComponentMounted.value) {
+          examplesStore.resetBuffer()
+          console.log('[ExamplesPage.onMounted] Fallback: calling fetchExamples()')
+          fetchExamples()
+        }
+      }
+    )
   } catch (e: any) {
     console.error('[ExamplesPage.onMounted] Error:', e)
     console.error('[ExamplesPage.onMounted] Error details:', e.response?.data || e.message)
@@ -738,9 +657,9 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  console.log('[ExamplesPage] Unmounting - cleaning up SSE')
+  console.log('[ExamplesPage] Unmounting - cleaning up polling')
   isComponentMounted.value = false
-  stopSSE()
+  stopPolling()
 })
 </script>
 

@@ -3,16 +3,13 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import api from '@/utils/api'
 import { useBestOptionsStore } from '@/stores/bestOptions'
-import { useAuthStore } from '@/stores/auth'
 import { useActivityTracking } from '@/composables/useActivityTracking'
+import { useExplorePolling } from '@/composables/useExplorePolling'
 import LoadingCard from '@/components/LoadingCard.vue'
 
 const bestOptionsStore = useBestOptionsStore()
-const authStore = useAuthStore()
 const { trackButtonClick } = useActivityTracking()
-
-// API base URL from environment
-const API_BASE = import.meta.env.VITE_API_BASE || '/api'
+const { startPolling, stopPolling } = useExplorePolling()
 
 // ─── Local State ───
 const isComponentMounted = ref(false)
@@ -22,201 +19,52 @@ const showWordDropdown = ref(false)
 const wordDropdownData = ref<any>(null)
 
 const BATCH_SIZE = 4
-let sseEventSource: EventSource | null = null
-let sseActive = ref(false)
-
-// ─── SSE (Server-Sent Events) - RealtimeEventBus ───
-function startSSE() {
-  console.log('[startSSE] Starting SSE stream')
-  console.log('[startSSE] API_BASE:', API_BASE)
-  console.log('[startSSE] authStore.token exists:', !!authStore.token)
-
-  // Clean up any previous SSE connection
-  if (sseEventSource) {
-    console.log('[startSSE] Cleaning up previous EventSource')
-    sseEventSource.close()
-    sseEventSource = null
-  }
-
-  sseActive.value = true
-
-  // Construir URL del SSE con token en query param
-  // EventSource no soporta headers Authorization, así que pasamos el token como parámetro
-  const baseUrl = API_BASE.startsWith('http') ? API_BASE : `${window.location.origin}${API_BASE}`
-  const sseUrl = new URL(`${baseUrl}/best-options/explore-stream`)
-  if (authStore.token) {
-    sseUrl.searchParams.append('token', authStore.token)
-  }
-
-  const fullUrl = sseUrl.toString()
-  console.log('[startSSE] Conectando a:', fullUrl)
-
-  try {
-    sseEventSource = new EventSource(fullUrl)
-
-    // ─── Evento: open (conexión establecida) ───
-    sseEventSource.addEventListener('open', () => {
-      console.log('[SSE:open] ✅ Conexión establecida con servidor')
-      bestOptionsStore.setGenerating(true)
-    })
-
-    // ─── Evento: error ───
-    sseEventSource.addEventListener('error', (event: Event) => {
-      console.error('[SSE:error] Error en conexión:', event)
-      if (sseEventSource?.readyState === EventSource.CLOSED) {
-        console.log('[SSE:error] Conexión cerrada por servidor')
-      } else {
-        console.error('[SSE:error] Error inesperado en SSE')
-        bestOptionsStore.setError('SSE Connection Error')
-      }
-    })
-
-    // ─── Evento: best_options_explore.started ───
-    sseEventSource.addEventListener('best_options_explore.started', (event: MessageEvent) => {
-      if (!sseActive.value) {
-        console.log('[SSE:best_options_explore.started] Stream disabled, ignoring event')
-        return
-      }
-
-      try {
-        const data = JSON.parse(event.data)
-        console.log('[SSE:best_options_explore.started] Exploración iniciada:', data.request_id)
-        bestOptionsStore.setGenerating(true)
-      } catch (e) {
-        console.error('[SSE:best_options_explore.started] Error parsing event:', e)
-      }
-    })
-
-    // ─── Evento: best_options_explore.processing ───
-    sseEventSource.addEventListener('best_options_explore.processing', (event: MessageEvent) => {
-      if (!sseActive.value) {
-        console.log('[SSE:best_options_explore.processing] Stream disabled, ignoring event')
-        return
-      }
-
-      try {
-        const data = JSON.parse(event.data)
-        console.log('[SSE:best_options_explore.processing] Procesando acciones...', data.message)
-        bestOptionsStore.setGenerating(true)
-      } catch (e) {
-        console.error('[SSE:best_options_explore.processing] Error parsing event:', e)
-      }
-    })
-
-    // ─── Evento: best_options_explore.completed ───
-    sseEventSource.addEventListener('best_options_explore.completed', (event: MessageEvent) => {
-      if (!sseActive.value) {
-        console.log('[SSE:best_options_explore.completed] Stream disabled, ignoring event')
-        return
-      }
-
-      try {
-        const data = JSON.parse(event.data)
-        console.log('[SSE:best_options_explore.completed] Exploración completada:', data)
-
-        // Actualizar store con datos recibidos
-        bestOptionsStore.setGenerating(false)
-        bestOptionsStore.setError(null)
-        bestOptionsStore.setNoWords(false)
-
-        // Si hay best_options, cargarlos
-        if (data.best_options && data.best_options.length > 0) {
-          console.log('[SSE:best_options_explore.completed] Cargando', data.best_options.length, 'best options')
-          bestOptionsStore.loadBestOptions(
-            data.best_options,
-            data.buffer_delivery_ids,
-            data.buffer_position
-          )
-        } else if (data.best_options_count > 0) {
-          // Fallback: solo IDs, sin datos de best_options
-          console.log('[SSE:best_options_explore.completed] Actualizando buffer con IDs:', data.buffer_delivery_ids)
-          bestOptionsStore.setBufferData(data.buffer_delivery_ids, data.buffer_position)
-        } else if (data.status === 'generating') {
-          console.log('[SSE:best_options_explore.completed] Contenido aún se está generando...')
-          bestOptionsStore.setGenerating(true)
-          return
-        } else if (data.status === 'no_words') {
-          console.log('[SSE:best_options_explore.completed] No hay palabras disponibles')
-          bestOptionsStore.setNoWords(true)
-        }
-
-        sseActive.value = false
-        sseEventSource?.close()
-      } catch (e) {
-        console.error('[SSE:best_options_explore.completed] Error parsing event:', e)
-      }
-    })
-
-    // ─── Evento: best_options_explore.failed ───
-    sseEventSource.addEventListener('best_options_explore.failed', (event: MessageEvent) => {
-      if (!sseActive.value) {
-        console.log('[SSE:best_options_explore.failed] Stream disabled, ignoring event')
-        return
-      }
-
-      try {
-        const data = JSON.parse(event.data)
-        console.error('[SSE:best_options_explore.failed] Error en exploración:', data.error)
-        bestOptionsStore.setGenerating(false)
-        bestOptionsStore.setError(data.error || 'Failed to process explore action')
-        sseActive.value = false
-        sseEventSource?.close()
-      } catch (e) {
-        console.error('[SSE:best_options_explore.failed] Error parsing event:', e)
-      }
-    })
-
-    sseEventSource.addEventListener('error', (event: Event) => {
-      console.error('[SSE] Connection error:', event)
-      if (sseEventSource?.readyState === EventSource.CLOSED) {
-        console.log('[SSE] Connection closed')
-        sseActive.value = false
-      } else {
-        console.error('[SSE] Unexpected error')
-        bestOptionsStore.setGenerating(false)
-        bestOptionsStore.setError('Connection error - please try again')
-        sseActive.value = false
-        sseEventSource?.close()
-      }
-    })
-  } catch (e) {
-    console.error('[startSSE] Error creating EventSource:', e)
-    bestOptionsStore.setGenerating(false)
-    bestOptionsStore.setError('Failed to connect to stream')
-  }
-}
-
-function stopSSE() {
-  console.log('[stopSSE] Stopping SSE stream')
-  sseActive.value = false
-
-  if (sseEventSource) {
-    console.log('[stopSSE] Closing EventSource')
-    sseEventSource.close()
-    sseEventSource = null
-  }
-
-  console.log('[stopSSE] SSE stream stopped')
-}
 
 async function fetchBestOptions() {
   console.log('[fetchBestOptions] Loading new batch of best options')
 
   try {
-    console.log('[fetchBestOptions] Enviando POST /explore con acción "next"')
+    console.log('[fetchBestOptions] Sending POST /explore with action "next"')
+    bestOptionsStore.setGenerating(true)
 
-    // Enviar POST /explore para notificar al backend
-    await api.post('/best-options/explore', {
+    // Send POST /explore to backend
+    const response = await api.post('/best-options/explore', {
       actions: ['next'],
       limit: BATCH_SIZE,
       buffer_delivery_ids: bestOptionsStore.bufferIds,
       buffer_position: bestOptionsStore.currentIndex,
     })
 
-    console.log('[fetchBestOptions] Request enqueued, starting SSE stream')
+    const requestId = response.data.request_id
+    console.log('[fetchBestOptions] Task enqueued, starting polling', { requestId })
 
-    // Iniciar SSE para escuchar eventos de progreso
-    startSSE()
+    // Start polling for task completion
+    startPolling(
+      requestId,
+      'best_options',
+      (result) => {
+        console.log('[fetchBestOptions] Results received', result)
+        bestOptionsStore.setGenerating(false)
+        bestOptionsStore.setError(null)
+
+        if (result.best_options && result.best_options.length > 0) {
+          bestOptionsStore.loadBestOptions(
+            result.best_options,
+            result.buffer_delivery_ids,
+            result.buffer_position
+          )
+        } else if (result.buffer_delivery_ids && result.buffer_delivery_ids.length > 0) {
+          bestOptionsStore.setBufferData(result.buffer_delivery_ids, result.buffer_position)
+        } else {
+          bestOptionsStore.setNoWords(true)
+        }
+      },
+      (error) => {
+        console.error('[fetchBestOptions] Error:', error)
+        bestOptionsStore.setGenerating(false)
+        bestOptionsStore.setError(error || 'Failed to generate best options')
+      }
+    )
   } catch (e: any) {
     console.error('[fetchBestOptions] Error:', e)
     bestOptionsStore.setGenerating(false)
@@ -339,12 +187,12 @@ onMounted(async () => {
   isComponentMounted.value = true
 
   try {
-    console.log('[onMounted] Iniciando carga de best options')
+    console.log('[onMounted] Starting best options load')
     bestOptionsStore.setGenerating(true)
     bestOptionsStore.setError(null)
 
-    // Hacer POST request con 'resume' para iniciar el explore
-    await api.post('/best-options/explore', {
+    // Send POST request with 'resume' action
+    const response = await api.post('/best-options/explore', {
       actions: ['resume'],
       limit: BATCH_SIZE,
       buffer_delivery_ids: [],
@@ -353,10 +201,38 @@ onMounted(async () => {
 
     if (!isComponentMounted.value) return
 
-    console.log('[onMounted] Request enqueued, iniciando SSE para escuchar datos')
+    const requestId = response.data.request_id
+    console.log('[onMounted] Task enqueued, starting polling', { requestId })
 
-    // Iniciar SSE para recibir los datos del explore
-    startSSE()
+    // Start polling for results
+    startPolling(
+      requestId,
+      'best_options',
+      (result) => {
+        console.log('[onMounted] Results loaded', result)
+        bestOptionsStore.setGenerating(false)
+        bestOptionsStore.setError(null)
+
+        if (result.best_options && result.best_options.length > 0) {
+          bestOptionsStore.loadBestOptions(
+            result.best_options,
+            result.buffer_delivery_ids,
+            result.buffer_position
+          )
+        } else if (result.buffer_delivery_ids && result.buffer_delivery_ids.length > 0) {
+          bestOptionsStore.setBufferData(result.buffer_delivery_ids, result.buffer_position)
+        } else {
+          bestOptionsStore.setNoWords(true)
+        }
+      },
+      (error) => {
+        console.error('[onMounted] Polling error:', error)
+        if (isComponentMounted.value) {
+          bestOptionsStore.resetBuffer()
+          bestOptionsStore.setError('Failed to load best options')
+        }
+      }
+    )
   } catch (e) {
     if (isComponentMounted.value) {
       console.error('[onMounted] Error:', e)
@@ -368,7 +244,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   isComponentMounted.value = false
-  stopSSE()
+  stopPolling()
 })
 </script>
 

@@ -1,6 +1,5 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 from typing import Optional, List
 from pydantic import BaseModel
@@ -18,12 +17,10 @@ from core.explore.explore_actions import ExploreActions
 from features.examples.explore_response_builder import ExploreResponseBuilder
 from features.examples.repository import ExampleRepository
 from core.delivery.service import DeliveryService
-from core.realtime_event_bus import get_realtime_bus
-from celery_app import celery_app
 from core.celery_queues import CeleryQueue
 from features.examples.tasks import explore_examples_task
-from core.sse_service import SSEStreamService, get_current_user_sse
 from core.explore_endpoint_service import ExploreEndpointService
+from core.explore_task_redis_service import ExploreTaskRedisService
 
 
 class ExploreRequest(BaseModel):
@@ -45,43 +42,70 @@ explore_service = ExploreEndpointService(
 )
 
 
-@router.get("/explore-stream")
-async def explore_examples_stream(
-    current_user: User = Depends(get_current_user_sse),
+@router.get("/explore/status/{request_id}")
+@log_endpoint
+def get_explore_status(
+    request_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    SSE endpoint que transmite eventos de exploración en tiempo real.
+    Obtiene el status de una tarea explore consultando Redis.
 
-    Clients pueden conectarse así:
-        const eventSource = new EventSource('/api/examples/explore-stream');
-        eventSource.addEventListener('examples_explore.started', (event) => {
-            const data = JSON.parse(event.data);
-            console.log('Explore iniciado:', data);
-        });
-        eventSource.addEventListener('examples_explore.completed', (event) => {
-            const data = JSON.parse(event.data);
-            console.log('Explore completado:', data);
-        });
-        eventSource.addEventListener('examples_explore.failed', (event) => {
-            const data = JSON.parse(event.data);
-            console.log('Explore fallido:', data);
-        });
-
-    Eventos transmitidos:
-        - examples_explore.started:   Exploración iniciada
-        - examples_explore.processing: Procesando acciones
-        - examples_explore.completed: Exploración completada (incluye buffer_ids, position, status)
-        - examples_explore.failed:    Error durante exploración
+    Returns:
+        {
+            "request_id": str,
+            "status": "processing" | "completed" | "failed",
+            "message": str,
+            "timestamp": float
+        }
     """
-    logger.info(f"[explore_examples_stream] Iniciando SSE para user {current_user.id}")
+    logger.info(f"[get_explore_status] User {current_user.id}: Checking status for request {request_id}")
 
-    sse_service = SSEStreamService(
-        user_id=current_user.id,
-        channel_pattern=f"user:{current_user.id}:examples_explore.*",
-        logger_name="[explore_examples_stream]"
-    )
+    status_data = ExploreTaskRedisService.get_status(request_id)
 
-    return sse_service.get_stream_response()
+    if not status_data:
+        raise HTTPException(status_code=404, detail="Request not found or expired")
+
+    return {
+        "request_id": request_id,
+        **status_data
+    }
+
+
+@router.get("/explore/results/{request_id}")
+@log_endpoint
+def get_explore_results(
+    request_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Obtiene los resultados de una tarea explore consultando Redis y Postgres.
+
+    Returns:
+        {
+            "request_id": str,
+            "status": str,
+            "buffer_delivery_ids": list[int],
+            "buffer_position": int,
+            "examples": list[dict],
+            "examples_count": int,
+            "timestamp": float
+        }
+    """
+    logger.info(f"[get_explore_results] User {current_user.id}: Fetching results for request {request_id}")
+
+    # Obtener resultados desde Redis
+    results = ExploreTaskRedisService.get_results(request_id)
+
+    if not results:
+        raise HTTPException(status_code=404, detail="Results not found or expired")
+
+    return {
+        "request_id": request_id,
+        **results
+    }
 
 
 @router.post("/explore")

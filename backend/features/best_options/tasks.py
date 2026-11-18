@@ -19,7 +19,7 @@ from core.event_bus import publish_event_background, subscribe_to_ai
 from core.generation_ai.enums import GenerationAIStatus
 from features.best_options.response_builder import BestOptionsResponseBuilder
 from core.delivery.service import DeliveryService
-from core.sse_service import StreamReadyWaiter
+from core.explore_task_redis_service import ExploreTaskRedisService
 
 
 def _shuffle_options_with_correct_index(options: list, correct_option_idx: int) -> tuple:
@@ -330,20 +330,17 @@ def explore_best_options_task(
     buffer_position: int = 0,
 ) -> None:
     """
-    Task de background que procesa acciones de explore para best options y publica eventos en tiempo real.
+    Task de background que procesa acciones de explore y guarda resultados en Redis.
 
     Flujo:
     1. Recibe solicitud de explore con acciones
-    2. Ejecuta acciones usando ExploreActions
-    3. Publica eventos en RealtimeEventBus para transmitir al frontend vía SSE
-    4. Eventos: explore.started, explore.processing, explore.completed, explore.failed
-
-    Los datos se transmiten en tiempo real a través de /explore-stream (SSE).
+    2. Actualiza status a "processing" en Redis
+    3. Ejecuta acciones usando ExploreActions
+    4. Guarda resultados en Redis
+    5. Actualiza status a "completed" en Redis
     """
-    from core.realtime_event_bus import get_realtime_bus
     from db import engine
 
-    realtime_bus = get_realtime_bus()
     buffer_delivery_ids = buffer_delivery_ids or []
 
     logger.info(
@@ -351,16 +348,10 @@ def explore_best_options_task(
         f"request_id={request_id}, actions={actions}"
     )
 
-    try:
-        realtime_bus.publish(
-            channel=f"user:{user_id}:best_options_explore.processing",
-            data={
-                "request_id": request_id,
-                "message": "Processing explore actions...",
-                "timestamp": time.time(),
-            }
-        )
+    # Marcar como procesando
+    ExploreTaskRedisService.set_processing(request_id)
 
+    try:
         with Session(engine) as db:
             # Preparar repositorios y validadores
             from features.content_repository import UnifiedContentRepository
@@ -400,7 +391,7 @@ def explore_best_options_task(
                 f"status={status}, buffer_size={len(buffer_ids)}, position={buffer_pos}"
             )
 
-            # Construir datos de best options (opcional, si quieres incluir detalles en el evento)
+            # Construir datos de best options
             best_options_data = []
             if buffer_ids:
                 logger.debug(f"[explore_best_options_task] Building best_options_data for buffer_ids: {buffer_ids}")
@@ -416,68 +407,28 @@ def explore_best_options_task(
                         buffer_ids, delivery_item_map, user_id
                     )
                     logger.debug(f"[explore_best_options_task] Built best_options_data with {len(best_options_data)} best options")
-
-                    # Log a sample of the data to verify structure
-                    if best_options_data:
-                        import json as json_module
-                        sample = best_options_data[0] if best_options_data else {}
-                        logger.debug(f"[explore_best_options_task] Sample best_option_data: {json_module.dumps(sample, default=str)}")
                 except Exception as e:
                     logger.error(f"[explore_best_options_task] Error building best_options_data: {e}", exc_info=True)
                     best_options_data = []
 
-            # ✅ Esperar a que el stream SSE esté listo antes de publicar
-            # Previene race condition: evento se publica DESPUÉS de que cliente se suscriba
-            stream_waiter = StreamReadyWaiter()
-            stream_waiter.wait(user_id, "best_options_explore")
+            # Guardar resultados en Redis
+            results_data = {
+                "status": status,
+                "buffer_delivery_ids": buffer_ids,
+                "buffer_position": buffer_pos,
+                "best_options": best_options_data,
+                "best_options_count": len(best_options_data),
+                "timestamp": time.time(),
+            }
 
-            # Publicar evento de completación con datos de best options
-            try:
-                event_data = {
-                    "request_id": request_id,
-                    "status": status,
-                    "buffer_delivery_ids": buffer_ids,
-                    "buffer_position": buffer_pos,
-                    "best_options": best_options_data,  # Incluir datos completos de best options
-                    "best_options_count": len(best_options_data),
-                    "timestamp": time.time(),
-                }
-                logger.info(
-                    f"[explore_best_options_task] Event data before publishing: "
-                    f"buffer_ids={buffer_ids}, buffer_position={buffer_pos}, best_options_count={len(best_options_data)}, "
-                    f"status={status}, request_id={request_id}"
-                )
-                logger.debug(f"[explore_best_options_task] Full event_data: {event_data}")
-                logger.debug(f"[explore_best_options_task] Publishing explore.completed with {len(best_options_data)} best options")
-                realtime_bus.publish(
-                    channel=f"user:{user_id}:best_options_explore.completed",
-                    data=event_data
-                )
-            except Exception as e:
-                logger.error(f"[explore_best_options_task] Error publishing explore.completed event: {e}", exc_info=True)
-                # Publish without best_options if serialization fails
-                fallback_event_data = {
-                    "request_id": request_id,
-                    "status": status,
-                    "buffer_delivery_ids": buffer_ids,
-                    "buffer_position": buffer_pos,
-                    "best_options_count": 0,
-                    "error": str(e),
-                    "timestamp": time.time(),
-                }
-                logger.info(
-                    f"[explore_best_options_task] Fallback event data: "
-                    f"buffer_ids={buffer_ids}, buffer_position={buffer_pos}, status={status}"
-                )
-                realtime_bus.publish(
-                    channel=f"user:{user_id}:best_options_explore.completed",
-                    data=fallback_event_data
-                )
-
+            ExploreTaskRedisService.set_results(request_id, results_data)
             logger.info(
-                f"[explore_best_options_task] Evento completado publicado para user {user_id}: "
+                f"[explore_best_options_task] Resultados guardados en Redis para user {user_id}: "
                 f"request_id={request_id}"
             )
+
+            # Marcar como completado
+            ExploreTaskRedisService.set_completed(request_id)
 
     except Exception as e:
         logger.error(
@@ -485,12 +436,5 @@ def explore_best_options_task(
             exc_info=True,
         )
 
-        # Publicar evento de error
-        realtime_bus.publish(
-            channel=f"user:{user_id}:best_options_explore.failed",
-            data={
-                "request_id": request_id,
-                "error": str(e),
-                "timestamp": time.time(),
-            }
-        )
+        # Marcar como fallido
+        ExploreTaskRedisService.set_failed(request_id, str(e))
