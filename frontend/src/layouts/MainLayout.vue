@@ -514,7 +514,8 @@ const modules = [
 
 .nav-item.active {
   background: rgba(155, 143, 181, 0.16);
-  color: #c4b5fd;
+  /* color: #c4b5fd; */
+  color: #c4b5fdeb;
   font-weight: 500;
 }
 
