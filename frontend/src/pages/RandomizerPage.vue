@@ -238,8 +238,8 @@ async function randomize() {
   padding: 12px 28px;
   border-radius: 12px;
   border: none;
-  background: #6d47c9;
-  color: white;
+  background: #65588c;
+  color: rgba(255, 255, 255, 0.95);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
@@ -247,7 +247,7 @@ async function randomize() {
 }
 
 .randomize-btn:hover:not(:disabled) {
-  background: #5e3ab8;
+  background: #765e97;
 }
 
 .randomize-btn:disabled {

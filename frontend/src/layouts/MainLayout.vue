@@ -101,15 +101,15 @@ function handleMenuOption(action: string) {
 
 // Mapeamos los módulos a las propiedades "to" usando el "name" de tus rutas
 const modules = [
-  { id: 'words', label: 'My Words', icon: 'solar:book-bookmark-linear', to: { name: 'my-words' } },
+  { id: 'words', label: 'My Words', icon: 'solar:home-2-linear', to: { name: 'my-words' } },
   // { id: 'vocab-images', label: 'Vocab Images', icon: 'ci:image-02', to: { name: 'vocab-images' } },
   { id: 'examples', label: 'Examples', icon: 'solar:chat-round-line-linear', to: { name: 'examples' } },
-  { id: 'best-options', label: 'Best Options', icon: 'akar-icons:chat-question', to: { name: 'best-options' } },
-  { id: 'vocab-images', label: 'Explore', icon: 'ci:image-02', to: { name: 'vocab-images' } },
-  { id: 'randomizer', label: 'Randomizer', icon: 'bi:dice-5', to: { name: 'randomizer' } },
+  { id: 'best-options', label: 'Questions', icon: 'akar-icons:chat-question', to: { name: 'best-options' } },
+  { id: 'vocab-images', label: 'Explore', icon: 'solar:compass-linear', to: { name: 'vocab-images' } },
+  { id: 'randomizer', label: 'Random', icon: 'solar:shuffle-linear', to: { name: 'randomizer' } },
   // { id: 'game-story', label: 'Game Story', icon: 'fluent:game-20-filled', to: { name: 'game-story' } },
-  { id: 'quick-write', label: 'Quick Write', icon: 'solar:pen-bold', to: { name: 'quick-write' } },
-  { id: 'collocations', label: 'Word Combos', icon: 'boxicons:burger-filled', to: { name: 'collocations' } },
+  { id: 'quick-write', label: 'Write', icon: 'solar:pen-bold', to: { name: 'quick-write' } },
+  { id: 'collocations', label: 'Word Combos', icon: 'solar:link-bold', to: { name: 'collocations' } },
   // { id: 'store', label: 'Store', icon: 'solar:bag-linear', to: { name: 'store' } },
   // { id: 'atlas', label: 'Atlas', icon: 'bi:map', to: { name: 'atlas' } },
   // { id: 'search', label: 'Search', icon: 'iconamoon:search-light', to: { name: 'home' } },
@@ -127,7 +127,8 @@ const modules = [
     <aside v-if="authStore.isAuthenticated && !hideLayout" class="sidebar">
       <div class="sidebar-top" :class="{ 'sidebar-top-expanded': !sidebarCollapsed }">
         <!-- <img src="@/assets/logo.svg" alt="Logo" class="logo" /> -->
-         <h1 class="logo"  style="font-size:28px;font-family: 'Fredoka', sans-serif">Strawmist</h1>
+         <!-- <h1 class="logo"  >Strawmist</h1> -->
+        <img src="/logo04.png" class="logo" style="height:80px;width:auto;opacity:0.88" alt="">
 
         <button
           class="collapse-btn"
@@ -230,17 +231,18 @@ const modules = [
               <span>Customize</span>
             </button> -->
             <button class="user-menu-item" @click="handleMenuOption('sound')">
-              <!-- <Icon icon="solar:volume-loud-linear" width="18" /> -->
+              <Icon icon="solar:user-linear" width="18" />
               <span>Profile</span>
             </button>
             <button class="user-menu-item" @click="handleMenuOption('referral')">
               <!-- <Icon icon="solar:share-linear" width="18" /> -->
+              <Icon icon="solar:sparkles-outline" width="18" />
+              <span>Upgrade</span>
+            </button>
+            <!-- <button class="user-menu-item" @click="handleMenuOption('feedback')">
+              <Icon icon="solar:palette-linear" width="18" />
               <span>Invite Friends</span>
-            </button>
-            <button class="user-menu-item" @click="handleMenuOption('feedback')">
-              <!-- <Icon icon="solar:chat-line-linear" width="18" /> -->
-              <span>Send Feedback</span>
-            </button>
+            </button> -->
             <div class="user-menu-divider"></div>
             <button class="user-menu-item logout-item" @click="handleMenuOption('logout')">
               <!-- <Icon icon="solar:logout-3-linear" width="18" /> -->
@@ -354,6 +356,8 @@ const modules = [
 </template>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@300;400;500;600;700&display=swap');
+
 /* ─── CSS Variables for sidebar widths ─── */
 :root {
   --sidebar-width: 220px;
@@ -375,7 +379,7 @@ const modules = [
 /* ─── Desktop Sidebar ─── */
 .sidebar {
   /* width: var(--sidebar-width); */
-  width: 210px;
+  width: 200px;
   flex-shrink: 0;
   padding: 20px 14px;
   border-right: 1px solid rgba(255, 255, 255, 0.06);
@@ -426,6 +430,7 @@ const modules = [
 
 .user-profile {
   padding: 12px;
+  padding-left: 0;
   background: transparent;
   border: 0;
   border-radius: 8px;
@@ -514,12 +519,14 @@ const modules = [
 }
 
 .logo {
-  height: 32px;
+  /* height: 32px;
   width: auto;
   max-width: 32px;
-  opacity: 1;
+  opacity: 0.98;
   flex-shrink: 0;
   transition: opacity 0.2s ease;
+  font-family: 'Fredoka', sans-serif; */
+  font-size: 28px;
 }
 
 .logo:hover {

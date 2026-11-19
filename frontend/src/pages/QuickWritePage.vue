@@ -1010,12 +1010,12 @@ const revealWord = (word: string, e: Event) => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.15);
+  background: #906fc9;
   transition: all 0.2s ease;
 }
 
 .progress-dot.done {
-  background: #7c3aed;
+  background: #523b7abf;
   width: 10px;
   height: 10px;
 }

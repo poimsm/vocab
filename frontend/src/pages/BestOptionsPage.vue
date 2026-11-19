@@ -404,9 +404,10 @@ onUnmounted(() => {
   gap: 8px;
   padding: 10px 22px;
   border-radius: 999px;
-  background: rgba(124, 58, 237, 0.12);
-  border: 1px solid rgba(124, 58, 237, 0.25);
-  color: #c4b5fd;
+  background: #65588c;
+  border: 0px solid rgba(124, 58, 237, 0.25);
+  /* color: #c4b5fd; */
+  color: rgba(255, 255, 255, 0.95);
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
@@ -415,16 +416,17 @@ onUnmounted(() => {
 }
 
 .word:hover {
-  background: rgba(124, 58, 237, 0.2);
-  border-color: rgba(124, 58, 237, 0.4);
+  background: #65588c;
+  /* border-color: rgba(124, 58, 237, 0.4); */
 }
 
 .word-dropdown {
   width: 100%;
   max-width: 320px;
   padding: 14px;
-  background: rgba(45, 42, 65, 0.6);
-  border: 1px solid rgba(124, 58, 237, 0.15);
+  background: #65588c12;
+  /* background: rgba(45, 42, 65, 0.6); */
+  /* border: 1px solid rgba(124, 58, 237, 0.15); */
   border-radius: 10px;
   box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.05);
 }
@@ -605,12 +607,12 @@ onUnmounted(() => {
 }
 
 .progress-dot.active {
-  background: #7c3aed;
+  background: #906fc9;
   transform: scale(1.2);
 }
 
 .progress-dot.passed {
-  background: rgba(124, 58, 237, 0.4);
+  background: #523b7abf;
 }
 
 .nav {

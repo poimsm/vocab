@@ -975,12 +975,12 @@ onUnmounted(() => {
 }
 
 .progress-dot.active {
-  background: #7c3aed;
+  background: #906fc9;
   transform: scale(1.2);
 }
 
 .progress-dot.passed {
-  background: rgba(124, 58, 237, 0.4);
+  background: #523b7abf;
 }
 
 /* ─── States ─── */
